@@ -1,0 +1,29 @@
+# Compilación
+build/
+build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Archivos originales del juego
+DATA/
+assets/original/
+assets/extracted/
+*.LAB
+*.EXE
+*.SPR
+*.SPT
+*.DAL
+*.PAL
+*.DSS
+
+# Python
+__pycache__/
+*.pyc
