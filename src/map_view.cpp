@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace {
@@ -21,9 +22,24 @@ bool setColor(SDL_Renderer* renderer, SDL_Color color)
 {
     return SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
 }
+
+bool drawPlayerMarker(SDL_Renderer* renderer, SDL_FPoint position, double angle)
+{
+    const float dx = float(std::cos(angle)), dy = -float(std::sin(angle));
+    const SDL_FPoint arrow[] = {
+        {position.x + dx * 10, position.y + dy * 10},
+        {position.x - dx * 5 - dy * 5, position.y - dy * 5 + dx * 5},
+        {position.x - dx * 5 + dy * 5, position.y - dy * 5 - dx * 5},
+        {position.x + dx * 10, position.y + dy * 10}};
+    return setColor(renderer, {255, 255, 255, 255}) &&
+           SDL_RenderLines(renderer, arrow, 4) &&
+           SDL_RenderLine(renderer, position.x, position.y,
+                          position.x + dx * 20, position.y + dy * 20);
+}
 } // namespace
 
-bool drawMap(SDL_Renderer* renderer, const game_lab::Level& level, bool showPolygons)
+bool drawMap(SDL_Renderer* renderer, const game_lab::Level& level, bool showPolygons,
+             const Camera* camera)
 {
     float minX = std::numeric_limits<float>::max();
     float minY = minX;
@@ -60,12 +76,15 @@ bool drawMap(SDL_Renderer* renderer, const game_lab::Level& level, bool showPoly
                                  (height - 2 * margin) / std::max(spanY, 1.0f));
     const float left = (width - spanX * scale) * 0.5f;
     const float top = (height - spanY * scale) * 0.5f;
+    const auto projectWorld = [&](double x, double y) {
+        return SDL_FPoint{float(left + (x - minX) * scale),
+                         float(top + (maxY - y) * scale)};
+    };
     const auto project = [&](const game_lab::Sector& sector,
                              const game_lab::Vertex& vertex) {
         const float x = std::uint32_t(sector.gx) + vertex.x;
         const float y = std::uint32_t(sector.gy) + vertex.y;
-        return SDL_FPoint{left + (x - minX) * scale,
-                          top + (maxY - y) * scale};
+        return projectWorld(x, y);
     };
 
     // Draw contours first so wall colors and entity markers remain intact.
@@ -117,5 +136,5 @@ bool drawMap(SDL_Renderer* renderer, const game_lab::Level& level, bool showPoly
             }
         }
     }
-    return true;
+    return !camera || drawPlayerMarker(renderer, projectWorld(camera->x, camera->y), camera->angle);
 }

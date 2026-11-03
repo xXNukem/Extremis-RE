@@ -52,6 +52,28 @@ private:
     std::string context_;
 };
 
+std::vector<std::uint16_t> readConnectionStates(const std::vector<std::uint8_t>& bytes,
+                                              std::size_t begin, std::size_t end)
+{
+    Reader header(bytes, begin + 0x0a, end, "Connection state offset");
+    const auto offset = header.u16();
+    if (offset == 0) return {}; // Absent in older synthetic fixtures; infer no doors.
+    if (offset < 0x14 || offset > end - begin) {
+        throw std::runtime_error("Invalid connection state table offset");
+    }
+    const auto nextOffset = header.u16(); // Following section at header +0x0c.
+    if (nextOffset != 0 && (nextOffset <= offset || nextOffset > end - begin)) {
+        throw std::runtime_error("Invalid connection state table boundary");
+    }
+    Reader table(bytes, begin + offset, nextOffset ? begin + nextOffset : end,
+                 "Connection states");
+    const auto count = table.u16();
+    table.require(std::size_t(count) * 2);
+    std::vector<std::uint16_t> states;
+    for (unsigned i = 0; i < count; ++i) states.push_back(table.u16());
+    return states;
+}
+
 } // namespace
 
 Level1 loadLevel1(const std::filesystem::path& path)
@@ -100,6 +122,20 @@ Level1 loadLevel1(const std::filesystem::path& path)
     level.monsBank = banks.u16();
     if (end - begin < 0x14) {
         throw std::runtime_error("Truncated level 1 header");
+    }
+    // EXTREMIS.EXE new-game template, file 0x1d8a0; loaded at 0x1de72.
+    level.playerStart = PlayerStart{0,300,320,180};
+    level.connectionStates = readConnectionStates(bytes, begin, end);
+    Reader codeHeader(bytes,begin+0x0e,end,"Zone access code offset");
+    const auto codeOffset=codeHeader.u16();
+    if (codeOffset) {
+        if (codeOffset<0x14 || codeOffset>end-begin-2)
+            throw std::runtime_error("Invalid zone access code offset");
+        Reader code(bytes,begin+codeOffset,end,"Zone access code");
+        level.accessCode=code.u16();
+        const auto count=code.u16();
+        code.require(std::size_t(count)*2);
+        for (unsigned i=0;i<count;++i) level.codeTargets.push_back(code.u16());
     }
     Reader table(bytes, begin + 0x12, end, "Level 1 sector table");
     const auto sectorCount = table.u16();
@@ -209,6 +245,46 @@ Level1 loadLevel1(const std::filesystem::path& path)
                 polygon.connections.push_back(connection);
             }
             sector.polygons.push_back(std::move(polygon));
+        }
+    }
+    Reader routeHeader(bytes, begin + 8, end, "Sector route offsets");
+    const auto routeOffset = routeHeader.u16();
+    const auto routeEnd = routeHeader.u16();
+    if (routeOffset) {
+        if (routeOffset < tableEnd || routeEnd <= routeOffset || routeEnd > end-begin)
+            throw std::runtime_error("Invalid sector route table bounds");
+        Reader offsets(bytes, begin+routeOffset, begin+routeEnd, "Sector routes");
+        offsets.require(level.sectors.size()*2);
+        for (auto& sector : level.sectors) {
+            const auto offset = offsets.u16();
+            if (offset < level.sectors.size()*2 || offset >= routeEnd-routeOffset)
+                throw std::runtime_error("Invalid sector route offset");
+            Reader links(bytes, begin+routeOffset+offset, begin+routeEnd, "Sector route links");
+            const auto count = links.u16(); links.require(std::size_t(count)*6);
+            for (unsigned i=0;i<count;++i) {
+                SectorRoute route{links.u16(),links.u16(),links.u16()};
+                if (route.sector >= level.sectors.size()) throw std::runtime_error("Invalid sector route target");
+                sector.routes.push_back(route);
+            }
+        }
+    }
+    Reader enemyHeader(bytes, begin + 0x0c, end, "Enemy table offset");
+    const auto enemyOffset = enemyHeader.u16();
+    const auto enemyEnd = enemyHeader.u16();
+    if (enemyOffset) {
+        if (enemyOffset < tableEnd || enemyEnd <= enemyOffset || enemyEnd > end - begin)
+            throw std::runtime_error("Invalid enemy table bounds");
+        Reader enemies(bytes, begin + enemyOffset, begin + enemyEnd, "Enemies");
+        const auto count = enemies.u16();
+        enemies.require(std::size_t(count) * 28);
+        for (unsigned i = 0; i < count; ++i) {
+            EnemyRecord record{enemies.u16(), enemies.u16(), enemies.u16(), enemies.u16(),
+                enemies.u16(), enemies.u16(), enemies.u16(), enemies.u16(),
+                enemies.u16(), enemies.u16(), enemies.u16(), enemies.u16(),
+                enemies.u16(), enemies.u16()};
+            if (record.sector >= level.sectors.size())
+                throw std::runtime_error("Invalid enemy sector");
+            level.enemies.push_back(record);
         }
     }
     return result;

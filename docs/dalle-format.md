@@ -1,5 +1,42 @@
 # DALLE1.DAL and related graphics: investigated layout
 
+Animation follow-up: [animated-textures.md](animated-textures.md) now traces
+ADALLE composition onto DALLE materials 11–13. Statements below that the overlay
+destinations are unknown describe the earlier investigation and are superseded
+by that audit; original timing in seconds is still uncalibrated.
+
+## Orientation correction (original executable audit)
+
+The earlier visual interpretation below is retained as historical evidence, but
+its **74x60 row-major orientation was incorrect**. The runtime layout is **60x74
+column-major**, with address `record * 4440 + x * 74 + y`. The loader and PNG
+extractor now convert this to row-major 60x74 images. ADALLE decoding is unchanged.
+
+In the supplied EXTREMIS.EXE (hash documented in wall-texture-mapping.md), absolute
+file offsets `0x15795..0x157a8` select a texture column by multiplying its index
+by 74. At `0x15827` the vertical step numerator is `73 << 16`; the loop at
+`0x1591e..0x15925` advances the framebuffer by 320 bytes per pixel and advances
+the source within that column by the positive vertical step. This establishes
+that consecutive source bytes run downward, not horizontally. The ADALLE copy
+at `0x152ff..0x15309` corroborates it: source rows advance through destination
+columns in steps of 74, and each next source row starts one destination byte down.
+Together with the 4440-byte record this gives 60 columns of 74 pixels.
+
+This is an axis transpose, not a quarter-turn with an extra reflection. No
+`width - 1 - x` or `height - 1 - y` is applied. All four corners and every interior
+pixel are checked against the source address in the C++ and Python tests.
+The renderer already uses U along A-to-B and V downward, indexing `y * width + x`;
+its sampling, clipping, geometry, camera, material indices and portals are unchanged.
+The original game's complete per-wall horizontal direction and UV scale still
+require comparison with original in-game captures. No new mirroring is introduced
+in our A-to-B convention.
+
+The black regions are retained byte-for-byte. Frame geometry/compositing is outside
+this correction. Historical references below to black lower halves become black
+right halves in the corrected orientation; no black pixels are removed.
+
+## Historical extraction investigation (orientation superseded above)
+
 Scope: the original files in `~/Desktop/In_Extremis/DATA/`. No game resources
 are included in source control. This investigation does not change the engine,
 assign textures to wall types, or reproduce the original rendering code.

@@ -1,5 +1,8 @@
 #include "first_person_view.h"
 #include "wall_material.h"
+#include "plane_renderer.h"
+#include "sprite_renderer.h"
+#include "player_collision.h"
 
 #include <SDL3/SDL.h>
 
@@ -12,8 +15,8 @@
 namespace {
 constexpr double pi = 3.14159265358979323846;
 constexpr double wallHeight = 256.0;
-constexpr double eyeHeight = 128.0;
-constexpr double fov = 70.0 * pi / 180.0;
+constexpr double eyeHeight = Camera::eyeHeight;
+constexpr double fov = Camera::horizontalFov;
 
 struct Point {
     double x, y;
@@ -61,22 +64,6 @@ double segmentDistance(Point point, Point a, Point b)
     return std::hypot(point.x - a.x - t * dx, point.y - a.y - t * dy);
 }
 
-bool insidePolygon(Point point, const game_lab::Sector& sector,
-                   const game_lab::Polygon& polygon)
-{
-    bool result = false;
-    for (std::size_t i = 0, j = polygon.vertices.size() - 1;
-         i < polygon.vertices.size(); j = i++) {
-        const auto a = globalVertex(sector, polygon.vertices[i]);
-        const auto b = globalVertex(sector, polygon.vertices[j]);
-        if ((a.y > point.y) != (b.y > point.y) &&
-            point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x) {
-            result = !result;
-        }
-    }
-    return result;
-}
-
 PolygonBounds polygonBounds(const game_lab::Sector& sector,
                             const game_lab::Polygon& polygon)
 {
@@ -122,7 +109,7 @@ void sampleCameraPositions(const game_lab::Level& level, const game_lab::Sector&
         for (int x = 1; x < 20; ++x) {
             const Point point{bounds.low.x + (bounds.high.x - bounds.low.x) * x / 20.0,
                               bounds.low.y + (bounds.high.y - bounds.low.y) * y / 20.0};
-            if (!insidePolygon(point, sector, polygon)) {
+            if (!collision::insidePolygon({point.x,point.y}, sector, polygon)) {
                 continue;
             }
             const double clearance = cameraClearance(point, level, sector, polygon);
@@ -187,8 +174,9 @@ ProjectedColumn projectWall(const CameraProjection& projection, double distance)
 
 bool drawBackground(SDL_Renderer* renderer, int width, int height)
 {
-    const SDL_FRect ceiling{0, 0, float(width), height * 0.5f};
-    const SDL_FRect floor{0, height * 0.5f, float(width), height * 0.5f};
+    const float split = float((height + 1) / 2);
+    const SDL_FRect ceiling{0, 0, float(width), split};
+    const SDL_FRect floor{0, split, float(width), float(height) - split};
     return SDL_SetRenderDrawColor(renderer, 20, 23, 32, 255) &&
            SDL_RenderFillRect(renderer, &ceiling) &&
            SDL_SetRenderDrawColor(renderer, 45, 39, 34, 255) &&
@@ -238,11 +226,15 @@ void fillBackground(std::vector<std::uint32_t>& pixels, int width, int height)
 
 void rasterizeWallColumn(std::vector<std::uint32_t>& pixels, int width, int height,
                             int column, const WallHit& hit, const ProjectedColumn& projected,
-                            const wall_textures::Texture* texture)
+                            const wall_textures::Texture* texture,
+                            std::vector<double>* depth = nullptr)
 {
-    // UV scale remains provisional: one full image from A to B and once vertically.
-    const int textureX = texture ? std::min(texture->width - 1,
-        int(hit.segmentPosition * texture->width)) : 0;
+    // Frames span the first half of DAL's columns; other walls use the full image.
+    const int columns = texture ? wallTextureColumnCount(hit.type, texture->width) : 0;
+    const double textureExtent = columns * hit.textureSpan;
+    const int lastColumn = texture ? std::max(0, int(std::ceil(textureExtent)) - 1) : 0;
+    const int textureX = texture ? std::min(lastColumn,
+        int(hit.segmentPosition * textureExtent)) : 0;
     const double projectedHeight = projected.unclippedBottom - projected.unclippedTop;
     const double shade = distanceShade(projected.depth);
     const int begin = int(std::ceil(std::clamp(projected.unclippedTop, 0.0,
@@ -251,6 +243,13 @@ void rasterizeWallColumn(std::vector<std::uint32_t>& pixels, int width, int heig
                                             double(height)) - 0.5));
     const auto base = wallBaseColor(hit.type);
     const auto flatPixel = rgbaPixel({base.r, base.g, base.b}, shade);
+    // This level has sealed floor/ceiling planes and full-height walls/doors.
+    // Their nearest hit also hides billboard overhang above/below the wall's
+    // screen rectangle (floor stains and ceiling fixtures use interior anchors).
+    if (depth) {
+        for (int y = 0; y < height; ++y)
+            (*depth)[std::size_t(y) * width + column] = hit.distance;
+    }
     for (int y = begin; y < end; ++y) {
         auto pixel = flatPixel;
         if (texture) {
@@ -277,6 +276,7 @@ const wall_textures::Texture* selectWallTexture(const WallHit& hit,
     if (overrideTexture) {
         return overrideTexture;
     }
+    if (!materials) return nullptr;
     const auto index = wallTextureIndex(hit.type, materials->textures.size());
     if (!index || !validTexture(materials->textures[*index])) {
         return nullptr; // Preserve a visible flat-color wall for unsupported materials.
@@ -286,14 +286,15 @@ const wall_textures::Texture* selectWallTexture(const WallHit& hit,
 
 template <typename DrawColumn>
 bool renderVisibleColumns(const game_lab::Level& level, const Camera& camera,
-                          int width, int height, DrawColumn drawColumn)
+                          int width, int height, const std::vector<doors::Door>* doors,
+                          DrawColumn drawColumn)
 {
     const double plane = std::tan(fov * 0.5);
     const CameraProjection projection{width, height, std::cos(camera.angle),
                                       std::sin(camera.angle), plane, width / (2 * plane)};
     for (int column = 0; column < width; ++column) {
         const auto direction = columnRay(projection, column);
-        const auto hit = castWallRay(level, camera, direction.x, direction.y);
+        const auto hit = castSceneRay(level, camera, direction.x, direction.y, doors);
         if (!std::isfinite(hit.distance)) {
             continue;
         }
@@ -308,6 +309,14 @@ bool renderVisibleColumns(const game_lab::Level& level, const Camera& camera,
 
 Camera initialCamera(const game_lab::Level& level)
 {
+    if (level.playerStart) {
+        const auto& start=*level.playerStart;
+        if (start.sector>=level.sectors.size())
+            throw std::runtime_error("Invalid original player start sector");
+        const auto& sector=level.sectors[start.sector];
+        return {double(sector.gx)+start.x,double(sector.gy)+start.y,
+                start.angle*(2*3.14159265358979323846/720)};
+    }
     double bestClearance = 1.0;
     Camera best;
     for (const auto& sector : level.sectors) {
@@ -348,8 +357,31 @@ WallHit castWallRay(const game_lab::Level& level, const Camera& camera,
     return hit;
 }
 
+WallHit castSceneRay(const game_lab::Level& level, const Camera& camera,
+                    double dx, double dy, const std::vector<doors::Door>* doors)
+{
+    auto hit = castWallRay(level, camera, dx, dy);
+    if (!doors) return hit;
+    for (const auto& door : *doors) {
+        for (const auto& closedFace : door.faces) {
+            const auto face = doors::visibleFace(door, closedFace);
+            if (!face) continue;
+            const Point a{face->a.x, face->a.y}, b{face->b.x, face->b.y};
+            // Original projected walls retain A-left/B-right faces only.
+            if (cross({b.x - a.x, b.y - a.y}, {camera.x - a.x, camera.y - a.y}) >= 0)
+                continue;
+            const auto intersection = intersectSegment(camera, {dx, dy}, a, b);
+            if (intersection && intersection->distance < hit.distance) {
+                hit = {intersection->distance, face->material, intersection->position,
+                       face->textureSpan};
+            }
+        }
+    }
+    return hit;
+}
+
 bool drawFirstPerson(SDL_Renderer* renderer, const game_lab::Level& level,
-                     const Camera& camera)
+                     const Camera& camera, const std::vector<doors::Door>* doors)
 {
     int width = 0, height = 0;
     if (!SDL_GetRenderOutputSize(renderer, &width, &height)) {
@@ -361,7 +393,7 @@ bool drawFirstPerson(SDL_Renderer* renderer, const game_lab::Level& level,
     if (!drawBackground(renderer, width, height)) {
         return false;
     }
-    return renderVisibleColumns(level, camera, width, height,
+    return renderVisibleColumns(level, camera, width, height, doors,
         [&](int column, const WallHit& hit, const ProjectedColumn& projected) {
             return drawWallColumn(renderer, column, projected, hit.type);
         });
@@ -375,38 +407,51 @@ void FirstPersonRenderer::TextureDeleter::operator()(SDL_Texture* texture) const
     SDL_DestroyTexture(texture);
 }
 
-bool FirstPersonRenderer::resizeFrame(int width, int height)
+bool FirstPersonRenderer::resizeFrame(int width, int height, bool withHud)
 {
-    if (width == width_ && height == height_) {
+    if (width == width_ && height == height_ && withHud == withHud_) {
         return true;
     }
     // RGBA8888 specifies channel bit positions, independent of host byte order.
     std::unique_ptr<SDL_Texture, TextureDeleter> texture(SDL_CreateTexture(
-        renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, width, height));
+        renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING,
+        width, withHud ? hud::height : height));
     if (!texture || !SDL_SetTextureBlendMode(texture.get(), SDL_BLENDMODE_NONE) ||
         !SDL_SetTextureScaleMode(texture.get(), SDL_SCALEMODE_NEAREST)) {
         return false;
     }
     pixels_.resize(std::size_t(width) * height);
+    composed_.resize(withHud ? hud::width * hud::height : 0);
     uploadTexture_ = std::move(texture);
     width_ = width;
     height_ = height;
+    withHud_ = withHud;
     return true;
 }
 
-bool FirstPersonRenderer::presentFrame()
+bool FirstPersonRenderer::presentFrame(bool withHud, int outputWidth, int outputHeight)
 {
-    return SDL_UpdateTexture(uploadTexture_.get(), nullptr, pixels_.data(),
-                             width_ * int(sizeof(std::uint32_t))) &&
-           SDL_RenderTexture(renderer_, uploadTexture_.get(), nullptr, nullptr);
+    const auto& frame = withHud ? composed_ : pixels_;
+    if (!SDL_UpdateTexture(uploadTexture_.get(), nullptr, frame.data(),
+                           width_ * int(sizeof(std::uint32_t)))) return false;
+    if (!withHud) return SDL_RenderTexture(renderer_, uploadTexture_.get(), nullptr, nullptr);
+    const auto fit = hud::presentation(outputWidth,outputHeight);
+    const SDL_FRect destination{fit.x,fit.y,fit.width,fit.height};
+    return SDL_RenderTexture(renderer_, uploadTexture_.get(), nullptr, &destination);
 }
 
 bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camera,
                                const wall_textures::Texture* provisionalTexture,
-                               const wall_textures::Bank* materials)
+                               const wall_textures::Bank* materials,
+                               const std::vector<doors::Door>* doors,
+                               const wall_textures::PlaneBank* planes,
+                               const sprites::Scene* spriteScene,
+                               const hud::Renderer* hudRenderer, const hud::State& hudState,
+                               const interaction::Renderer* interactionRenderer,
+                               const interaction::State* interactionState, const sprites::Scene* projectileScene, const sprites::Scene* enemyScene, const std::vector<sprites::Instance>* enemyEffects)
 {
-    if (!provisionalTexture && !materials) {
-        return drawFirstPerson(renderer_, level, camera);
+    if (!provisionalTexture && !materials && !planes && !spriteScene && !projectileScene && !hudRenderer) {
+        return drawFirstPerson(renderer_, level, camera, doors);
     }
     if (provisionalTexture && !validTexture(*provisionalTexture)) {
         return SDL_SetError("Invalid wall texture dimensions or pixel count");
@@ -418,14 +463,38 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
     if (width <= 0 || height <= 0) {
         return true;
     }
-    if (!resizeFrame(width, height)) {
+    const int outputWidth = width, outputHeight = height;
+    if (hudRenderer) { width = hud::width; height = hud::viewHeight; }
+    if (!resizeFrame(width, height, hudRenderer != nullptr)) {
         return false;
     }
     fillBackground(pixels_, width, height);
-    return renderVisibleColumns(level, camera, width, height,
+    if (spriteScene || projectileScene || enemyScene) depth_.assign(pixels_.size(), std::numeric_limits<double>::infinity());
+    const double focal = width / (2 * std::tan(fov * 0.5));
+    if (planes) {
+        planes::render(pixels_, camera, {width, height, focal, eyeHeight, wallHeight}, *planes);
+    }
+    const bool wallsDrawn = renderVisibleColumns(level, camera, width, height, doors,
         [&](int column, const WallHit& hit, const ProjectedColumn& projected) {
             const auto* texture = selectWallTexture(hit, materials, provisionalTexture);
-            rasterizeWallColumn(pixels_, width, height, column, hit, projected, texture);
+            rasterizeWallColumn(pixels_, width, height, column, hit, projected, texture,
+                                (spriteScene || projectileScene || enemyScene) ? &depth_ : nullptr);
             return true;
-        }) && presentFrame();
+        });
+    if (!wallsDrawn) return false;
+    if (spriteScene) sprites::render(pixels_, depth_, *spriteScene, camera,
+                                    {width, height, focal, eyeHeight});
+    if (enemyScene) sprites::render(pixels_,depth_,*enemyScene,camera,
+                                   {width,height,focal,eyeHeight});
+    if (enemyScene && enemyEffects) sprites::render(pixels_,depth_,enemyScene->bank,*enemyEffects,camera,
+                                                   {width,height,focal,eyeHeight});
+    if (projectileScene) sprites::render(pixels_,depth_,*projectileScene,camera,
+                                        {width,height,focal,eyeHeight});
+    if (hudRenderer) {
+        std::copy(pixels_.begin(),pixels_.end(),composed_.begin());
+        if (!hudRenderer->draw(composed_,hudState)) return SDL_SetError("Invalid HUD framebuffer");
+        if (interactionRenderer && interactionState && !interactionRenderer->draw(composed_,*interactionState))
+            return SDL_SetError("Invalid original interaction framebuffer");
+    }
+    return presentFrame(hudRenderer != nullptr,outputWidth,outputHeight);
 }

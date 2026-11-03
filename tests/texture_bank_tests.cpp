@@ -56,13 +56,14 @@ int main(int argc, char* argv[])
         check(bank.textures.size() == 54, "Incorrect texture count");
         for (std::size_t i = 0; i < bank.textures.size(); ++i) {
             const auto& texture = bank.textures[i];
-            check(texture.width == 74 && texture.height == 60 && texture.pixels.size() == 4440,
+            check(texture.width == 60 && texture.height == 74 && texture.pixels.size() == 4440,
                   "Incorrect texture dimensions");
             for (std::size_t p = 0; p < texture.pixels.size(); ++p) {
-                const auto index = pixels[i * 4440 + p];
+                const auto x = p % texture.width, y = p / texture.width;
+                const auto index = pixels[i * 4440 + x * texture.height + y];
                 const auto rgb = texture.pixels[p];
                 check(rgb.r == ((index % 64) * 255 + 31) / 63 && rgb.g == 255 && rgb.b == 0,
-                      "Palette / row-major conversion mismatch");
+                      "Palette / column-to-row conversion or axis direction mismatch");
             }
         }
         TexturePreview preview;

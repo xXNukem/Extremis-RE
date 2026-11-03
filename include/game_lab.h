@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <vector>
+#include <optional>
 
 namespace game_lab {
 
@@ -28,6 +29,8 @@ struct Polygon {
     std::vector<PolygonConnection> connections;
 };
 
+struct SectorRoute { std::uint16_t sector, x, y; }; // Global waypoint, header +0x08.
+
 struct Sector {
     std::uint16_t localOffset, gx, gy;
     std::vector<std::uint16_t> neighbors;
@@ -35,11 +38,28 @@ struct Sector {
     std::vector<Wall> walls;
     std::vector<EntityA> entitiesA;
     std::vector<Polygon> polygons;
+    std::vector<SectorRoute> routes;
+};
+
+struct PlayerStart {
+    unsigned sector;
+    std::uint16_t x, y, angle; // Local coordinates; 720 angle units per turn.
+};
+
+struct EnemyRecord {
+    // EXE [0x519e]: fourteen words, preserved in their original order.
+    std::uint16_t health, behavior, state, phase, sector, x, y, polygon;
+    std::uint16_t angle, reserved, sprite, elevation, homeX, homeY;
 };
 
 struct Level {
     std::uint16_t palBank, dalleBank, objetBank, monsBank;
     std::vector<Sector> sectors;
+    std::vector<EnemyRecord> enemies;
+    std::optional<PlayerStart> playerStart;
+    std::vector<std::uint16_t> connectionStates; // Raw table at level header +0x0a.
+    std::optional<std::uint16_t> accessCode; // Word at header +0x0e target, EXE [0x519a].
+    std::vector<std::uint16_t> codeTargets; // Count/list following accessCode for code terminals.
 };
 
 struct Header {

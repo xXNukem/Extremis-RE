@@ -25,9 +25,15 @@ class TextureFormatTests(unittest.TestCase):
         data = bytes(index % 256 for index in range(extract_dalle.DAL_REFERENCE_SIZE))
         images = extract_dalle.decode_dalle(data)
         self.assertEqual(len(images), 54)
-        self.assertEqual(images[0].pixels[74], data[74])
+        self.assertEqual((images[0].width, images[0].height), (60, 74))
+        self.assertEqual(images[0].pixels[1], data[74])
+        self.assertEqual(images[0].pixels[60], data[1])
         self.assertEqual(images[-1].offset, 235320)
-        self.assertEqual(b"".join(image.pixels for image in images), data)
+        for image in images:
+            for y in range(image.height):
+                for x in range(image.width):
+                    self.assertEqual(image.pixels[y * image.width + x],
+                                     data[image.offset + x * image.height + y])
         for invalid in (b"", data[:-1], data + b"\x00"):
             with self.assertRaises(ValueError):
                 extract_dalle.decode_dalle(invalid)

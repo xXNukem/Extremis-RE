@@ -1,5 +1,9 @@
 # Wall textures and provisional preview
 
+Orientation update: the previous 74x60 row-major assumption mentioned below is
+superseded by 60x74 column-major decoding. See [the orientation audit](dalle-format.md#orientation-correction-original-executable-audit).
+Record selection and renderer U/V are unchanged.
+
 The C++ renderer now reads original DAL/PAL files at runtime. The decoded graphics
 are genuine. The default selection **`type & 0xff` is now verified** against the
 original executable; see [the complete mapping audit](wall-texture-mapping.md).

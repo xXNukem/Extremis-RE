@@ -80,6 +80,37 @@ int main(int argc, char* argv[])
         const auto valid = fixture();
         write(valid);
         const auto data = game_lab::loadLevel1(path);
+        auto withEnemy = valid;
+        withEnemy.insert(withEnemy.begin() + 226, 34, 0);
+        for (unsigned i = 1; i <= 30; ++i)
+            put32(withEnemy, 2 + i * 4, 126 + 134 + (i - 1) * 20);
+        put16(withEnemy, 126 + 0x0c, 100);
+        put16(withEnemy, 126 + 0x0e, 130);
+        put16(withEnemy, 226, 1);
+        put16(withEnemy, 228, 4);
+        put16(withEnemy, 232, 6);
+        put16(withEnemy, 248, 0x8000);
+        write(withEnemy);
+        const auto enemies = game_lab::loadLevel1(path).level.enemies;
+        check(enemies.size() == 1 && enemies[0].health == 4 && enemies[0].state == 6 &&
+              enemies[0].sprite == 0x8000, "Enemy record decoding failed");
+        for (const bool badCount : {false, true}) {
+            auto malformed = withEnemy;
+            put16(malformed, badCount ? 226 : 236, 2);
+            write(malformed);
+            bool rejected = false;
+            try { game_lab::loadLevel1(path); }
+            catch (const std::runtime_error&) { rejected = true; }
+            check(rejected, "Malformed enemy record accepted");
+        }
+        auto withStates = valid;
+        put16(withStates, 126 + 0x0a, 90);
+        put16(withStates, 216, 2);
+        put16(withStates, 218, 0);
+        put16(withStates, 220, 0x0400);
+        write(withStates);
+        check(game_lab::loadLevel1(path).level.connectionStates ==
+              std::vector<std::uint16_t>({0, 0x0400}), "Connection states decoding failed");
         const auto& sector = data.level.sectors.at(0);
         check(data.header.levelCount == 30 && data.level.palBank == 0x1234,
               "Header / little-endian decoding failed");
@@ -112,6 +143,15 @@ int main(int argc, char* argv[])
             throw std::runtime_error("Malformed fixture was accepted");
         };
         // Every truncation inside the parsed header/sector must fail.
+        auto badStates = withStates;
+        put16(badStates, 216, 0xffff);
+        reject(badStates);
+        badStates = withStates;
+        put16(badStates, 126 + 0x0c, 94); // Table would overlap following section.
+        reject(badStates);
+        badStates = withStates;
+        put16(badStates, 126 + 0x0a, 0xffff);
+        reject(badStates);
         for (std::size_t length = 0; length < 182; ++length) {
             reject(Bytes(valid.begin(), valid.begin() + length));
         }

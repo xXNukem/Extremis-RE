@@ -16,8 +16,8 @@ except ImportError as error:
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 DEBUG_ROOT = REPOSITORY / "build" / "texture-debug"
-DAL_WIDTH = 74
-DAL_HEIGHT = 60
+DAL_WIDTH = 60
+DAL_HEIGHT = 74
 DAL_IMAGE_SIZE = DAL_WIDTH * DAL_HEIGHT
 DAL_REFERENCE_SIZE = 239760
 
@@ -46,13 +46,14 @@ def decode_palette(data):
 
 
 def decode_dalle(data):
-    # Dimensions are established for the investigated sample, not read from a header.
+    # Original sampler addresses column * 74 + row; PNG records are row-major.
     # Refuse other sizes rather than silently interpreting an unverified variant.
     if len(data) != DAL_REFERENCE_SIZE:
         raise ValueError(f"Only the investigated {DAL_REFERENCE_SIZE}-byte DALLE1 is supported")
     return [
         IndexedImage(index, offset, DAL_WIDTH, DAL_HEIGHT,
-                     data[offset:offset + DAL_IMAGE_SIZE])
+                     bytes(data[offset + x * DAL_HEIGHT + y]
+                           for y in range(DAL_HEIGHT) for x in range(DAL_WIDTH)))
         for index, offset in enumerate(range(0, len(data), DAL_IMAGE_SIZE))
     ]
 
@@ -154,15 +155,16 @@ def extract(data_dir, output):
                     "preview_expansion": "round(value * 255 / 63)",
                     "association": "Visually coherent with PAL1; original runtime not traced"},
         "dalle_layout": {"header_bytes": 0, "record_bytes": DAL_IMAGE_SIZE,
-                         "pixel_order": "row-major, top to bottom, left to right",
-                         "dimension_evidence": "Size divisibility, alignment of all images, visual inspection",
+                         "pixel_order": "column-major, top to bottom, left to right",
+                         "exported_pixel_order": "row-major, top to bottom, left to right",
+                         "dimension_evidence": "Original executable column addressing and 4440-byte records",
                          "dimensions_stored_in_file": False},
         "dalle_images": image_manifest(dalle),
         "adalle_header_word": u16(sources["ADALLE.SPR"], 0),
         "adalle_images": image_manifest(sprites),
         "uncertainties": [
             "No traced mapping from GAME.LAB wall fields to texture indices",
-            "ADALLE overlay destinations and animation timing unknown",
+            "ADALLE destinations/sequences traced in docs/animated-textures.md; wall-clock timing uncalibrated",
             "No proof of transparency or runtime interpretation of repeated/shaded images",
         ],
     }

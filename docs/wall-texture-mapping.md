@@ -1,5 +1,9 @@
 # Original wall-to-DAL texture mapping (level 1)
 
+Orientation update: the previous 74x60 row-major assumption mentioned below is
+superseded by 60x74 column-major decoding. See [the orientation audit](dalle-format.md#orientation-correction-original-executable-audit).
+Record selection and renderer U/V are unchanged.
+
 ## Conclusion
 
 **Verified by static tracing of the supplied original executable:** the texture

@@ -7,6 +7,8 @@ void TexturePreview::load(const std::filesystem::path& dataDirectory, std::uint1
                           std::uint16_t palBank)
 {
     bank_ = {};
+    overlays_ = {};
+    animationClock_ = {};
     selected_ = 0;
     manualOverride_ = false;
     try {
@@ -19,6 +21,24 @@ void TexturePreview::load(const std::filesystem::path& dataDirectory, std::uint1
     } catch (const std::exception& error) {
         std::cerr << "Wall textures unavailable: " << error.what()
                   << ". Using flat wall colors.\n";
+    }
+    if (bank_.textures.empty()) return;
+    try {
+        overlays_ = wall_textures::loadWallOverlays(dataDirectory, palBank);
+        wall_animation::compose(bank_, overlays_, animationClock_.tick());
+        std::cout << "Animated wall materials: 11, 12, 13 (ADALLE). "
+                     "Global tick: provisional 100 ms.\n";
+    } catch (const std::exception& error) {
+        overlays_ = {};
+        std::cerr << "Wall animations unavailable: " << error.what()
+                  << ". Keeping static DALLE materials.\n";
+    }
+}
+
+void TexturePreview::update(double elapsedSeconds)
+{
+    if (!overlays_.textures.empty() && animationClock_.advance(elapsedSeconds)) {
+        wall_animation::compose(bank_, overlays_, animationClock_.tick());
     }
 }
 
