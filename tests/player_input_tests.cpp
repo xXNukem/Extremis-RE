@@ -2,6 +2,7 @@
 #include "item_session.h"
 #include "survival_session.h"
 #include "game_audio.h"
+#include "map_session.h"
 
 #include <SDL3/SDL.h>
 #include <iostream>
@@ -69,13 +70,40 @@ void testModalMouseOwnership()
     }
     check(player.inventory().ammunition()==500,"UI click consumed ammunition");
 }
+void testMapOwnsQueuedActions()
+{
+    ItemSession items; game_lab::Level level; items.load(level);
+    SurvivalSession player; GameAudio audio; Camera camera{50,0,0};
+    const collision::World walls;
+    std::vector<doors::Door> doors{{7,0,{{{{100,100},{100,-100},23},{{100,-100},{100,100},33}}}}};
+    DoorControl control(walls,doors); control.prepareFrame(&camera,0,{});
+    original_map::Session map; map.beginFrame(0);
+    // Synthetic permission fixture: real transfer authorization has separate integration tests.
+    for (const auto code:{SDL_SCANCODE_M,SDL_SCANCODE_E,SDL_SCANCODE_I,SDL_SCANCODE_Z,
+                         SDL_SCANCODE_SPACE,SDL_SCANCODE_E}) {
+        auto event=keyEvent(SDL_EVENT_KEY_DOWN,code);
+        if (!map.handleEvent(event,31,&camera,!items.busy(),true,false,true,player))
+            items.handleEvent(event,31);
+    }
+    check(!map.modal() && map.blocksSimulation(),"Same-pump close lost transition guard");
+    items.update(&camera,!map.blocksSimulation(),walls,player,audio,&control);
+    check(!items.modal() && doors[0].state==doors::State::Closed,"Queued map keys interacted with world");
+    map.beginFrame(0); items.update(&camera,true,walls,player,audio,&control);
+    check(!items.modal() && doors[0].state==doors::State::Closed,"Map left pending gameplay actions");
+    // A pending inventory request must win over a later map-open key in the same pump.
+    items.handleEvent(keyEvent(SDL_EVENT_KEY_DOWN,SDL_SCANCODE_I),31);
+    map.handleEvent(keyEvent(SDL_EVENT_KEY_UP,SDL_SCANCODE_M),31,&camera,false,true,false,true,player);
+    map.handleEvent(keyEvent(SDL_EVENT_KEY_DOWN,SDL_SCANCODE_M),31,&camera,!items.busy(),true,false,true,player);
+    items.update(&camera,true,walls,player,audio,&control);
+    check(items.modal() && !map.modal(),"Map opened over pending inventory");
+}
 } // namespace
 
 int main()
 {
     try {
         check(SDL_Init(SDL_INIT_EVENTS), "SDL event initialization failed");
-        testQueuedEventsToDoorState(); testModalMouseOwnership();
+        testQueuedEventsToDoorState(); testModalMouseOwnership(); testMapOwnsQueuedActions();
         SDL_Quit();
         std::cout << "Physical E binding, SDL events, repeat rejection and individual transition passed.\n";
     } catch (const std::exception& error) {

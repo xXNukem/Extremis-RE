@@ -1,5 +1,10 @@
 # Objetos e inventario originales: nivel 1
 
+Mapa jugable implementado: [Paso 206 — mapa original](step-206-original-map.md).
+
+Auditoría vigente: [Paso 205 — funcionalidades DOS pendientes](step-205-original-functionality-audit.md).
+Incluye estado real, nuevas evidencias y límites de validación; no implementa funciones.
+
 Actualización: [disparo del arma equipada — fase 1](equipped-weapon-fire.md).
 Las menciones anteriores a ausencia de disparo quedan sustituidas por ese informe.
 

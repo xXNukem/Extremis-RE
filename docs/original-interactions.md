@@ -1,5 +1,10 @@
 # Interfaces originales de interacción del nivel 1
 
+Mapa jugable implementado: [Paso 206 — mapa original](step-206-original-map.md).
+
+Auditoría vigente: [Paso 205 — funcionalidades DOS pendientes](step-205-original-functionality-audit.md).
+Incluye estado real, nuevas evidencias y límites de validación; no implementa funciones.
+
 Actualización vigente: [Paso 201 — controles e interfaces](step-201-interfaces-and-controls.md).
 Los controles y el alcance descritos abajo corresponden a revisiones anteriores.
 

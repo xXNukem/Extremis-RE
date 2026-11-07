@@ -1,4 +1,5 @@
 #include "enemy_system.h"
+#include "enemy_profiles.h"
 #include "enemy_navigation.h"
 #include <algorithm>
 #include <cmath>
@@ -44,17 +45,36 @@ bool visible(collision::Point enemy, const Camera& camera, const collision::Worl
 }
 void System::load(const game_lab::Level& level, const std::filesystem::path& directory)
 {
-    if (level.monsBank!=1) throw std::runtime_error("Only MONS1 has been audited");
-    auto bank=sprites::decode(read(directory/"MONS1.SPR"),wall_textures::loadPalette(
-        directory/("PAL"+std::to_string(level.palBank)+".PAL")));
-    auto masks=read(directory/"MONS1.SPT");
-    if (bank.images.size()!=20 || masks.size()!=160) throw std::runtime_error("Unexpected MONS1 bank/masks");
+    if(level.monsBank<1 || level.monsBank>original::profiles.size())
+        throw std::runtime_error("Unsupported monster bank ID");
+    const auto& profile=original::profiles[level.monsBank-1];
+    const std::string name = "MONS" + std::to_string(level.monsBank);
+
+    auto bank = sprites::decode(
+        read(directory / (name + ".SPR")),
+        wall_textures::loadPalette(
+            directory / ("PAL" + std::to_string(level.palBank) + ".PAL"))
+    );
+
+    auto masks = read(directory / (name + ".SPT"));
+
+    if (bank.images.empty() ||
+        masks.size() != bank.images.size() * 8 ||
+        bank.images[0].texture.height == 0)
+    {
+        throw std::runtime_error("Invalid monster bank: " + name);
+    }
+    if (bank.images.size() != profile.frames)
+        throw std::runtime_error("Invalid native monster action/effect image count");
     std::vector<collision::Point> origins;
     for (const auto& enemy:level.enemies) {
         const auto& sector=level.sectors.at(enemy.sector);
-        if ((enemy.sprite&255)>=bank.images.size()) throw std::runtime_error("Invalid MONS1 frame");
+        if ((enemy.sprite&255)>=bank.images.size()) throw std::runtime_error("Invalid monster frame: " + name);
         origins.push_back({double(sector.gx),double(sector.gy)});
     }
+    bank_=level.monsBank; terminalDefeated_=false;
+    directionalCycle_ = bank_!=1; // Preserve the established MONS1 presentation.
+    baseHeight_=profile.height; speed_=profile.speed; baseElevation_=profile.elevation;
     records_=level.enemies; origins_=std::move(origins); masks_=std::move(masks);
     scene_.bank=std::move(bank); accumulator_=0; reaction_=attackSound_=ticks_=0; wasActive_=false;
     sounds_.clear(); effects_.reset(); rebuildScene();
@@ -66,8 +86,9 @@ void System::rebuildScene()
         const auto& e=records_[i];
         if (e.health==0xffff) continue;
         const auto image=std::size_t(e.sprite&255);
-        const double height=270.0*scene_.bank.images[image].texture.height/scene_.bank.images[0].texture.height;
-        scene_.objects.push_back({origins_[i].x+e.x,origins_[i].y+e.y,double(e.elevation&255),
+        if (image >= scene_.bank.images.size()) throw std::runtime_error("Invalid monster scene frame");
+        const double height=baseHeight_*scene_.bank.images[image].texture.height/scene_.bank.images[0].texture.height;
+        scene_.objects.push_back({origins_[i].x+e.x,origins_[i].y+e.y,baseElevation_+double(e.elevation&255),
             height,image,std::uint16_t((e.sprite&0x2000)?0x0200:0),std::uint16_t(i)});
     }
 }
@@ -93,27 +114,36 @@ void System::step(const game_lab::Level& level, const Camera& camera, const coll
         auto& e=records_[i];
         if (e.health==0xffff) continue;
         if (e.state==5) {
+            if(bank_==5) e.elevation=std::uint16_t((e.elevation&255)/2);
             frame(e,(e.phase&1)?9:5);
             if (++e.phase>=8) {
-                e.health=0xffff; sounds_.push_back(17);
-                effects_.begin({origins_[i].x+e.x,origins_[i].y+e.y},e.elevation&255,camera);
+                e.health=0xffff;
+                if (bank_==9) terminalDefeated_=true; // EXE 0xe25e: ending, no explosion.
+                else {
+                    sounds_.push_back(17);
+                    effects_.begin({origins_[i].x+e.x,origins_[i].y+e.y},
+                        baseElevation_+(e.elevation&255),camera,baseHeight_,true,bank_);
+                }
             }
-        } else if (e.state==4 && e.phase<1) { ++e.phase; frame(e,9); }
-        else if (e.state==2) {
+        } else if (e.state==4 && e.phase<(bank_==6?3u:1u)) {
+            ++e.phase; frame(e,(e.phase&1)?9:5);
+            if(bank_==5) e.elevation=std::uint16_t((e.elevation&255)/2);
+        }
+        else if (e.state==2 && bank_!=5) {
             if (++e.phase>=7) {
                 e.phase=0; e.state=0; advance(i,level,camera,walls,location);
             }
             else {
-                frame(e,attack[e.phase]);
+                frame(e,bank_==6?original::attack6[e.phase]:attack[e.phase]);
                 const collision::Point p{origins_[i].x+e.x,origins_[i].y+e.y};
                 const double dx=camera.x-p.x,dy=camera.y-p.y,d=std::hypot(dx,dy);
-                if (e.phase==2 && location && location->sector==e.sector &&
-                    (d<1e-6 || !collision::rayDistance(walls,p,{dx/d,dy/d},d))) {
+                if (e.phase==2 && (bank_!=6 || !reaction_) && location && location->sector==e.sector &&
+                    (bank_==6 || d<1e-6 || !collision::rayDistance(walls,p,{dx/d,dy/d},d))) {
                     reaction_=8; sounds_.push_back(9+(attackSound_++&1));
                 }
             }
         } else {
-            if (e.state==4) { e.state=0; e.phase=0; }
+            if (e.state==4) { e.state=0; e.phase=0; if(bank_==5) e.elevation=0; }
             advance(i,level,camera,walls,location);
         }
     }
@@ -126,6 +156,23 @@ void System::advance(std::size_t i, const game_lab::Level& level, const Camera& 
     auto& e=records_[i];
     const collision::Point p{origins_[i].x+e.x,origins_[i].y+e.y};
     if (e.behavior==2 && ((playerLocation && playerLocation->sector==e.sector) || visible(p,camera,walls))) e.behavior=3;
+    if (bank_==5) {
+        // EXE 0xe9f5: jump phases/elevation are not the common walk cycle.
+        // Only its confirmed idle/hit/death subset is enabled here.
+        e.state=6; e.phase=(e.phase+1)&31;
+        if (!e.phase) e.sprite^=0x2000;
+        frame(e,original::waiting5[e.phase]); return;
+    }
+    if (bank_==6) {
+        // EXE 0xe90b..0xe9f0: stationary, same-sector Chebyshev proximity.
+        if (playerLocation && playerLocation->sector==e.sector &&
+            std::max(std::abs(camera.x-p.x),std::abs(camera.y-p.y))<original::profiles[5].reach) {
+            e.state=2; e.phase=1; frame(e,original::attack6[1]);
+        } else {
+            e.state=6; e.phase=(e.phase+1)&31; frame(e,original::waiting6[e.phase]);
+        }
+        return;
+    }
     auto location=collision::locate(level,p,e.sector);
     if (!location) return;
     e.polygon=std::uint16_t(location->polygon);
@@ -148,10 +195,10 @@ void System::advance(std::size_t i, const game_lab::Level& level, const Camera& 
         if (!e.phase) e.sprite^=0x2000;
         frame(e,waiting[e.phase]); return;
     }
-    move(i,level,*destination,walls);
+    move(i,level,*destination,camera,walls);
 }
 void System::move(std::size_t i, const game_lab::Level& level, collision::Point destination,
-                  const collision::World& walls)
+                  const Camera& camera, const collision::World& walls)
 {
     auto& e=records_[i];
     const collision::Point p{origins_[i].x+e.x,origins_[i].y+e.y};
@@ -164,7 +211,7 @@ void System::move(std::size_t i, const game_lab::Level& level, collision::Point 
     }
     if (std::abs(turn)<180) {
         const double angle=e.angle*pi/360;
-        const auto moved=collision::move(walls,p,{30*std::cos(angle),30*std::sin(angle)});
+        const auto moved=collision::move(walls,p,{speed_*std::cos(angle),speed_*std::sin(angle)});
         const auto next=collision::locate(level,moved,e.sector);
         if (next) {
             const auto& sector=level.sectors[next->sector];
@@ -173,8 +220,15 @@ void System::move(std::size_t i, const game_lab::Level& level, collision::Point 
             e.x=std::uint16_t(std::lround(moved.x-sector.gx));
             e.y=std::uint16_t(std::lround(moved.y-sector.gy));
         }
-        e.phase=(e.phase+1)%5;
-        if (!e.phase) e.sprite^=0x2000;
+        // EXE 0xe696: MONS3 follows the original direction-dependent cycle.
+        // Keep MONS1's established forward-only animation unchanged.
+        const bool reverse=directionalCycle_ &&
+            std::abs(std::remainder(camera.angle*360/pi-e.angle,720))<180;
+        if (reverse) e.phase=e.phase==0?4:e.phase-1;
+        else {
+            e.phase=(e.phase+1)%5;
+            if (!e.phase) e.sprite^=0x2000;
+        }
         frame(e,e.phase); e.state=0;
     }
 }
@@ -186,6 +240,8 @@ std::optional<ShotHit> System::trace(const Camera& view, collision::Point origin
     if (denominator<=1e-9) return {};
     std::optional<ShotHit> best;
     for (const auto& object:scene_.objects) {
+        if (object.image >= scene_.bank.images.size() || object.image >= masks_.size()/8)
+            throw std::runtime_error("Invalid monster mask index");
         const auto& image=scene_.bank.images[object.image];
         const double distance=((object.x-origin.x)*c+(object.y-origin.y)*s)/denominator;
         if (distance<0 || distance>=range) continue;
@@ -236,6 +292,18 @@ void System::constrainPlayer(const game_lab::Level& level, const Camera& before,
     if (after.x==proposed.x && after.y==proposed.y) return;
     const auto corrected=collision::move(walls,{before.x,before.y},{after.x-before.x,after.y-before.y});
     after.x=corrected.x; after.y=corrected.y;
+}
+bool System::blocksInterface(const game_lab::Level& level, const Camera& camera,
+                             const collision::World& walls) const
+{
+    const auto location=collision::locate(level,{camera.x,camera.y});
+    for (const auto& e:records_) {
+        if (e.health==0xffff || e.sector>=level.sectors.size()) continue;
+        const auto& sector=level.sectors[e.sector];
+        if ((location && location->sector==e.sector) ||
+            visible({double(sector.gx)+e.x,double(sector.gy)+e.y},camera,walls)) return true;
+    }
+    return false;
 }
 std::vector<unsigned> System::takeSounds()
 {

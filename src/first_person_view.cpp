@@ -420,6 +420,7 @@ bool FirstPersonRenderer::resizeFrame(int width, int height, bool withHud)
         !SDL_SetTextureScaleMode(texture.get(), SDL_SCALEMODE_NEAREST)) {
         return false;
     }
+    frameReady_=false; showingMap_=false;
     pixels_.resize(std::size_t(width) * height);
     composed_.resize(withHud ? hud::width * hud::height : 0);
     uploadTexture_ = std::move(texture);
@@ -448,7 +449,8 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
                                const sprites::Scene* spriteScene,
                                const hud::Renderer* hudRenderer, const hud::State& hudState,
                                const interaction::Renderer* interactionRenderer,
-                               const interaction::State* interactionState, const sprites::Scene* projectileScene, const sprites::Scene* enemyScene, const std::vector<sprites::Instance>* enemyEffects)
+                               const interaction::State* interactionState, const sprites::Scene* projectileScene, const sprites::Scene* enemyScene, const std::vector<sprites::Instance>* enemyEffects,
+                               const original_map::Renderer* map, const original_map::State* mapState)
 {
     if (!provisionalTexture && !materials && !planes && !spriteScene && !projectileScene && !hudRenderer) {
         return drawFirstPerson(renderer_, level, camera, doors);
@@ -468,6 +470,14 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
     if (!resizeFrame(width, height, hudRenderer != nullptr)) {
         return false;
     }
+    if (hudRenderer && map && mapState && frameReady_) {
+        if (!showingMap_) mapBackground_=composed_;
+        showingMap_=true;
+        composed_=mapBackground_;
+        if (!map->draw(composed_,*mapState)) return SDL_SetError("Invalid original map framebuffer");
+        return presentFrame(true,outputWidth,outputHeight);
+    }
+    showingMap_=false;
     fillBackground(pixels_, width, height);
     if (spriteScene || projectileScene || enemyScene) depth_.assign(pixels_.size(), std::numeric_limits<double>::infinity());
     const double focal = width / (2 * std::tan(fov * 0.5));
@@ -495,6 +505,11 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
         if (!hudRenderer->draw(composed_,hudState)) return SDL_SetError("Invalid HUD framebuffer");
         if (interactionRenderer && interactionState && !interactionRenderer->draw(composed_,*interactionState))
             return SDL_SetError("Invalid original interaction framebuffer");
+        if (map && mapState) {
+            mapBackground_=composed_; showingMap_=true;
+            if (!map->draw(composed_,*mapState)) return SDL_SetError("Invalid original map framebuffer");
+        }
     }
+    frameReady_=true;
     return presentFrame(hudRenderer != nullptr,outputWidth,outputHeight);
 }

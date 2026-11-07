@@ -15,6 +15,9 @@ public:
     void interfaceKey();
     void acceptCard();
     void interfaceMotor();
+    void pickupTransfer();
+    void insertCard();
+    void interfaceShutters();
     void fireWeapon(unsigned weapon);
     void emptyWeapon();
     void enemyEffect(unsigned bankId);

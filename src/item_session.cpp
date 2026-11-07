@@ -1,22 +1,35 @@
 #include "item_session.h"
+#include "original_travel.h"
 #include "survival_session.h"
 #include "game_audio.h"
 #include "door_control.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <utility>
+#include <stdexcept>
+
+std::optional<ItemSession::Travel> ItemSession::takeTravel() { return std::exchange(travel_,std::nullopt); }
 
 void ItemSession::load(const game_lab::Level& level)
 {
+    if (level.zoneIndex>=plans_.size()) throw std::runtime_error("Invalid map zone");
+    animationTime_=planTicks_=0; resumeAnimation_=false; pendingCard_.reset();
+    zone_=level.zoneIndex; travel_.reset();
     world_.emplace(level); accessCode_=level.accessCode; authorized_=false;
     codeTargets_=level.codeTargets;
-    planTransferred_=false;
     interface_.reset(); panel_.reset(); take_=injector_=oxygen_=false; action_=Action::None;
     inventoryRequested_=false; keysDown_.fill(false);
     SDL_Log("I: toggle inventory; E: interact/confirm; WASD/arrows: navigate; Z: heal; X: oxygen; Escape: close.");
 }
 bool ItemSession::modal() const { return interface_.has_value(); }
-bool ItemSession::planTransferred() const { return planTransferred_; }
+bool ItemSession::planTransferred() const { return planTransferred(zone_); }
+bool ItemSession::planTransferred(unsigned zone) const { return zone<plans_.size() && plans_[zone]; }
+void ItemSession::resetPlans() { plans_.fill(false); }
+void ItemSession::clearInput()
+{
+    action_=Action::None; inventoryRequested_=take_=injector_=oxygen_=false;
+    keysDown_.fill(false);
+}
 const interaction::State* ItemSession::interfaceState() const { return interface_?&*interface_:nullptr; }
 void ItemSession::setAvailable(bool available)
 {
@@ -28,7 +41,7 @@ bool ItemSession::handleEvent(const SDL_Event& event, std::uint32_t windowId)
 {
     if (event.type==SDL_EVENT_WINDOW_FOCUS_LOST && event.window.windowID==windowId) {
         action_=Action::None; inventoryRequested_=take_=injector_=oxygen_=false;
-        keysDown_.fill(false);
+        resumeAnimation_=true; keysDown_.fill(false);
         return false;
     }
     if (event.type==SDL_EVENT_MOUSE_BUTTON_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_UP)
@@ -90,8 +103,15 @@ void ItemSession::open(std::size_t index, SurvivalSession& player)
     interface_->codeReader=panel.codeReader;
     interface_->elevator=panel.elevator;
     interface_->elevatorIndex=panel.contents;
-    if (panel.elevator || panel.cardReader || panel.codeReader || authorized_) showContents(player);
-    else interface_->screen=interaction::Screen::Code;
+    interface_->elevatorZone=zone_;
+    interface_->elevatorSector=unsigned(panel.sector);
+    if (panel.elevator || panel.cardReader || panel.codeReader) showContents(player);
+    else {
+        interface_->screen=interaction::Screen::Code;
+        interface_->codeAccepted=authorized_;
+        if(authorized_) interface_->notice="CODE ZONE C200 ALREADY SEIZED";
+    }
+    startPhase(interaction::Phase::Opening);
 }
 void ItemSession::showContents(const SurvivalSession& player)
 {
@@ -152,8 +172,10 @@ void ItemSession::confirmCode(SurvivalSession& player)
     const auto checksum=interaction::codeChecksum(s.entered);
     if (!checksum) return;
     if (!accessCode_) { s.notice="CODE DATA UNAVAILABLE"; return; }
-    if (*checksum!=*accessCode_) { s.notice="WRONG CODE!!..."; return; }
-    authorized_=true; showContents(player);
+    s.codeAccepted=*checksum==*accessCode_;
+    s.notice=s.codeAccepted?"OK...":"WRONG CODE!!...";
+    startPhase(interaction::Phase::CodeResult);
+    (void)player;
 }
 void ItemSession::confirmCard(SurvivalSession& player, GameAudio& audio, DoorControl* security)
 {
@@ -166,27 +188,37 @@ void ItemSession::confirmCard(SurvivalSession& player, GameAudio& audio, DoorCon
     if (!card) { if (s.elevator) audio.interfaceMotor(); interface_.reset(); return; } // Original Exit entry.
     if (s.replacing) {
         const auto result=world_->replaceCard(*panel_,player.inventory(),s.selection);
-        if (result==player::Transfer::Exchanged) interface_.reset();
+        if (result==player::Transfer::Exchanged) { s.screen=interaction::Screen::Supply; s.contentTaken=true; closePanel(audio); }
         return;
     }
     if (s.elevator) {
         if ((*card&0xf000)!=0) { s.notice="Incompatible card type"; return; }
         audio.interfaceMotor();
         s.screen=interaction::Screen::Elevator; s.selection=0;
-        s.useSelection=*card&0xff; s.notice.clear(); return;
+        s.useSelection=*card&0xff; s.notice.clear(); pendingCard_=card;
+        startPhase(interaction::Phase::Opening); return;
     }
     if ((*card&0xf000)!=0x1000) { s.notice="Incompatible card type"; return; }
+    pendingCard_=card;
+    s.screen=interaction::Screen::Reader; s.notice.clear();
+    startPhase(interaction::Phase::Opening);
+    audio.interfaceMotor();
+}
+void ItemSession::usePendingCard(SurvivalSession& player, GameAudio& audio, DoorControl* security)
+{
+    auto& s=*interface_;
+    if (!pendingCard_) return;
     if (s.codeReader) {
-        if ((*card&0xff)!=(s.contents&0xff)) {
+        if ((*pendingCard_&0xff)!=(s.contents&0xff)) {
             s.screen=interaction::Screen::Reader; s.notice="CARD REFUSED...";
         } else {
-            audio.acceptCard(); s.screen=interaction::Screen::Codes;
-            s.selection=0; s.codeIndex=0; showCode();
+            audio.acceptCard(); s.cardAccepted=true;
+            s.notice="CARD ACCEPTED...."; s.selection=0; s.codeIndex=0;
         }
         return;
     }
     if (!security) { interface_.reset(); return; }
-    const auto result=security->useCardReader(s.contents,card);
+    const auto result=security->useCardReader(s.contents,pendingCard_);
     using Result=DoorControl::CardResult;
     if (result==Result::Unlocked) { audio.acceptCard(); player.postMessage(messages::Id::DoorUnlocked); }
     else if (result==Result::AlreadyDisabled) player.postMessage(messages::Id::AlreadyDisabled);
@@ -195,53 +227,53 @@ void ItemSession::confirmCard(SurvivalSession& player, GameAudio& audio, DoorCon
     s.notice=std::string(messages::text(result==Result::Unlocked?messages::Id::DoorUnlocked:
         result==Result::AlreadyDisabled?messages::Id::AlreadyDisabled:messages::Id::CardRejected));
 }
+
 void ItemSession::showCode()
 {
     auto& s=*interface_;
     if (s.codeIndex>=codeTargets_.size()) { s.notice="CODE DATA UNAVAILABLE"; return; }
-    // Only the two entries actually referenced by this level are integrated.
-    // EXE tables: names file 0x60ef, six-letter codes file 0x6167.
-    switch(codeTargets_[s.codeIndex]) {
-    case 0: s.notice="CODE ZONE C200  IJEKAH"; break;
-    case 1: s.notice="CODE ZONE B101  JBHGAD"; break;
-    default: s.notice="CODE DATA UNAVAILABLE"; break;
-    }
+    const auto index=codeTargets_[s.codeIndex];
+    if (index>=interaction::original::codes.size()) { s.notice="CODE DATA UNAVAILABLE"; return; }
+    const auto& code=interaction::original::codes[index];
+    s.notice="CODE ZONE "+std::string(code.zone)+"  "+std::string(code.letters);
 }
 void ItemSession::confirm(SurvivalSession& player, GameAudio& audio, DoorControl* security)
 {
     using Screen=interaction::Screen;
     switch(interface_->screen) {
-    case Screen::Elevator:
-        // EXE 0xd170 complements row index, then checks route and E-card access.
-        // E001 allows (level 0, sector 0/9). Cross-level loading is not implemented.
-        if ((interface_->selection==2 && interface_->elevatorIndex<2) ||
-            (interface_->selection==1 && interface_->elevatorIndex==1)) {
-            if (interface_->useSelection==1 || interface_->useSelection==9) {
-                audio.interfaceKey(); interface_->notice="DESTINATION UNAVAILABLE";
-            }
-        }
+    case Screen::Elevator: {
+        const auto& s=*interface_;
+        const auto* route=interaction::original::route(s.elevatorIndex,s.selection);
+        if (!route || !interaction::original::admitted(*route,s.useSelection,
+                                                     s.elevatorZone,s.elevatorSector)) return;
+        const auto& lift=interaction::original::lifts[s.elevatorIndex];
+        travel_=Travel{route->zone,{route->sector,lift.x,lift.y,lift.angle}};
+        audio.interfaceKey(); interface_.reset(); clearInput();
         return;
+    }
     case Screen::Inventory:
         audio.interfaceKey();
         if (interface_->selection==5) audio.interfaceMotor();
         confirmInventory(player); return;
     case Screen::Codes:
         audio.interfaceKey();
-        if (interface_->selection) interface_.reset();
+        if (interface_->selection) { interface_->screen=Screen::Reader; interface_->notice.clear(); startPhase(interaction::Phase::CardWithdraw); }
         else if (!codeTargets_.empty()) {
             interface_->codeIndex=(interface_->codeIndex+1)%codeTargets_.size(); showCode();
         }
         return;
     case Screen::Code: audio.interfaceKey(); confirmCode(player); return;
     case Screen::Cards: audio.interfaceKey(); confirmCard(player,audio,security); return;
-    case Screen::Reader: case Screen::Plan: interface_.reset(); return;
+    case Screen::Reader: startPhase(interaction::Phase::CardWithdraw); return;
+    case Screen::Plan: return;
     case Screen::Supply: case Screen::Weapon: break;
     }
     audio.confirmItemSelection(); // Original confirmation precedes both Yes and No branches.
-    if (interface_->selection) { interface_.reset(); return; }
+    if (interface_->selection) { closePanel(audio); return; }
     const auto result=world_->take(*panel_,player.inventory());
     if (result==player::Transfer::Taken || result==player::Transfer::Exchanged) {
-        interface_.reset();
+        interface_->contentTaken=true;
+        closePanel(audio);
     } else if (result==player::Transfer::Empty) {
         player.postMessage(messages::Id::EmptyPanel); interface_.reset();
     } else if ((interface_->contents>>12)>=3 && (interface_->contents>>12)<=5) {
@@ -251,7 +283,7 @@ void ItemSession::confirm(SurvivalSession& player, GameAudio& audio, DoorControl
         "ALREADY HAVE AN OXYGEN BOTTLE":"ALREADY HAVE TWO INJECTORS";
 }
 void ItemSession::update(const Camera* camera, bool active, const collision::World& obstacles,
-                         SurvivalSession& player, GameAudio& audio, DoorControl* security)
+                         SurvivalSession& player, GameAudio& audio, DoorControl* security, double seconds)
 {
     const bool inventory=std::exchange(inventoryRequested_,false);
     const bool take=std::exchange(take_,false), injector=std::exchange(injector_,false);
@@ -262,16 +294,13 @@ void ItemSession::update(const Camera* camera, bool active, const collision::Wor
         if (interface_->screen==interaction::Screen::Inventory || interface_->elevator) audio.interfaceMotor();
         interface_.reset(); return;
     }
-    if (!camera || !active) return;
+    if (!camera || !active) { resumeAnimation_=true; return; }
+    if (resumeAnimation_) { seconds=0; resumeAnimation_=false; }
     if (modal()) {
         if (interface_->pressedKey && ++interface_->fingerPhase>3) {
             interface_->pressedKey.reset(); interface_->fingerPhase=0;
         }
-        if (interface_->screen==interaction::Screen::Plan && action!=Action::Cancel) {
-            if (interface_->transfer) interface_->transfer-=4;
-            else { planTransferred_=true; interface_.reset(); }
-            return; // EXE 0x1a1f4..0x1a225: 100, subtract 4 per modal iteration, set plan flag.
-        }
+        if (animate(seconds,player,audio,security)) return;
         interface_->blinkVisible=(blink_++%64)<32; // Original selector counter, not a recovered Hz rate.
         if (action==Action::Confirm) confirm(player,audio,security);
         else if (action!=Action::None) {
@@ -303,6 +332,7 @@ void ItemSession::update(const Camera* camera, bool active, const collision::Wor
             else {
                 if (panel.elevator) audio.interfaceMotor();
                 open(*target,player);
+                if (interface_->screen!=interaction::Screen::Cards) audio.interfaceMotor();
             }
         } else if (security && security->interact(*camera)==DoorControl::UseResult::Locked)
             player.postMessage(messages::Id::PortalLocked);

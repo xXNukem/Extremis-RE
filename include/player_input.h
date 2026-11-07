@@ -16,6 +16,7 @@ public:
     PlayerInput(const PlayerInput&) = delete;
     PlayerInput& operator=(const PlayerInput&) = delete;
     void handleEvent(const SDL_Event& event, bool gameplay = true);
+    void invalidateContext() { reset_=true; firePressed_=false; fireReady_=false; }
     bool update(Camera* camera, bool view3D, double seconds);
     double movementDistance() const;
     bool running() const;

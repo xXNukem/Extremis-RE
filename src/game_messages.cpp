@@ -11,6 +11,9 @@ std::string_view text(Id id)
     case Id::CardRejected: return "IMPOSSIBLE TO UNLOCK THIS DOOR...";
     case Id::AlreadyDisabled: return "THE SECURITY IS ALREADY DISABLE";
     // English localization of EXE file 0x2193f; original wording is documented.
+    // Verbatim original strings at EXE file 0x21972 and 0x21990.
+    case Id::MapBlocked: return "ATTENTION: AN ALIEN IS NEAR!!";
+    case Id::MapUnavailable: return "ATTENTION:\r\n  ACCESS NOT POSSIBLE WITH CARD!!";
     case Id::EmptyPanel: return "THIS COMPARTMENT IS EMPTY!";
     }
     return {};

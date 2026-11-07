@@ -15,6 +15,12 @@ DoorControl::DoorControl(const collision::World& staticWorld, std::vector<doors:
     : staticWorld_(staticWorld), doors_(doors), approachFaces_(doors.size()),
       movementWorld_(staticWorld) {}
 
+void DoorControl::resetLevel()
+{
+    approachFaces_.assign(doors_.size(),std::nullopt);
+    rebuildWorld();
+}
+
 const collision::World& DoorControl::movementWorld() const
 {
     return movementWorld_;

@@ -76,7 +76,9 @@ std::vector<std::uint16_t> readConnectionStates(const std::vector<std::uint8_t>&
 
 } // namespace
 
-Level1 loadLevel1(const std::filesystem::path& path)
+Level1 loadLevel1(const std::filesystem::path& path) { return loadLevel(path,0); }
+
+static std::vector<std::uint8_t> readLab(const std::filesystem::path& path)
 {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file) {
@@ -94,6 +96,11 @@ Level1 loadLevel1(const std::filesystem::path& path)
         throw std::runtime_error("Cannot read GAME.LAB");
     }
 
+    return bytes;
+}
+
+static Level1 decodeLevel(const std::vector<std::uint8_t>& bytes, unsigned zoneIndex, bool banksOnly = false)
+{
     Level1 result{};
     Reader header(bytes, 0, bytes.size(), "Header");
     result.header.levelCount = header.u16();
@@ -112,19 +119,23 @@ Level1 loadLevel1(const std::filesystem::path& path)
         result.header.offsets.push_back(offset);
     }
 
-    const std::size_t begin = result.header.offsets[0];
-    const std::size_t end = result.header.offsets[1];
+    if (zoneIndex>=result.header.levelCount) throw std::runtime_error("Invalid level index");
+    const std::size_t begin = result.header.offsets[zoneIndex];
+    const std::size_t end = result.header.offsets[zoneIndex+1];
     Reader banks(bytes, begin, end, "Level 1 banks");
     auto& level = result.level;
     level.palBank = banks.u16();
     level.dalleBank = banks.u16();
     level.objetBank = banks.u16();
     level.monsBank = banks.u16();
+    level.zoneIndex = zoneIndex;
+    if (banksOnly) return result;
     if (end - begin < 0x14) {
         throw std::runtime_error("Truncated level 1 header");
     }
     // EXTREMIS.EXE new-game template, file 0x1d8a0; loaded at 0x1de72.
-    level.playerStart = PlayerStart{0,300,320,180};
+    level.zoneIndex=zoneIndex;
+    if (zoneIndex==0) level.playerStart = PlayerStart{0,300,320,180};
     level.connectionStates = readConnectionStates(bytes, begin, end);
     Reader codeHeader(bytes,begin+0x0e,end,"Zone access code offset");
     const auto codeOffset=codeHeader.u16();
@@ -211,10 +222,9 @@ Level1 loadLevel1(const std::filesystem::path& path)
         }
         auto sortedOffsets = offsets;
         std::sort(sortedOffsets.begin(), sortedOffsets.end());
-        if (std::adjacent_find(sortedOffsets.begin(), sortedOffsets.end()) !=
-            sortedOffsets.end()) {
-            throw std::runtime_error(context + ": duplicate polygon offsets");
-        }
+        // Original level 3 sector 18 aliases polygon indices 2/3 (LAB 0x5420).
+        // EXE 0xf502..0xf50f indexes offsets directly: preserve both indices.
+        // upper_bound below still bounds each record by the next distinct offset.
         for (std::size_t n = 0; n < offsets.size(); ++n) {
             const auto nextPolygon = std::upper_bound(sortedOffsets.begin(),
                                                       sortedOffsets.end(), offsets[n]);
@@ -288,6 +298,22 @@ Level1 loadLevel1(const std::filesystem::path& path)
         }
     }
     return result;
+}
+
+Level1 loadLevel(const std::filesystem::path& path, unsigned zoneIndex)
+{
+    return decodeLevel(readLab(path), zoneIndex);
+}
+
+std::vector<Level> loadBankTable(const std::filesystem::path& path)
+{
+    const auto bytes = readLab(path);
+    auto first = decodeLevel(bytes, 0, true);
+    std::vector<Level> levels;
+    levels.push_back(std::move(first.level));
+    for (unsigned i = 1; i < first.header.levelCount; ++i)
+        levels.push_back(decodeLevel(bytes, i, true).level);
+    return levels;
 }
 
 } // namespace game_lab

@@ -79,9 +79,8 @@ Bank loadWallOverlays(const std::filesystem::path& dataDirectory, std::uint16_t 
 PlaneBank loadPlanes(const std::filesystem::path& dataDirectory, std::uint16_t solBank,
                      std::uint16_t palBank)
 {
-    if (solBank != 1) throw std::runtime_error("Only the investigated SOL1 bank is supported");
     const auto palette = loadPalette(dataDirectory / ("PAL" + std::to_string(palBank) + ".PAL"));
-    const auto bytes = readExactFile(dataDirectory / "SOL1.DAS", 32768);
+    const auto bytes = readExactFile(dataDirectory / ("SOL" + std::to_string(solBank) + ".DAS"), 32768);
     PlaneBank bank{{128, 128, {}}, {128, 128, {}}};
     bank.floor.pixels.reserve(16384);
     bank.ceiling.pixels.reserve(16384);
@@ -97,14 +96,12 @@ PlaneBank loadPlanes(const std::filesystem::path& dataDirectory, std::uint16_t s
 Bank load(const std::filesystem::path& dataDirectory, std::uint16_t dalleBank,
           std::uint16_t palBank)
 {
-    if (dalleBank != 1) {
-        throw std::runtime_error("DALLE" + std::to_string(dalleBank) +
-                                 " layout has not been validated; only DALLE1 is supported");
-    }
     const auto dalPath = dataDirectory / ("DALLE" + std::to_string(dalleBank) + ".DAL");
     const auto palPath = dataDirectory / ("PAL" + std::to_string(palBank) + ".PAL");
     const auto palette = loadPalette(palPath);
-    const auto bytes = readExactFile(dalPath, bankBytes);
+    // Original DAL addressing uses fixed 4440-byte records for every bank.
+    // DALLE5 contains 35 records; the other original banks contain 54.
+    const auto bytes = readExactFile(dalPath, dalleBank == 5 ? 35 * imageBytes : bankBytes);
     Bank bank;
     bank.textures.reserve(bytes.size() / imageBytes);
     for (std::size_t start = 0; start < bytes.size(); start += imageBytes) {

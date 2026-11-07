@@ -1,5 +1,8 @@
 # Enemigos originales del nivel 1 — Paso 204
 
+Auditoría vigente: [Paso 205 — funcionalidades DOS pendientes](step-205-original-functionality-audit.md).
+Incluye estado real, nuevas evidencias y límites de validación; no implementa funciones.
+
 ## Estado vigente
 
 El Paso204 añade explosión mundial, fragmentos, GOUTTE y detector de presencia

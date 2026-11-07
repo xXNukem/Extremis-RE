@@ -79,7 +79,14 @@ int main(int argc, char* argv[])
         preview.changeIndex(1);
         check(preview.windowTitle().find("texture 0/") != std::string::npos,
               "Next texture wrap failed");
-        expectFailure(directory, 2);
+        write(directory / "DALLE2.DAL", pixels);
+        check(wall_textures::load(directory, 2, 2).textures.size() == 54, "DALLE2 rejected");
+        write(directory / "DALLE5.DAL", std::vector<std::uint8_t>(35 * 4440, 1));
+        check(wall_textures::load(directory, 5, 2).textures.size() == 35, "DALLE5 count");
+        write(directory / "SOL2.DAS", std::vector<std::uint8_t>(32768, 1));
+        check(wall_textures::loadPlanes(directory, 2, 2).ceiling.pixels[0].g == 255,
+              "SOL2 palette selection");
+        expectFailure(directory, 99);
         auto invalid = palette;
         invalid[0] = 64;
         write(palPath, invalid);

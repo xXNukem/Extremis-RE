@@ -19,6 +19,11 @@ public:
     void constrainPlayer(const game_lab::Level& level, const Camera& before, Camera& after,
                          const collision::World& walls) const;
     std::vector<unsigned> takeSounds();
+    // Read-only approximation of DOS visible-sector flag [0x5200], using current port visibility.
+    bool blocksInterface(const game_lab::Level& level, const Camera& camera,
+                         const collision::World& walls) const;
+    // MONS9 death requests the DOS ending; presentation remains with the caller.
+    bool terminalDefeated() const { return terminalDefeated_; }
     unsigned simulationTicks() const { return ticks_; }
     const DeathEffects& effects() const { return effects_; }
     const sprites::Scene& scene() const { return scene_; }
@@ -33,11 +38,16 @@ private:
     double accumulator_=0;
     unsigned reaction_=0, attackSound_=0, ticks_=0;
     bool wasActive_=false;
+    unsigned bank_=1;
+    double speed_=30, baseElevation_=0;
+    bool terminalDefeated_=false;
+    bool directionalCycle_=false;
+    double baseHeight_=270;
     void rebuildScene();
     void step(const game_lab::Level& level, const Camera& player, const collision::World& walls,
               player::Vitals& vitals);
     void move(std::size_t index, const game_lab::Level& level, collision::Point destination,
-              const collision::World& walls);
+              const Camera& camera, const collision::World& walls);
     void advance(std::size_t index, const game_lab::Level& level, const Camera& player,
                  const collision::World& walls, std::optional<collision::Location> playerLocation);
 };

@@ -17,7 +17,7 @@ void TexturePreview::load(const std::filesystem::path& dataDirectory, std::uint1
         std::cout << "Loaded DALLE" << dalleBank << " / PAL" << palBank << ": "
                   << bank_.textures.size() << " textures, " << texture.width << 'x'
                   << texture.height << ". Original wall selection: type & 0xFF.\n"
-                  << "N/M: override with a PROVISIONAL single-texture preview.\n";
+                  << "PgDn/PgUp: override with a PROVISIONAL single-texture preview.\n";
     } catch (const std::exception& error) {
         std::cerr << "Wall textures unavailable: " << error.what()
                   << ". Using flat wall colors.\n";
@@ -69,8 +69,8 @@ std::string TexturePreview::windowTitle() const
         return "In Extremis Port | flat wall colors";
     }
     if (!manualOverride_) {
-        return "In Extremis Port | original wall materials | TAB: 2D/3D | N/M: preview";
+        return "In Extremis Port | original wall materials | TAB: 2D/3D | PgDn/PgUp: preview";
     }
     return "In Extremis Port | PROVISIONAL texture " + std::to_string(selected_) + '/' +
-           std::to_string(bank_.textures.size() - 1) + " | N/M: select | TAB: 2D/3D";
+           std::to_string(bank_.textures.size() - 1) + " | PgDn/PgUp: select | TAB: 2D/3D";
 }

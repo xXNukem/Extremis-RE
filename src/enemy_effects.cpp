@@ -1,13 +1,11 @@
 #include "enemy_effects.h"
+#include "enemy_profiles.h"
+#include <stdexcept>
 #include <algorithm>
 #include <cmath>
 
 namespace enemies {
 namespace {
-// EXE file 0x5ad5, bank1 descriptor: seven triples followed by four fragments.
-constexpr int bursts[7][3]{{3,50,200},{3,-20,170},{2,40,140},{1,-30,110},
-                            {0,30,80},{0,-40,50},{2,20,20}};
-constexpr int pieces[4][3]{{16,-60,210},{17,60,210},{18,-60,40},{19,60,40}};
 constexpr unsigned burstFrames[]{15,14,13,12,13,14,15}; // File0x100ef, BYTE table.
 }
 void DeathEffects::reset()
@@ -19,12 +17,17 @@ void DeathEffects::splashNear(collision::Point point, const Camera& camera)
     // EXE 0xfdd4..0xfdfd /0x10013..0x1003c; no line-of-sight condition.
     if (std::max(std::abs(point.x-camera.x),std::abs(point.y-camera.y))<400) slime_=0;
 }
-void DeathEffects::begin(collision::Point point, double elevation, const Camera& camera)
+void DeathEffects::begin(collision::Point point, double elevation, const Camera& camera,
+                         double baseHeight, bool bodyFragments, unsigned bank)
 {
+    if(bank<1 || bank>8) throw std::runtime_error("Missing native monster death descriptor");
+    bank_=bank;
+    const auto* pieces=original::effects[bank_-1]+7;
+    baseHeight_=baseHeight; bodyFragments_=bodyFragments;
     origin_=point; elevation_=elevation;
     heading_=std::atan2(camera.y-point.y,camera.x-point.x);
     phase_=0; fragments_={}; objects_.clear();
-    for (unsigned i=0;i<4;++i) {
+    for (unsigned i=0;bodyFragments_ && i<4;++i) {
         fragments_[i]={{origin_.x-std::sin(heading_)*pieces[i][1],
                         origin_.y+std::cos(heading_)*pieces[i][1]},
                        elevation_+pieces[i][2],pieces[i][0]};
@@ -54,14 +57,16 @@ void DeathEffects::step(const Camera& camera, const collision::World& walls)
 void DeathEffects::compose(const Camera& camera, const sprites::Bank& bank)
 {
     objects_.clear();
-    if (!phase_ || bank.images.size()<20) return;
+    if (!phase_ || bank.images.size()<original::profiles[bank_-1].frames) return;
+    const auto* bursts=original::effects[bank_-1];
     const auto add=[&](collision::Point point,double z,unsigned image) {
-        objects_.push_back({point.x,point.y,z,270.0*bank.images[image].texture.height/
+        objects_.push_back({point.x,point.y,z,baseHeight_*bank.images[image].texture.height/
             bank.images[0].texture.height,image,0,0});
     };
     if (*phase_<2) add(origin_,elevation_,10+*phase_);
     else if (*phase_<9) {
-        for (const auto& burst:bursts) {
+        for (unsigned i=0;i<7;++i) {
+            const auto& burst=bursts[i];
             const unsigned stage=*phase_-2+unsigned(burst[0]);
             if (stage<7) add({origin_.x+std::sin(camera.angle)*burst[1],
                              origin_.y-std::cos(camera.angle)*burst[1]},

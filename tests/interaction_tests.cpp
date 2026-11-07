@@ -1,4 +1,5 @@
 #include "original_interactions.h"
+#include "original_travel.h"
 #include "item_session.h"
 #include "survival_session.h"
 #include "game_audio.h"
@@ -13,6 +14,7 @@ void check(bool condition,const char* message) { if (!condition) throw std::runt
 interaction::Resources fixture()
 {
     interaction::Resources r;
+    r.pickupMovie.frames.assign(5,std::vector<std::uint8_t>(64000));
     const auto fill=[](unsigned count) {
         std::vector<spr_format::Image> result;
         for(unsigned i=0;i<count;++i) result.push_back({1,1,0,0,{std::uint8_t(i+1)}});
@@ -20,10 +22,14 @@ interaction::Resources fixture()
     };
     r.keyboard=fill(10); r.supplies=fill(31); r.weapons=fill(26); r.inventory=fill(27);
     r.letters=fill(76); r.reader=fill(5); r.plan=fill(5);
+    r.supplyDoor=fill(1); r.weaponDoor=fill(1); r.planDoor=fill(1);
+    r.supplyOpening=fill(12); r.weaponOpening=fill(11);
     r.codes=fill(10); r.elevator=fill(10);
     const auto resize=[](spr_format::Image& s,int w,int h,std::uint8_t color) {
         s={w,h,0,0,std::vector<std::uint8_t>(w*h,color)};
     };
+    for(auto* bank:{&r.supplyDoor,&r.weaponDoor,&r.planDoor}) resize((*bank)[0],196,128,1);
+    resize(r.supplyOpening[0],196,100,1); resize(r.weaponOpening[0],196,100,1);
     resize(r.keyboard[0],196,100,1); resize(r.supplies[12],196,100,13);
     resize(r.weapons[12],196,100,13); resize(r.inventory[0],184,180,1);
     resize(r.reader[0],196,100,1); resize(r.plan[0],196,100,1);
@@ -95,10 +101,16 @@ struct Session {
         level.sectors.push_back(sector); level.accessCode=90; level.codeTargets={0,1}; items.load(level);
     }
     void tick(bool active=true) {items.update(&camera,active,obstacles,player,audio,&control);}
+    void settle() {
+        for(unsigned i=0;i<600 && items.modal() &&
+            items.interfaceState()->phase!=interaction::Phase::Ready &&
+            (items.interfaceState()->phase!=interaction::Phase::CardResult || items.interfaceState()->cardAccepted);++i) tick();
+    }
     void press(SDL_Scancode code) {
         SDL_Event e{}; e.type=SDL_EVENT_KEY_DOWN; e.key.windowID=17; e.key.scancode=code;
         items.handleEvent(e,17); tick();
         e.type=SDL_EVENT_KEY_UP; items.handleEvent(e,17);
+        settle();
     }
     void select(unsigned key) {
         while(items.interfaceState()->selection/7>key/7) press(SDL_SCANCODE_UP);
@@ -259,9 +271,93 @@ void inventoryAndElevator()
     lift.press(SDL_SCANCODE_SPACE);
     check(lift.items.interfaceState()->screen==interaction::Screen::Elevator,"E001 failed elevator access");
     lift.press(SDL_SCANCODE_UP); lift.press(SDL_SCANCODE_SPACE);
-    check(lift.items.interfaceState()->notice=="DESTINATION UNAVAILABLE" && lift.player.inventory().cards()[0]==1,
+    const auto travel=lift.items.takeTravel();
+    check(travel && travel->zone==1 && travel->arrival.sector==0 &&
+          travel->arrival.x==300 && travel->arrival.y==280 && travel->arrival.angle==540 &&
+          lift.player.inventory().cards()[0]==1,
           "Pending level transition consumed E001");
-    lift.press(SDL_SCANCODE_ESCAPE); check(!lift.items.modal(),"Elevator cancel failed");
+    check(!lift.items.modal() && !lift.items.takeTravel(),"Elevator request was not consumed");
+}
+void originalTravel()
+{
+    using namespace interaction::original;
+    check(!route(25,0) && !route(0,4),"Invalid elevator/row accepted");
+    check(!admitted(*route(2,2),9,1,14),"E009 enabled nonexistent route");
+    check(admitted(*route(2,1),2,1,14),"Current destination requires a listed permission");
+    check(!admitted(*route(2,0),2,1,14),"E002 authorized A002");
+    check(admitted(*route(2,0),9,1,14),"E009 did not bypass destination filter");
+    check(!admitted(*route(2,0),0,1,14) && !admitted(*route(2,0),10,1,14),
+          "Invalid E-card identifier accepted");
+    for (unsigned index=0;index<lifts.size();++index) for (unsigned row=0;row<4;++row) {
+        const auto& r=*route(index,row);
+        if (!r.exists) continue;
+        Session s(0x3002,std::uint16_t(index));
+        std::uint16_t card=0x3009; s.player.inventory().takeSupply(card);
+        s.press(SDL_SCANCODE_E); s.press(SDL_SCANCODE_SPACE);
+        for(unsigned i=0;i<row;++i) s.press(SDL_SCANCODE_UP);
+        s.press(SDL_SCANCODE_SPACE);
+        const auto travel=s.items.takeTravel();
+        check(travel && travel->zone==r.zone && travel->arrival.sector==r.sector &&
+              travel->arrival.x==lifts[index].x && travel->arrival.y==lifts[index].y &&
+              travel->arrival.angle==lifts[index].angle,"Table route not reachable from interface");
+    }
+    interaction::Renderer renderer(fixture());
+    interaction::State menu; menu.screen=interaction::Screen::Elevator;
+    menu.elevatorIndex=2; menu.elevatorZone=1; menu.elevatorSector=14; menu.useSelection=1;
+    std::vector<std::uint32_t> pixels(320*200);
+    renderer.draw(pixels,menu);
+    check(pixels[79*320+142]==color(2) && pixels[63*320+142]==color(4),
+          "A002 or current B101 marker missing from shared table menu");
+    menu.useSelection=2; renderer.draw(pixels,menu);
+    check(pixels[79*320+142]==color(1) && pixels[63*320+142]==color(4),
+          "Menu permissions disagree with current-destination exception");
+    Session next(0x3002,2); next.level.zoneIndex=1; next.items.load(next.level);
+    std::uint16_t card=0x3001; next.player.inventory().takeSupply(card);
+    next.press(SDL_SCANCODE_E); next.press(SDL_SCANCODE_SPACE); next.press(SDL_SCANCODE_SPACE);
+    auto travel=next.items.takeTravel();
+    check(travel && travel->zone==2 && travel->arrival.sector==0 &&
+          travel->arrival.x==300 && travel->arrival.y==280 && travel->arrival.angle==540 &&
+          next.player.inventory().cards()[0]==1,"Level 2 to 3 with E001 failed");
+    Session denied(0x3002,2); card=0x3002; denied.player.inventory().takeSupply(card);
+    denied.press(SDL_SCANCODE_E); denied.press(SDL_SCANCODE_SPACE); denied.press(SDL_SCANCODE_SPACE);
+    check(denied.items.modal() && !denied.items.takeTravel(),"Denied route closed modal or travelled");
+    Session code(0x3508,1); code.level.codeTargets={2}; code.items.load(code.level);
+    card=0x4001; code.player.inventory().takeSupply(card);
+    code.press(SDL_SCANCODE_E); code.press(SDL_SCANCODE_SPACE);
+    check(code.items.interfaceState()->notice=="CODE ZONE A002  CJBAIK","A002 code missing");
+}
+void originalTravelLab(const char* path)
+{
+    using namespace interaction::original;
+    std::array<bool,3> seen{};
+    unsigned destinations=0;
+    for(unsigned zone=0;zone<3;++zone) {
+        const auto data=game_lab::loadLevel(path,zone);
+        for(const auto& sector:data.level.sectors) for(const auto& wall:sector.walls)
+            if(wall.type==0x3002) {
+                check(wall.extra<lifts.size(),"GAME.LAB references unknown lift"); if(wall.extra<seen.size()) seen[wall.extra]=true;
+            }
+        for(unsigned index=0;index<lifts.size();++index) for(const auto& r:lifts[index].routes) {
+            if(!r.exists || r.zone!=zone) continue;
+            check(r.sector<data.level.sectors.size(),"Arrival sector missing");
+            const auto& sector=data.level.sectors[r.sector];
+            // Elevator cabins need not have enemy navigation polygons. Validate
+            // the original arrival against the sector's vertex bounds instead.
+            const auto xBounds=std::minmax_element(sector.vertices.begin(),sector.vertices.end(),
+                [](const auto& a,const auto& b){return a.x<b.x;});
+            const auto yBounds=std::minmax_element(sector.vertices.begin(),sector.vertices.end(),
+                [](const auto& a,const auto& b){return a.y<b.y;});
+            check(!sector.vertices.empty() && lifts[index].x>=xBounds.first->x &&
+                  lifts[index].x<=xBounds.second->x && lifts[index].y>=yBounds.first->y &&
+                  lifts[index].y<=yBounds.second->y,"Arrival outside sector bounds");
+            check(std::any_of(sector.walls.begin(),sector.walls.end(),[&](const auto& w) {
+                return w.type==0x3002 && w.extra==index;
+            }),"Destination has no matching elevator panel");
+            ++destinations;
+        }
+    }
+    check(std::all_of(seen.begin(),seen.end(),[](bool value){return value;}),"Unreferenced elevator table entry");
+    std::cout<<"Verified first three levels and "<<destinations<<" arrivals against GAME.LAB.\n";
 }
 void unifiedControls()
 {
@@ -347,7 +443,8 @@ void cardCountsAndLiftDirections()
     }
     lift.press(SDL_SCANCODE_S);check(lift.items.interfaceState()->selection==0,"Elevator exceeded bottom limit");
     lift.press(SDL_SCANCODE_W);lift.press(SDL_SCANCODE_E);
-    check(lift.items.interfaceState()->notice=="DESTINATION UNAVAILABLE","Visible B101 row confirmed a different destination");
+    const auto travel=lift.items.takeTravel();
+    check(travel && travel->zone==1,"Visible B101 row confirmed a different destination");
     auto resources=fixture(); const interaction::Renderer renderer(resources);
     std::vector<std::uint32_t> pixels(320*200);
     for(unsigned row=0;row<4;++row) {
@@ -372,11 +469,17 @@ void capacityAndPlan()
     check(s.items.interfaceState()->contents==0x4001,"Replaced card not left in cabinet");
     Session plan(0x3606,0); plan.press(SDL_SCANCODE_E); plan.code();
     check(plan.items.interfaceState()->screen==interaction::Screen::Plan,"Initial panel not a plan transfer");
-    for(int i=0;i<26;++i) plan.tick();
+    for(int i=0;i<500 && plan.items.modal();++i) plan.tick();
     check(plan.items.planTransferred() && !plan.items.modal() && plan.player.hudState().injectors==0,
           "Plan transfer invented supply or failed to return to world");
     plan.items.load(plan.level);
-    check(!plan.items.planTransferred(),"Level reset retained plan-transfer state");
+    check(plan.items.planTransferred(),"Returning to zone lost transferred plan");
+    plan.level.zoneIndex=1; plan.items.load(plan.level);
+    check(!plan.items.planTransferred() && plan.items.planTransferred(0),"Plan leaked across zones");
+    plan.level.zoneIndex=0; plan.items.load(plan.level);
+    check(plan.items.planTransferred(),"Zone permission did not survive return");
+    plan.items.resetPlans();
+    check(!plan.items.planTransferred(),"New game retained plan-transfer state");
 }
 void pauseAndFailures()
 {
@@ -426,6 +529,54 @@ void codeTerminal()
     check(wrong.items.interfaceState()->screen==interaction::Screen::Reader &&
           wrong.items.interfaceState()->notice=="CARD REFUSED...","Code terminal accepted wrong C identifier");
 }
+void sequenceTiming()
+{
+    using interaction::Phase;
+    const auto raw=[](Session& s,SDL_Scancode key) {
+        SDL_Event e{}; e.type=SDL_EVENT_KEY_DOWN; e.key.windowID=17; e.key.scancode=key;
+        s.items.handleEvent(e,17); s.tick(); e.type=SDL_EVENT_KEY_UP; s.items.handleEvent(e,17);
+    };
+    const auto enter=[&](Session& s) {
+        s.press(SDL_SCANCODE_E);
+        for(char c:std::string("IJEKAH")) {s.select(unsigned(c-'A')+(c>='G'));s.press(SDL_SCANCODE_SPACE);}
+        s.select(13);raw(s,SDL_SCANCODE_SPACE);
+        check(s.items.interfaceState()->phase==Phase::CodeResult && s.items.interfaceState()->notice=="OK...",
+              "Accepted code feedback skipped");
+    };
+    Session canceled(0x3606,0); enter(canceled); raw(canceled,SDL_SCANCODE_ESCAPE);
+    check(!canceled.items.modal() && !canceled.items.planTransferred(),"Canceled code feedback granted plan");
+    for(int rate:{30,60,120,160}) {
+        Session s(0x3606,0); enter(s);
+        for(unsigned i=0;i<300 && s.items.interfaceState()->phase!=Phase::Shutters;++i) s.tick();
+        check(s.items.interfaceState()->phase==Phase::Shutters,"Plan never opened shutters");
+        check(s.items.interfaceState()->transfer==100 && !s.items.planTransferred(),"Animation granted plan early");
+        double time=0;
+        while(time+1.0/rate<900.0/160-1e-8) {
+            s.items.update(&s.camera,true,s.obstacles,s.player,s.audio,&s.control,1.0/rate); time+=1.0/rate;
+            check(!s.items.planTransferred(),"Transfer completed before 900 DOS ticks");
+        }
+        s.items.update(&s.camera,true,s.obstacles,s.player,s.audio,&s.control,900.0/160-time);
+        check(s.items.planTransferred() && s.items.modal() && s.items.interfaceState()->transfer==0,
+              "Zero-count transfer did not grant exactly once before closing");
+        for(unsigned i=0;i<30 && s.items.modal();++i) s.tick();
+        check(!s.items.modal() && s.player.hudState().injectors==0,"Transfer failed to close or invented pickup");
+    }
+    Session opening(0x3606,0);raw(opening,SDL_SCANCODE_E);
+    raw(opening,SDL_SCANCODE_SPACE);
+    check(opening.items.interfaceState()->entered.empty(),"Opening confirmation leaked into keyboard");
+    const auto frame=opening.items.interfaceState()->frame;
+    opening.items.update(&opening.camera,false,opening.obstacles,opening.player,opening.audio,&opening.control,100);
+    opening.items.update(&opening.camera,true,opening.obstacles,opening.player,opening.audio,&opening.control,100);
+    check(opening.items.interfaceState()->frame==frame,"Unfocused animation caught up on resume");
+    Session reader(0x3308,0x0107);std::uint16_t card=0x4001;reader.player.inventory().takeSupply(card);
+    reader.press(SDL_SCANCODE_E);raw(reader,SDL_SCANCODE_SPACE);
+    check(reader.doors[0].originalState==0x400,"Card granted access before insertion");
+    for(unsigned i=0;i<200 && reader.items.interfaceState()->phase!=Phase::CardResult;++i) reader.tick();
+    check(reader.doors[0].originalState==0 && reader.player.inventory().cards()[0]==0x1001,
+          "Inserted card did not unlock once or was consumed");
+    for(unsigned i=0;i<250 && reader.items.modal();++i) reader.tick();
+    check(!reader.items.modal(),"Reader result failed to withdraw and close automatically");
+}
 void originals(const std::filesystem::path& directory)
 {
     const auto resources=interaction::load(directory);
@@ -467,6 +618,25 @@ void originals(const std::filesystem::path& directory)
         interaction::State state; state.selection=0; state.pressedKey=0; state.fingerPhase=phase;
         save(state,"finger-"+std::to_string(phase));
     }
+    for(auto screen:{interaction::Screen::Plan,interaction::Screen::Supply,interaction::Screen::Weapon}) {
+        for(auto phase:{interaction::Phase::PanelSlide,interaction::Phase::PanelZoom,interaction::Phase::Shutters,
+                        interaction::Phase::ContentMove,interaction::Phase::ContentReveal}) {
+            if(screen==interaction::Screen::Plan && (phase==interaction::Phase::ContentMove || phase==interaction::Phase::ContentReveal)) continue;
+            interaction::State state;state.screen=screen;state.phase=phase;state.frame=10;
+            state.contents=screen==interaction::Screen::Weapon?0x11f4:0x4001;
+            save(state,"sequence-"+std::to_string(int(screen))+"-"+std::to_string(int(phase)));
+        }
+    }
+    {
+        interaction::State plan;plan.screen=interaction::Screen::Plan;
+        std::vector<std::uint32_t> pixels(64000,0);renderer.draw(pixels,plan);
+        const auto c=resources.palette[102];const auto ink=(std::uint32_t(c.r)<<24)|(std::uint32_t(c.g)<<16)|(std::uint32_t(c.b)<<8)|255;
+        check(std::count(pixels.begin()+51*320+142,pixels.begin()+59*320,ink)>0,"Original TRANSFER text is invisible");
+    }
+    for(unsigned frame=0;frame<5;++frame) {
+        interaction::State movie;movie.phase=interaction::Phase::Movie;movie.movieSeconds=frame*33.0/160;
+        save(movie,"weapon-movie-"+std::to_string(frame));
+    }
     interaction::State rejected; rejected.screen=interaction::Screen::Cards;
     rejected.cards={1,0x1001,0x2001}; rejected.notice="Incompatible card type";
     save(rejected,"cards-rejected");
@@ -490,7 +660,7 @@ void originals(const std::filesystem::path& directory)
 }
 int main(int argc,char* argv[])
 {
-    try { graphics(); checksum(); flows(); selectionRegressions(); detectorInventory(); inventoryAndElevator(); unifiedControls(); cardCountsAndLiftDirections(); capacityAndPlan(); pauseAndFailures(); codeTerminal(); if(argc==2) originals(argv[1]);
+    try { graphics(); checksum(); flows(); selectionRegressions(); detectorInventory(); inventoryAndElevator(); originalTravel(); unifiedControls(); cardCountsAndLiftDirections(); capacityAndPlan(); pauseAndFailures(); codeTerminal(); sequenceTiming(); if(argc==2) originals(argv[1]); if(argc==3 && std::string_view(argv[1])=="--lab") originalTravelLab(argv[2]);
         std::cout<<"Original interaction coordinates, bounds, resources and code format passed.\n";
     } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
 }

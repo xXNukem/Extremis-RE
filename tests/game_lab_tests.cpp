@@ -180,8 +180,12 @@ int main(int argc, char* argv[])
             reject(bytes);
         }
         bytes = valid;
-        put16(bytes, 186, 6); // Duplicate polygon offsets.
-        reject(bytes);
+        put16(bytes, 186, 6); // Two original indices may share one polygon record.
+        write(bytes);
+        const auto aliases=game_lab::loadLevel1(path).level.sectors.at(0).polygons;
+        check(aliases.size()==2 && aliases[0].vertices==aliases[1].vertices &&
+              aliases[0].connections[0].polygon==aliases[1].connections[0].polygon,
+              "Shared polygon records lost their original indices");
         bytes = valid;
         put16(bytes, 184, 2); // Offset points inside table B header.
         reject(bytes);

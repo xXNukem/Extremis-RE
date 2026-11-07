@@ -1,4 +1,6 @@
 #include "original_interactions.h"
+#include "original_travel.h"
+#include "interface_font.h"
 #include <algorithm>
 #include <fstream>
 #include <stdexcept>
@@ -13,6 +15,8 @@ void requireImage(const std::vector<spr_format::Image>& bank, std::size_t index,
 }
 void validate(const Resources& r)
 {
+    if(r.pickupMovie.frames.size()!=5 || std::any_of(r.pickupMovie.frames.begin(),r.pickupMovie.frames.end(),
+        [](const auto& frame){return frame.size()!=64000;})) throw std::runtime_error("Invalid pickup ANM");
     if (r.keyboard.size()!=10 || r.supplies.size()!=31 || r.weapons.size()!=26 ||
         r.inventory.size()!=27 || r.letters.size()!=76 || r.reader.size()!=5 || r.plan.size()!=5 || r.codes.size()!=10 || r.elevator.size()!=10)
         throw std::runtime_error("Invalid original interaction bank count");
@@ -26,16 +30,21 @@ void validate(const Resources& r)
                 s.anchorY<0 || s.anchorY>s.height ||
                 s.indices.size()!=std::size_t(s.width)*s.height)
                 throw std::runtime_error("Invalid original interaction sprite pixels");
-    if (r.smallFont.size()!=634 || r.smallFont[0]!=3 || r.smallFont[1]!=8)
-        throw std::runtime_error("Unsupported TYPO_3X8 font");
-    if (r.tinyFont.size()!=278 || r.tinyFont[0]!=3 || r.tinyFont[1]!=5)
-        throw std::runtime_error("Unsupported TYPO_3X5 font");
-    for (unsigned i=2;i<98;++i)
-        if (r.tinyFont[i]!=255 && 98+5*unsigned(r.tinyFont[i])+5>r.tinyFont.size())
-            throw std::runtime_error("Invalid original elevator font mapping");
-    for (unsigned i=2;i<98;++i)
-        if (r.smallFont[i]!=255 && 98+8*unsigned(r.smallFont[i])+8>r.smallFont.size())
-            throw std::runtime_error("Invalid original interaction font mapping");
+    for (const auto* bank:{&r.supplyDoor,&r.weaponDoor,&r.planDoor}) {
+        if (bank->size()!=1) throw std::runtime_error("Invalid terminal door bank");
+        requireImage(*bank,0,196,128);
+    }
+    if (r.supplyOpening.size()!=12 || r.weaponOpening.size()!=11)
+        throw std::runtime_error("Invalid cabinet opening bank");
+    requireImage(r.supplyOpening,0,196,100); requireImage(r.weaponOpening,0,196,100);
+    for (const auto* bank:{&r.supplyDoor,&r.weaponDoor,&r.planDoor,&r.supplyOpening,&r.weaponOpening})
+        for (const auto& s:*bank)
+            if (s.width<=0 || s.height<=0 || s.width>320 || s.height>200 ||
+                s.anchorX<0 || s.anchorY<0 || s.anchorX>s.width || s.anchorY>s.height ||
+                s.indices.size()!=std::size_t(s.width)*s.height)
+                throw std::runtime_error("Invalid terminal animation pixels");
+    interface_font::validate(r.smallFont,8);
+    interface_font::validate(r.tinyFont,5);
 }
 std::optional<unsigned> letter(unsigned char c)
 {
@@ -50,6 +59,12 @@ std::optional<unsigned> letter(unsigned char c)
 Resources load(const std::filesystem::path& directory)
 {
     Resources r;
+    r.pickupMovie=anm_format::load(directory/"A_ARME.ANM");
+    r.supplyDoor=spr_format::load(directory/"CH_OBJ2.SPR");
+    r.supplyOpening=spr_format::load(directory/"CH_OBJ3.SPR");
+    r.weaponDoor=spr_format::load(directory/"CHARME2.SPR");
+    r.weaponOpening=spr_format::load(directory/"CHARME3.SPR");
+    r.planDoor=spr_format::load(directory/"B_PLAN2.SPR");
     r.keyboard=spr_format::load(directory/"CHARME.SPR");
     r.supplies=spr_format::load(directory/"CH_OBJ4A.SPR");
     r.weapons=spr_format::load(directory/"CHARME4A.SPR");
@@ -89,22 +104,8 @@ void Renderer::image(std::vector<std::uint32_t>& pixels, const spr_format::Image
 }
 void Renderer::smallText(std::vector<std::uint32_t>& pixels, std::string_view text, int x, int y, bool tiny) const
 {
-    const auto& font=tiny?resources_.tinyFont:resources_.smallFont;
-    const int height=tiny?5:8;
-    // EXE 0xa759: header, 96-byte character map, MSB-first 3-bit rows; color 102.
-    for (unsigned char c : text) {
-        if (x>=320) break;
-        if (c>=32 && c<128) {
-            const auto glyph=font[2+c-32];
-            if (glyph!=255)
-                for (int row=0;row<height;++row)
-                    for (int col=0;col<3;++col)
-                        if (x+col>=0 && x+col<320 && y+row>=0 && y+row<200 &&
-                            (font[98+height*glyph+row] & (128>>col)))
-                            pixels[(y+row)*320+x+col]=colors_[tiny?24:102];
-        }
-        x+=4;
-    }
+    interface_font::draw(pixels,tiny?resources_.tinyFont:resources_.smallFont,
+                         colors_[tiny?24:102],text,x,y);
 }
 void Renderer::menuText(std::vector<std::uint32_t>& pixels, std::string_view text, int y, bool selected) const
 {
@@ -134,7 +135,8 @@ void Renderer::code(std::vector<std::uint32_t>& pixels, const State& s) const
         image(pixels,resources_.keyboard[1],88+15*int(pressed%7),pressed<7?58:75);
     }
     // Recovered resting glove/finger pose, EXE 0x196b4..0x19707.
-    const int handX=70+15*int(key%7), handY=70+17*int(key/7)-(s.fingerPhase==2?8:s.fingerPhase?4:0);
+    const int handX=70+15*int(key%7), handY=70+17*int(key/7)-(s.fingerPhase==2?8:s.fingerPhase?4:0)
+        +(s.phase==Phase::HandOut?4*int(s.frame):s.phase==Phase::HandIn?64-4*int(s.frame):0);
     image(pixels,resources_.keyboard[6],handX,handY,true,25,125,62,258);
     image(pixels,resources_.keyboard[s.fingerPhase==2?9:s.fingerPhase?8:7],handX+42,handY+9,true,25,125,62,258);
     if (!s.notice.empty()) { smallText(pixels,s.notice,77,36); return; }
@@ -266,20 +268,26 @@ void Renderer::inventory(std::vector<std::uint32_t>& pixels, const State& s) con
 bool Renderer::draw(std::vector<std::uint32_t>& pixels, const State& state) const
 {
     if (pixels.size()!=320*200) return false;
+    if (sequence(pixels,state)) return true;
     switch(state.screen) {
     case Screen::Elevator: {
         const auto& bank=resources_.elevator;
         image(pixels,bank[0],62,25,false);
-        // Labels are pairs of four characters, file 0xdacf + 54*index +22.
-        if (state.elevatorIndex<2) {
-            smallText(pixels,"ZONE",200,66,true); smallText(pixels,"C200",200,72,true);
-            image(pixels,bank[state.elevatorIndex==0?3:1],142,63);
-            if (state.elevatorIndex==1) {
-                smallText(pixels,"ZONE",200,50,true); smallText(pixels,"B101",200,56,true);
-                image(pixels,bank[1],142,47);
-            }
+        for (unsigned row=0;row<4;++row) {
+            const auto* route=original::route(state.elevatorIndex,row);
+            if (!route || !route->exists) continue;
+            const int y=82-16*int(row);
+            smallText(pixels,route->label.substr(0,4),200,y,true);
+            smallText(pixels,route->label.substr(4,4),200,y+6,true);
+            if (original::admitted(*route,state.useSelection,state.elevatorZone,state.elevatorSector))
+                image(pixels,bank[route->zone==state.elevatorZone?3:1],142,y-3);
         }
-        const int handY=87-16*int(std::min(state.selection,3u));
+        if(state.phase!=Phase::Opening) {
+            const int percent=state.phase==Phase::CardInsert?5*int(std::min(state.frame,20u)):100;
+            image(pixels,bank[5],62+16*percent/100,percent==100?41:125-85*percent/100,true,54,125,62,258);
+        }
+        if(state.phase==Phase::Opening || state.phase==Phase::CardInsert) break;
+        const int handY=state.phase==Phase::HandIn?123-2*int(state.frame):87-16*int(std::min(state.selection,3u));
         image(pixels,bank[6],136,handY+4,true,25,125,62,258);
         image(pixels,bank[7],178,handY+13,true,25,125,62,258);
         if (!state.notice.empty()) smallText(pixels,state.notice,77,110);
@@ -290,28 +298,17 @@ bool Renderer::draw(std::vector<std::uint32_t>& pixels, const State& state) cons
     case Screen::Supply: supply(pixels,state,false); break;
     case Screen::Weapon: supply(pixels,state,true); break;
     case Screen::Cards: cards(pixels,state); break;
-    case Screen::Reader:
-        image(pixels,(state.codeReader?resources_.codes:resources_.reader)[0],62,25,false);
-        image(pixels,(state.codeReader?resources_.codes:resources_.reader)[1],85,52,true,65,125);
-        smallText(pixels,state.notice,77,36); break;
+    case Screen::Reader: reader(pixels,state); break;
     case Screen::Codes:
         image(pixels,resources_.codes[0],62,25,false);
         image(pixels,resources_.codes[1],85,52,true,65,125);
         {
-            const int handY=state.selection?86:68;
+            const int handY=state.phase==Phase::HandIn?168-5*int(std::min(state.frame,20u)):state.selection?86:68;
             image(pixels,resources_.codes[5],134,handY,true,25,125,62,258);
             image(pixels,resources_.codes[6],173,handY+8,true,25,125,62,258);
         }
         smallText(pixels,state.notice,76,37); break;
-    case Screen::Plan:
-        image(pixels,resources_.plan[0],62,25,false);
-        smallText(pixels,"TRANSFER",142,51);
-        {
-            const unsigned value=std::min(state.transfer,100u);
-            const char digits[]{char('0'+value/100),char('0'+value/10%10),char('0'+value%10),0};
-            smallText(pixels,digits,154,81);
-        }
-        smallText(pixels,"ZONE C200",140,112); break;
+    case Screen::Plan: shutters(pixels,state); break;
     }
     return true;
 }

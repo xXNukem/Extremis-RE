@@ -7,6 +7,7 @@
 #include "sprite_scene.h"
 #include "original_hud.h"
 #include "original_interactions.h"
+#include "original_map.h"
 
 #include <memory>
 
@@ -57,7 +58,8 @@ public:
               const interaction::State* interactionState = nullptr,
               const sprites::Scene* projectiles = nullptr,
               const sprites::Scene* enemies = nullptr,
-              const std::vector<sprites::Instance>* enemyEffects = nullptr);
+              const std::vector<sprites::Instance>* enemyEffects = nullptr,
+              const original_map::Renderer* map = nullptr, const original_map::State* mapState = nullptr);
 
 private:
     struct TextureDeleter {
@@ -72,6 +74,8 @@ private:
     std::vector<std::uint32_t> pixels_;
     std::vector<std::uint32_t> composed_;
     std::vector<double> depth_;
+    std::vector<std::uint32_t> mapBackground_;
+    bool showingMap_ = false, frameReady_ = false;
     int width_ = 0, height_ = 0;
     bool withHud_ = false;
 };

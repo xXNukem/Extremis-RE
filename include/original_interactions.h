@@ -1,5 +1,6 @@
 #pragma once
 #include "spr_format.h"
+#include "anm_format.h"
 #include "texture_bank.h"
 #include <array>
 #include <optional>
@@ -8,7 +9,15 @@
 
 namespace interaction {
 enum class Screen { Code, Supply, Weapon, Cards, Reader, Plan, Codes, Inventory, Elevator };
+enum class Phase { Ready, Opening, HandIn, CodeResult, HandOut, PanelSlide, PanelZoom,
+                   Shutters, ContentExpand, ContentMove, ContentReveal, Closing,
+                   CardInsert, CardCheck, CardResult, CardWithdraw, MovieIn, Movie, MovieOut };
 struct State {
+    Phase phase = Phase::Ready;
+    unsigned frame = 0;
+    double movieSeconds = 0;
+    bool contentTaken = false;
+    bool codeAccepted = false, cardAccepted = false;
     Screen screen = Screen::Code;
     std::uint16_t contents = 0;
     unsigned selection = 0;
@@ -27,11 +36,14 @@ struct State {
     unsigned fingerPhase = 0;
     bool elevator = false;
     unsigned elevatorIndex = 0;
+    unsigned elevatorZone = 0, elevatorSector = 0;
     bool codeReader = false;
     unsigned codeIndex = 0;
 };
 struct Resources {
+    anm_format::Animation pickupMovie;
     std::vector<spr_format::Image> keyboard, supplies, weapons, inventory, letters, reader, plan, codes, elevator;
+    std::vector<spr_format::Image> supplyDoor, supplyOpening, weaponDoor, weaponOpening, planDoor;
     std::vector<std::uint8_t> smallFont, tinyFont;
     std::array<wall_textures::Rgb,256> palette{};
 };
@@ -46,6 +58,12 @@ private:
                int clipLeft = 0, int clipRight = 320) const;
     void smallText(std::vector<std::uint32_t>& pixels, std::string_view text, int x, int y, bool tiny = false) const;
     void menuText(std::vector<std::uint32_t>& pixels, std::string_view text, int y, bool selected) const;
+    void movie(std::vector<std::uint32_t>& pixels, const State& state) const;
+    bool sequence(std::vector<std::uint32_t>& pixels, const State& state) const;
+    void shutters(std::vector<std::uint32_t>& pixels, const State& state) const;
+    void scaled(std::vector<std::uint32_t>& pixels, const spr_format::Image& sprite,
+                int x, int y, int width, int height) const;
+    void reader(std::vector<std::uint32_t>& pixels, const State& state) const;
     void code(std::vector<std::uint32_t>& pixels, const State& state) const;
     void supply(std::vector<std::uint32_t>& pixels, const State& state, bool weapon) const;
     void inventory(std::vector<std::uint32_t>& pixels, const State& state) const;

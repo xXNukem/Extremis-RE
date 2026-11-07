@@ -38,6 +38,9 @@ void GameAudio::confirmItemSelection()
     // Original cabinet confirmation: 0x18f97..0x18f9f, AX=12, voice 1.
     player_.play(12);
 }
+void GameAudio::pickupTransfer() { player_.play(26,false,audio::Playback::Once); }
+void GameAudio::insertCard() { player_.play(18,false,audio::Playback::Once); }
+void GameAudio::interfaceShutters() { player_.play(27,false,audio::Playback::Once); }
 void GameAudio::interfaceKey() { player_.play(28); }
 void GameAudio::acceptCard() { player_.play(19); }
 void GameAudio::interfaceMotor()

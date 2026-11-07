@@ -22,6 +22,7 @@ public:
         double progress = 0;
     };
     DoorControl(const collision::World& staticWorld, std::vector<doors::Door>& doors);
+    void resetLevel();
     void prepareFrame(const Camera* player, double seconds, const collision::Settings& body);
     UseResult interact(const Camera& player, double range = 200.0, UseTrace* trace = nullptr);
     enum class CardResult { Unlocked, AlreadyDisabled, Rejected, NoCard, InvalidTarget };

@@ -12,6 +12,7 @@
 #include "game_audio.h"
 #include "survival_session.h"
 #include "item_session.h"
+#include "map_session.h"
 #include "enemy_system.h"
 
 #include <exception>
@@ -39,6 +40,8 @@ int main(int argc, char* argv[])
     std::optional<interaction::Renderer> interactionRenderer;
     SurvivalSession survival(vitalsDebug);
     ItemSession items;
+    original_map::Session mapSession;
+    std::optional<original_map::Renderer> originalMap;
     player::WeaponFire weaponFire;
     bool weaponGraphicsReady=false;
     std::vector<doors::Door> levelDoors;
@@ -63,6 +66,11 @@ int main(int argc, char* argv[])
                 std::cerr << "HUD unavailable: " << error.what() << '\n';
             }
             items.setAvailable(interactionRenderer.has_value() && originalHud.has_value());
+            try {
+                originalMap.emplace(original_map::load(std::filesystem::path(argv[1]).parent_path()/"DATA"));
+            } catch (const std::exception& error) {
+                std::cerr << "Original map unavailable: " << error.what() << '\n';
+            }
             try {
                 weaponFire.loadGraphics(std::filesystem::path(argv[1]).parent_path()/"DATA",level.palBank);
                 weaponGraphicsReady=true;
@@ -117,7 +125,8 @@ int main(int argc, char* argv[])
                       << " | Entities A: " << entities << '\n'
                       << "Polygons B: " << polygons << " | Connections: " << connections << '\n'
                       << "Press P to toggle polygon contours.\n"
-                      << "TAB: 2D/3D view; Left/Right: rotate in 3D; O: toggle doors (debug).\n"
+                      << "M / physical semicolon: toggle original map after plan transfer; Space: close map.\n"
+                      << "TAB: debug 2D/3D view; Left/Right: rotate in 3D; O: toggle doors (debug).\n"
                       << "WASD: move/navigate; Shift: run; mouse: look; left button: fire equipped weapon.\n"
                       << "E: interact/confirm; I: toggle inventory; Z: heal; X: oxygen; Escape: close interface.\n"
                       << "F: toggle floor and ceiling textures together.\n"
@@ -172,20 +181,36 @@ int main(int argc, char* argv[])
         if (data) gameAudio.load(std::filesystem::path(argv[1]).parent_path() / "DATA");
         bool running = true;
         bool showPolygons = false;
-        bool show3D = false;
+        bool show3D = camera.has_value();
         Uint64 previousTicks = SDL_GetTicks();
         while (running) {
+            mapSession.beginFrame(data?data->level.zoneIndex:0);
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                const bool modalEvent=items.handleEvent(event,SDL_GetWindowID(window));
+                const bool wasMap=mapSession.modal();
+                const bool mapKey=event.type==SDL_EVENT_KEY_DOWN &&
+                    (event.key.scancode==SDL_SCANCODE_M || event.key.scancode==SDL_SCANCODE_SEMICOLON);
+                const bool mapBlocked=mapKey && enemySystem && camera && data &&
+                    enemySystem->blocksInterface(data->level,*camera,doorControl.movementWorld());
+                const bool mapEvent=mapSession.handleEvent(event,SDL_GetWindowID(window),
+                    camera?&*camera:nullptr,show3D && !items.busy() && SDL_GetKeyboardFocus()==window,
+                    items.planTransferred(),mapBlocked,originalMap.has_value() && originalHud.has_value(),survival);
+                if (wasMap!=mapSession.modal()) { items.clearInput(); playerInput.invalidateContext(); }
+                // Releases must clear held UI keys even while the map owns input.
+                const bool itemEvent=(!mapEvent || event.type==SDL_EVENT_KEY_UP) &&
+                    items.handleEvent(event,SDL_GetWindowID(window));
+                const bool modalEvent=mapEvent || itemEvent;
                 // Observe releases even if the UI owns the event, but never arm UI clicks.
-                playerInput.handleEvent(event,!modalEvent && !items.modal() && show3D && survival.alive());
+                playerInput.handleEvent(event,!modalEvent && !items.modal() && !mapSession.blocksSimulation() && show3D && survival.alive());
                 if (modalEvent) continue;
+                if ((event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_KEY_UP) &&
+                    event.key.windowID!=SDL_GetWindowID(window)) continue;
                 survival.handleEvent(event, SDL_GetWindowID(window));
                 planeAppearance.handleEvent(event, SDL_GetWindowID(window));
                 if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
-                    (event.key.key == SDLK_N || event.key.key == SDLK_M)) {
-                    texturePreview.changeIndex(event.key.key == SDLK_M ? 1 : -1);
+                    event.key.windowID==SDL_GetWindowID(window) &&
+                    (event.key.scancode == SDL_SCANCODE_PAGEDOWN || event.key.scancode == SDL_SCANCODE_PAGEUP)) {
+                    texturePreview.changeIndex(event.key.scancode == SDL_SCANCODE_PAGEUP ? 1 : -1);
                     SDL_SetWindowTitle(window, survival.windowTitle(texturePreview.windowTitle()).c_str());
                 }
                 if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_TAB &&
@@ -218,14 +243,74 @@ int main(int argc, char* argv[])
             previousTicks = ticks;
             const bool inputActive = camera && show3D && SDL_GetKeyboardFocus() == window;
             // Resolve context changes before polling continuous WASD/Shift state.
-            items.update(camera ? &*camera : nullptr,inputActive,
-                         doorControl.movementWorld(),survival,gameAudio,&doorControl);
-            const bool simulationActive = inputActive && !items.modal();
-            texturePreview.update(items.modal()?0:elapsedSeconds);
-            if (spriteScene && !items.modal()) spriteAnimation.update(*spriteScene, elapsedSeconds);
+            items.update(camera ? &*camera : nullptr,inputActive && !mapSession.blocksSimulation(),
+                         doorControl.movementWorld(),survival,gameAudio,&doorControl,elapsedSeconds);
+                if (const auto travel=items.takeTravel()) {
+
+                    // An elevator travelling within the same level must not reload the world.
+                    if (data && travel->zone == data->level.zoneIndex) {
+                        auto arrivalLevel = data->level;
+                        arrivalLevel.playerStart = travel->arrival;
+
+                        camera = initialCamera(arrivalLevel);
+                        playerInput.invalidateContext();
+
+                        SDL_Log("Elevator: same-level transfer to sector %u",
+                                travel->arrival.sector);
+
+                        previousTicks = SDL_GetTicks();
+                        continue;
+                    }
+
+                    try {
+                    // Stage destination resources before replacing the active world.
+                    auto next=game_lab::loadLevel(argv[1],travel->zone);
+                    next.level.playerStart=travel->arrival;
+                    const auto nextCamera=initialCamera(next.level);
+                    const auto directory=std::filesystem::path(argv[1]).parent_path()/"DATA";
+                    auto nextSprites=sprites::loadScene(next.level,directory);
+                    enemies::System nextEnemies; nextEnemies.load(next.level,directory);
+                    auto nextHud=hud::Renderer(hud::load(directory,next.level.palBank));
+                    player::WeaponFire nextWeapon; nextWeapon.loadGraphics(directory,next.level.palBank);
+                    TexturePreview nextTextures;
+                    nextTextures.load(directory,next.level.dalleBank,next.level.palBank);
+                    PlaneAppearance nextPlanes;
+                    nextPlanes.load(directory,next.level.dalleBank,next.level.palBank);
+                    if (!nextTextures.materials())
+                        throw std::runtime_error("Missing destination wall textures");
+                    auto nextWorld=collision::staticWorld(next.level);
+                    auto nextDoors=doors::closedDoors(next.level);
+                    items.load(next.level); // Keeps transferred plans; clears level-local terminals.
+                    data=std::move(next); camera=nextCamera;
+                    collisionWorld=std::move(nextWorld); levelDoors=std::move(nextDoors);
+                    doorControl.resetLevel();
+                    spriteScene=std::move(nextSprites); spriteAnimation=sprites::Animation{};
+                    enemySystem=std::move(nextEnemies); originalHud=std::move(nextHud);
+                    weaponFire=std::move(nextWeapon); weaponGraphicsReady=true;
+                    texturePreview=std::move(nextTextures); planeAppearance=std::move(nextPlanes);
+                    mapSession=original_map::Session{};
+                    mapSession.beginFrame(data->level.zoneIndex);
+                    survival.clearMessages(); // Vitals, inventory and battery retain their values.
+                    playerInput.invalidateContext();
+                    SDL_SetWindowTitle(window,survival.windowTitle(texturePreview.windowTitle()).c_str());
+                    SDL_Log("Elevator: level %u, sector %u, arrival %.0f,%.0f; %zu sectors, %zu sprites, %zu enemies, %zu doors",
+                        travel->zone+1,travel->arrival.sector,camera->x,camera->y,
+                        data->level.sectors.size(),spriteScene->objects.size(),
+                        enemySystem->records().size(),levelDoors.size());
+                } catch (const std::exception& error) {
+                    SDL_Log("Elevator destination load failed: %s",error.what());
+                }
+                previousTicks=SDL_GetTicks();
+                continue; // No simulation with elapsed time or input from the old world.
+            }
+            const bool modalBlocked = items.modal() || mapSession.blocksSimulation();
+            const bool simulationActive = inputActive && !modalBlocked;
+            mapSession.update(elapsedSeconds,SDL_GetKeyboardFocus()==window);
+            texturePreview.update(modalBlocked?0:elapsedSeconds);
+            if (spriteScene && !modalBlocked) spriteAnimation.update(*spriteScene, elapsedSeconds);
             const Camera beforeMovement=camera.value_or(Camera{});
-            if (!playerInput.update(camera ? &*camera : nullptr, show3D && survival.alive() && !items.modal(),
-                                    items.modal()?0:elapsedSeconds)) {
+            if (!playerInput.update(camera ? &*camera : nullptr, show3D && survival.alive() && !modalBlocked,
+                                    modalBlocked?0:elapsedSeconds)) {
                 SDL_Log("Player input failed: %s", SDL_GetError());
                 exitCode = 1;
                 break;
@@ -266,7 +351,8 @@ int main(int argc, char* argv[])
                                        interactionRenderer ? &*interactionRenderer : nullptr,items.interfaceState(),
                                        weaponGraphicsReady?&weaponFire.scene():nullptr,
                                        enemySystem?&enemySystem->scene():nullptr,
-                                       enemySystem?&enemySystem->effects().objects():nullptr)
+                                       enemySystem?&enemySystem->effects().objects():nullptr,
+                                       originalMap?&*originalMap:nullptr,mapSession.state())
                     : drawMap(renderer, data->level, showPolygons, camera ? &*camera : nullptr))) ||
                 (camera && (!show3D || !originalHud) && !drawPlayerDebug(renderer, *camera)) ||
                 !SDL_RenderPresent(renderer)) {

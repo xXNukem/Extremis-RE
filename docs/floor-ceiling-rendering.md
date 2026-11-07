@@ -1,5 +1,8 @@
 # Suelo y techo texturizados
 
+Auditoría vigente: [Paso 205 — funcionalidades DOS pendientes](step-205-original-functionality-audit.md).
+Incluye estado real, nuevas evidencias y límites de validación; no implementa funciones.
+
 ## Recursos y correspondencia confirmada
 
 Investigación estática del mismo EXTREMIS.EXE documentado en

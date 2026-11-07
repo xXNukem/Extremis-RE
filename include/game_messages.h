@@ -3,7 +3,7 @@
 #include <string_view>
 
 namespace messages {
-enum class Id { PortalLocked, DoorUnlocked, CardRejected, AlreadyDisabled, EmptyPanel };
+enum class Id { PortalLocked, DoorUnlocked, CardRejected, AlreadyDisabled, EmptyPanel, MapBlocked, MapUnavailable };
 std::string_view text(Id id);
 
 // Original five-entry, duplicate-suppressing queue and 800-tick lifetime.

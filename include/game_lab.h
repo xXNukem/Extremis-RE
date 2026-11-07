@@ -60,6 +60,7 @@ struct Level {
     std::vector<std::uint16_t> connectionStates; // Raw table at level header +0x0a.
     std::optional<std::uint16_t> accessCode; // Word at header +0x0e target, EXE [0x519a].
     std::vector<std::uint16_t> codeTargets; // Count/list following accessCode for code terminals.
+    unsigned zoneIndex = 0; // Zero-based GAME.LAB/MAP.SPR record, not resource-bank number.
 };
 
 struct Header {
@@ -72,9 +73,12 @@ struct Level1 {
     Level level;
 };
 
-// Reads level 1 only. Throws std::runtime_error on I/O or invalid data.
+// Reads a zero-based level. Throws std::runtime_error on I/O or invalid data.
 // Includes table B polygons and connections. Coordinates remain local;
 // add sector.gx/gy using uint32_t to obtain global coordinates.
+Level1 loadLevel(const std::filesystem::path& path, unsigned zoneIndex);
+// Read GAME.LAB once; return bank IDs and zoneIndex only (no geometry/entities).
+std::vector<Level> loadBankTable(const std::filesystem::path& path);
 Level1 loadLevel1(const std::filesystem::path& path);
 
 } // namespace game_lab
