@@ -6,15 +6,20 @@
 
 SurvivalSession::SurvivalSession(bool diagnostics) : diagnostics_(diagnostics)
 {
+#ifdef EXTREMIS_DEBUG_MENU
     if (diagnostics_)
         SDL_Log("VITALS DEBUG enabled: F5 damage 250; F6 restore health; F7 oxygen +60 s; "
                 "F8 exhaust oxygen; F9 full diagnostic bottle; F10 reset vitals only; F11 diagnostic battery + radar.");
+#else
+    diagnostics_=false;
+#endif
 }
 
 void SurvivalSession::handleEvent(const SDL_Event& event, std::uint32_t windowId)
 {
     if ((event.type == SDL_EVENT_WINDOW_FOCUS_LOST || event.type == SDL_EVENT_WINDOW_FOCUS_GAINED) &&
         event.window.windowID == windowId) wasActive_ = false;
+#ifdef EXTREMIS_DEBUG_MENU
     if (event.type == SDL_EVENT_KEY_DOWN && event.key.windowID == windowId &&
         event.key.key == SDLK_TAB && !event.key.repeat) wasActive_ = false;
     if (!diagnostics_ || event.type != SDL_EVENT_KEY_DOWN || event.key.repeat ||
@@ -40,6 +45,7 @@ void SurvivalSession::handleEvent(const SDL_Event& event, std::uint32_t windowId
     }
     SDL_Log("VITALS DIAGNOSTIC: health=%d oxygen=%d alive=%s; F10 resets vitals only, not the world",
             vitals_.health(),vitals_.oxygen(),alive() ? "yes" : "no");
+#endif
 }
 
 bool SurvivalSession::update(double seconds, bool simulationActive, GameAudio& audio, bool running)
@@ -90,7 +96,9 @@ void SurvivalSession::clearMessages() { messages_.clear(); }
 std::string SurvivalSession::windowTitle(const std::string& base) const
 {
     std::string result = base;
+#ifdef EXTREMIS_DEBUG_MENU
     if (diagnostics_) result += " | VITALS DEBUG";
+#endif
     if (!alive()) result += " | DEAD - original visual transition pending";
     return result;
 }

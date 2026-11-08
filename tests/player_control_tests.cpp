@@ -70,6 +70,44 @@ void testRunning()
     Camera angle{}; player::update(angle,{0,0,1,0,true},1);
     check(near(angle.angle,1.5),"Running changed turn speed");
 }
+void testPosture()
+{
+    Camera camera{};
+    player::Input crouch{}; crouch.crouch=true;
+    for(int i=1;i<=7;++i) {
+        player::update(camera,crouch,1./18);
+        check(near(camera.postureHeight,std::max(100.,165.-10*i)),"Crouch transition differs");
+    }
+    player::update(camera,crouch,1);
+    check(camera.postureHeight==100,"Held crouch did not stay down");
+    for(int i=1;i<=7;++i) {
+        player::update(camera,{},1./18);
+        check(near(camera.postureHeight,std::min(165.,100.+10*i)),"Stand transition differs");
+    }
+    for(int fps : {30,60,120}) {
+        Camera split{},whole{};
+        const player::Input run{1,0,0,0,true,true};
+        player::update(whole,run,1);
+        for(int i=0;i<fps;++i) player::update(split,run,1./fps);
+        check(near(split.x,whole.x) && split.postureHeight==100 && split.movementStep==10,
+              "Crouch braking depends on rendering FPS");
+        const double before=split.x;
+        player::update(split,run,1);
+        check(near(split.x-before,300),"Held run accelerated crouched player");
+    }
+    Camera braking{};
+    player::update(braking,{1,0,0,0,true},1./18);
+    player::update(braking,{1,0,0,0,true,true},2./18);
+    check(braking.postureHeight==145 && braking.movementStep==18,"First braking step differs");
+    player::update(braking,{1,0,0,0,true,true},1./18);
+    check(braking.movementStep==16,"Braking is not two units per tick");
+    const collision::World wall{{{100,-1000},{100,1000}}};
+    Camera standing{},low{};low.postureHeight=100;
+    player::update(standing,{1,0},1,{},&wall);
+    player::update(low,{1,0,0,0,false,true},1,{},&wall);
+    check(near(standing.x,low.x) && low.x<70.001,"Posture changed planar collision radius");
+}
+
 void testRotation()
 {
     Camera left{}, right{}, mouse{}, splitMouse{}, splitKeys{};
@@ -95,7 +133,7 @@ int main()
     try {
         testDirections();
         testDiagonalAndTime();
-        testRotation(); testRunning();
+        testRotation(); testRunning(); testPosture();
         std::cout << "Planar WASD, normalized diagonals, timing and rotation passed (no SDL).\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

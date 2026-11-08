@@ -11,14 +11,15 @@ World::World(const game_lab::Level& level)
         for (std::size_t w = 0; w < sector.walls.size(); ++w) {
             const auto& wall = sector.walls[w];
             const auto family = wall.type & 0xff00;
-            const unsigned kind = wall.extra >> 12;
-            if (family != 0x3000 && family != 0x3100 && family != 0x3300 && family != 0x3500 && family != 0x3600 &&
-                !(family == 0x3200 && kind <= 5)) continue;
+            // EXE 0xa52f dispatches every supply cabinet, including mines and
+            // the empty sentinel. Contents are not an interaction-type filter.
+            if (family != 0x3000 && family != 0x3100 && family != 0x3300 && family != 0x3400 && family != 0x3500 && family != 0x3600 &&
+                family != 0x3200) continue;
             if (wall.vertexA >= sector.vertices.size() || wall.vertexB >= sector.vertices.size()) continue;
             const auto a = sector.vertices[wall.vertexA], b = sector.vertices[wall.vertexB];
             panels_.push_back({s,w,{{double(sector.gx)+a.x,double(sector.gy)+a.y},
                                     {double(sector.gx)+b.x,double(sector.gy)+b.y}},
-                               family == 0x3100,wall.extra,family == 0x3300,family == 0x3600,family==0x3500,family==0x3000});
+                               family == 0x3100,wall.extra,family == 0x3300,family == 0x3600,family==0x3500,family==0x3000,family==0x3400});
         }
     }
 }
@@ -72,13 +73,13 @@ player::Transfer World::take(std::size_t index, player::Inventory& inventory)
 {
     if (index>=panels_.size()) return player::Transfer::Unsupported;
     auto& panel=panels_[index];
-    if (panel.cardReader || panel.codePanel || panel.codeReader || panel.elevator) return player::Transfer::Unsupported;
+    if (panel.cardReader || panel.codePanel || panel.codeReader || panel.elevator || panel.securityPanel) return player::Transfer::Unsupported;
     return panel.weapon ? inventory.exchangeWeapon(panel.contents) : inventory.takeSupply(panel.contents);
 }
 player::Transfer World::replaceCard(std::size_t index, player::Inventory& inventory, unsigned slot)
 {
     if (index>=panels_.size() || panels_[index].weapon || panels_[index].cardReader ||
-        panels_[index].codePanel || panels_[index].codeReader || panels_[index].elevator)
+        panels_[index].codePanel || panels_[index].codeReader || panels_[index].elevator || panels_[index].securityPanel)
         return player::Transfer::Unsupported;
     return inventory.replaceCard(panels_[index].contents,slot);
 }

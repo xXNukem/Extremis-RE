@@ -70,6 +70,63 @@ game_lab::Level arena()
     level.enemies={{4,4,6,0,0,500,500,0xffff,360,0,0x8000,0,500,500}};
     return level;
 }
+void sectorVisibility(const std::filesystem::path& directory)
+{
+    auto level=arena();
+    level.sectors.push_back(level.sectors[0]); level.sectors[1].gx=1000;
+    level.sectors[0].neighbors={1}; level.sectors[1].neighbors={0};
+    level.connectionStates={0x0400};
+    std::vector<doors::Door> dynamic(1);
+    auto& door=dynamic[0]; door.stateIndex=0; door.originalState=0x0400;
+    const auto connected=[&]() -> bool { return doors::connectedSectors(level,1,dynamic)[0]; };
+    check(!connected(),"Closed locked connection enabled");
+    door.originalState=0;
+    check(!connected(),"Unlocking enabled a closed connection");
+    door.state=doors::State::Opening;
+    check(connected(),"Opening at zero progress did not enable connection");
+    door.state=doors::State::Open; door.progress=1;
+    check(connected(),"Open connection disabled");
+    door.state=doors::State::Closing; door.progress=.5;
+    check(connected(),"Closing positive progress disabled connection");
+    door.progress=0;
+    check(!connected(),"Closing zero progress enabled connection");
+    door.state=doors::State::Closed;
+    check(!connected(),"Finished closure enabled connection");
+    level.connectionStates[0]=0x0100;
+    check(doors::connectedSectors(level,1,{})==std::vector<bool>({true,true}),
+          "Original connection or cyclic traversal failed");
+    check(!connected(),"Original word overrode dynamic closed door");
+    level.connectionStates[0]=0x0400;
+    check(!doors::connectedSectors(level,1,{})[0],"Lock bit enabled original connection");
+    level.sectors[1].neighbors={99,0}; // Invalid neighbor and missing connection wall.
+    level.sectors[1].walls.resize(1);
+    check(doors::connectedSectors(level,1,{})==std::vector<bool>({false,true}),
+          "Invalid neighbor traversed");
+    level.sectors[1].neighbors={0}; level.sectors[1].walls[0].extra=99;
+    check(!connected(),"Invalid connection state traversed");
+    check(doors::connectedSectors(level,99,dynamic)==std::vector<bool>({false,false}),
+          "Invalid player sector traversed");
+    level.sectors[1].walls[0].extra=0;
+    const Camera camera{1500,500,0}; // Enemy is behind, in the other sector.
+    const auto walls=collision::staticWorld(level); // Also retains opaque separating walls.
+    for (unsigned bank : {1u,5u}) {
+        fixture(directory,bank); level.monsBank=bank;
+        level.enemies[0].behavior=2;
+        enemies::System system; system.load(level,directory); player::Vitals vitals;
+        door.state=doors::State::Closed; door.progress=0;
+        check(!system.blocksInterface(level,camera,dynamic),"Closed door did not isolate enemy");
+        system.update(level,camera,walls,vitals,0,true,{}, {},dynamic);
+        system.update(level,camera,walls,vitals,1./18,true,{}, {},dynamic);
+        check(system.records()[0].behavior==2,"Isolated enemy activated");
+        door.state=doors::State::Opening;
+        check(system.blocksInterface(level,camera,dynamic),"Connected enemy behind player did not block map");
+        system.update(level,camera,walls,vitals,1./18,true,{}, {},dynamic);
+        check(system.records()[0].behavior==3,"Opening connection did not activate behavior 2");
+        level.enemies[0].health=0xffff; system.load(level,directory);
+        check(!system.blocksInterface(level,camera,dynamic),"Removed connected enemy blocked map");
+        level.enemies[0].health=4;
+    }
+}
 void otherBanks(const std::filesystem::path& directory)
 {
     fixture(directory);
@@ -110,9 +167,8 @@ void allBanks(const std::filesystem::path& directory, bool synthetic)
                 check(object.image<counts[bank-1],"Action frame out of bounds");
             system.trace(view,{view.x,view.y},{1,0},1000);
         }
-        if(bank==5) check(vitals.health()==1000,"Partial MONS5 invented an attack");
-        else check(vitals.health()<1000,"Enabled bank failed to attack");
-        if(bank==5 || bank==6)
+        check(vitals.health()<1000,"Enabled bank failed to attack");
+        if(bank==6)
             check(system.records()[0].x==500 && system.records()[0].y==500,"Special bank used shared walking");
         system.hit(0,0,0);
         check(system.records()[0].health==3 && system.records()[0].state==4,"Bank did not receive hit");
@@ -134,7 +190,7 @@ void allBanks(const std::filesystem::path& directory, bool synthetic)
         view.x=300;
         system.update(level,view,walls,vitals,0,true);
         system.update(level,view,walls,vitals,1./18,true);
-        const unsigned expectedStep=(bank==5 || bank==6)?0:(bank==9?10:30);
+        const unsigned expectedStep=bank==6?0:(bank==5?50:(bank==9?10:30));
         check(system.records()[0].x==500-expectedStep && system.records()[0].y==500,
               "Bank pursuit speed or stationary policy differs");
     }
@@ -313,18 +369,18 @@ void mons3(const std::filesystem::path& directory)
     enemies::System system; player::Vitals vitals; Camera camera{300,500,0};
     system.load(level,directory);
     check(system.scene().objects[0].height==190,"MONS3 height must be 190");
-    check(system.blocksInterface(level,camera,walls),"Live MONS3 did not block map");
+    check(system.blocksInterface(level,camera),"Live MONS3 did not block map");
     system.hit(0,4,0);
     system.update(level,camera,walls,vitals,0,true);
     for(unsigned i=0;i<8;++i) {
-        check(system.blocksInterface(level,camera,walls),"Dying MONS3 stopped blocking map early");
+        check(system.blocksInterface(level,camera),"Dying MONS3 stopped blocking map early");
         Camera attempted{450,500,0};
         system.constrainPlayer(level,camera,attempted,walls);
         check(attempted.x<400,"Dying MONS3 stopped blocking movement early");
         system.update(level,camera,walls,vitals,1./18,true);
         if(i<7) check((system.records()[0].sprite&255)==(i%2?9:5),"MONS3 death sequence differs");
     }
-    check(!system.blocksInterface(level,camera,walls),"Removed MONS3 still blocks map");
+    check(!system.blocksInterface(level,camera),"Removed MONS3 still blocks map");
     check(system.effects().objects().size()==1 && system.effects().objects()[0].image==10 &&
           system.effects().objects()[0].height==190,"MONS3 explosion body/height differs");
     system.update(level,camera,walls,vitals,1./18,true);
@@ -384,12 +440,273 @@ void navigation()
     check(point && point->x==1500,"Sector boundary caused a permanent waypoint stop");
 
 }
+void sharedMovement(const std::filesystem::path& directory)
+{
+    for (unsigned bank : {1u,2u,3u,4u,7u,8u,9u}) {
+        fixture(directory,bank);
+        auto level=arena(); level.monsBank=bank;
+        level.sectors.push_back(level.sectors[0]); level.sectors[1].gx=1000;
+        level.sectors[0].walls.erase(level.sectors[0].walls.begin()+1);
+        level.sectors[1].walls.pop_back();
+        level.sectors[0].routes={{1,1000,500}};
+        level.sectors[1].routes={{0,1000,500}};
+        level.enemies[0].x=200; level.enemies[0].homeX=100;
+        level.enemies[0].angle=0;
+        const auto walls=collision::staticWorld(level);
+        enemies::System system; player::Vitals vitals;
+        auto run=[&](Camera camera,unsigned ticks) {
+            system.update(level,camera,walls,vitals,0,true);
+            for(unsigned n=0;n<ticks;++n) {
+                vitals=player::Vitals{};
+                system.update(level,camera,walls,vitals,1./18,true);
+            }
+        };
+        level.enemies[0].behavior=1; system.load(level,directory);
+        run({800,500,0},10);
+        check(system.scene().objects[0].x>250,"Behavior 1 failed to pursue in same sector");
+        run({800,500,0},80);
+        check(vitals.health()<1000 || system.records()[0].state==2,
+              "Behavior 1 failed to attack in same polygon");
+        system.load(level,directory); run({1600,500,0},40);
+        check(system.scene().objects[0].x<150 && system.records()[0].sector==0,
+              "Behavior 1 did not return home with player outside sector");
+        for(unsigned behavior : {2u,3u,4u}) {
+            level.enemies[0].behavior=behavior; system.load(level,directory);
+            run({1600,500,0},40); // No enabled sector connection; enemy remains dormant.
+            if (behavior==2) {
+                check(system.records()[0].behavior==2 && system.scene().objects[0].x<150,
+                      "Dormant behavior 2 pursued without activation");
+                run({800,500,0},10);
+                check(system.records()[0].behavior==3 && system.scene().objects[0].x>200,
+                      "Behavior 2 failed same-sector activation and movement");
+            }
+            run({1600,500,0},150);
+            check(system.records()[0].sector==1 && system.scene().objects[0].x>1400,
+                  "Active behavior failed real movement across a routed sector boundary");
+        }
+        level.enemies[0].behavior=2; system.load(level,directory);
+        system.hit(0,0,0); run({1600,500,0},150);
+        check(system.records()[0].behavior==3 && system.records()[0].sector==1,
+              "Hit failed to activate cross-sector pursuit");
+        level.sectors[1].neighbors={0}; level.connectionStates={0x0100};
+        system.load(level,directory); run({1600,500,3.141592653589793},150);
+        check(system.records()[0].behavior==3 && system.records()[0].sector==1,
+              "Connected behavior 2 failed to activate and cross sectors");
+        level.sectors[0].routes.clear(); level.enemies[0].behavior=4;
+        system.load(level,directory); run({1600,500,0},40);
+        check(system.scene().objects[0].x==200,"Enemy invented missing sector route");
+    }
+    // A U-shaped sector: returning directly home pushes into the inner wall.
+    auto level=arena(); auto& s=level.sectors[0];
+    s.vertices={{0,0},{400,0},{400,600},{600,600},{600,0},{1000,0},
+                {1000,1000},{600,1000},{400,1000},{0,1000}};
+    s.polygons={{{0,1,2,8,9},0,{{1,400,800}}},
+                {{2,3,7,8},0,{{0,400,800},{2,600,800}}},
+                {{3,4,5,6,7},0,{{1,600,800}}}};
+    s.walls.clear();
+    for(unsigned i=0;i<10;++i) s.walls.push_back({std::uint16_t(i),std::uint16_t((i+1)%10),1,0});
+    level.enemies[0].x=200; level.enemies[0].y=200;
+    level.enemies[0].homeX=800; level.enemies[0].homeY=200;
+    const auto walls=collision::staticWorld(level);
+    for(unsigned behavior : {1u,2u,3u,4u}) {
+        level.enemies[0].behavior=behavior;
+        enemies::System system; system.load(level,directory); player::Vitals vitals;
+        const Camera camera=behavior<3 ? Camera{2000,2000,0} : Camera{800,200,0};
+        system.update(level,camera,walls,vitals,0,true);
+        for(unsigned n=0;n<180;++n) {
+            vitals=player::Vitals{}; system.update(level,camera,walls,vitals,1./18,true);
+            const auto& p=system.scene().objects[0];
+            check(collision::locate(level,{p.x,p.y}).has_value(),"Movement left navigable polygons");
+        }
+        const auto& p=system.scene().objects[0];
+        check(p.x>700 && p.y<300,"Enemy stuck on wall instead of following polygon route");
+    }
+}
+void mons5(const std::filesystem::path& directory)
+{
+    fixture(directory,5);
+    auto level=arena(); level.monsBank=5;
+    level.sectors[0].vertices={{0,0},{4000,0},{4000,1000},{0,1000}};
+    auto& enemy=level.enemies[0]; enemy.angle=0;
+    const Camera far{3500,500,3.141592653589793};
+    auto walls=collision::staticWorld(level);
+    enemies::System system; player::Vitals vitals;
+    auto tick=[&](const Camera& camera) { system.update(level,camera,walls,vitals,1./18,true); };
+    auto reset=[&]() { system.load(level,directory); vitals.reset(); system.update(level,far,walls,vitals,0,true); };
+    reset();
+    constexpr unsigned images[]{3,3,4,4,4,3,3,3,2,1,0,1,2,3};
+    constexpr unsigned heights[]{30,57,77,88,88,77,57,30,0,0,0,0,0,0};
+    for(unsigned n=0;n<14;++n) {
+        tick(far); const auto& e=system.records()[0];
+        check((e.sprite&255)==images[n] && (e.elevation&255)==heights[n],
+              "MONS5 native jump phase/frame/height differs");
+        check(e.x==500+50*std::min(n+1,9u)+25*(n>=9?n-8:0),"MONS5 jump horizontal speed differs");
+        check(system.scene().objects[0].z==heights[n],"MONS5 elevation never reached rendered position");
+    }
+    // Reverse directional cycle is native and wraps signed phases below -120.
+    reset(); tick({3500,500,0});
+    check(system.records()[0].phase==std::uint16_t(-40) && system.records()[0].x==550,
+          "MONS5 reverse jump phase differs");
+    for(int n=0;n<4;++n) tick({3500,500,0});
+    check(system.records()[0].phase==360 && system.records()[0].x==650,
+          "MONS5 reverse cycle did not use ground half-speed");
+    enemy.phase=140; reset(); tick(far);
+    check((system.records()[0].elevation&255)==90,"MONS5 sine apex differs");
+    enemy.phase=0;
+    // Attack has no horizontal travel; each phase >60 refreshes the shared reaction.
+    enemy.state=2; reset();
+    constexpr unsigned attackImages[]{6,7,8,8,8,8,8,8};
+    for(unsigned n=0;n<8;++n) {
+        tick({550,500,0}); const auto& e=system.records()[0];
+        check(e.state==2 && e.phase==(n+1)*40 && (e.sprite&255)==attackImages[n],
+              "MONS5 attack sequence differs");
+        check(e.x==500 && e.y==500,"MONS5 attack incorrectly travelled horizontally");
+        check(vitals.health()==1000-int(n)*2,"MONS5 attack damage timing differs");
+    }
+    const auto sounds=system.takeSounds();
+    check(std::find(sounds.begin(),sounds.end(),9)!=sounds.end() &&
+          std::find(sounds.begin(),sounds.end(),10)!=sounds.end(),"MONS5 attack sounds missing");
+    for(unsigned n=0;n<8;++n) tick({4500,500,0});
+    check(vitals.health()==972 && !(system.records()[0].elevation&255),
+          "MONS5 attack tail or landing differs");
+    // Hit during flight halves altitude, knocks back with strong weapons, then recovers.
+    enemy.state=0; enemy.health=20; reset();
+    for(unsigned n=0;n<4;++n) tick(far);
+    const auto airborne=system.records()[0];
+    system.hit(0,4,3.141592653589793); tick(far);
+    check(system.records()[0].state==4 && (system.records()[0].sprite&255)==9 &&
+          (system.records()[0].elevation&255)==44 && system.records()[0].x==airborne.x-30,
+          "MONS5 airborne hurt/knockback differs");
+    tick(far);
+    check(system.records()[0].state!=4 && (system.records()[0].elevation&255)<=30,
+          "MONS5 did not recover from airborne hit");
+    // Hurt interrupts an attack too; death halves height and retires at eight ticks.
+    enemy.state=2; enemy.phase=120; enemy.elevation=77; enemy.health=4; reset();
+    system.hit(0,0,0); tick({550,500,0});
+    check(vitals.health()==1000 && system.records()[0].state==4,
+          "Interrupted MONS5 attack still damaged player");
+    system.hit(0,4,0);
+    for(unsigned n=0;n<8;++n) {
+        tick(far);
+        check((system.records()[0].sprite&255)==(n%2?9u:5u),"MONS5 death frames differ");
+    }
+    check(system.records()[0].health==0xffff && system.scene().objects.empty() && system.effects().active(),
+          "MONS5 death failed to retire/start effects");
+    enemy.state=0; enemy.phase=0; enemy.elevation=0; enemy.health=4;
+    // An airborne actor must still collide with a closed wall.
+    walls.push_back({{700,0},{700,1000}}); reset();
+    bool lifted=false;
+    for(unsigned n=0;n<40;++n) {
+        tick(far); const auto& e=system.records()[0]; lifted|=(e.elevation&255)>0;
+        check(e.x<=670 && collision::locate(level,{double(e.x),double(e.y)}).has_value(),
+              "MONS5 crossed a wall or left navigable polygons while jumping");
+    }
+    check(lifted && system.records()[0].x==670,"MONS5 collision probe never reached wall");
+    walls=collision::staticWorld(level);
+    enemies::System slow,fast; player::Vitals sv,fv;
+    slow.load(level,directory); fast.load(level,directory);
+    slow.update(level,far,walls,sv,0,true); fast.update(level,far,walls,fv,0,true);
+    for(unsigned n=0;n<60;++n) slow.update(level,far,walls,sv,1./30,true);
+    for(unsigned n=0;n<240;++n) fast.update(level,far,walls,fv,1./120,true);
+    check(slow.records()[0].x==fast.records()[0].x && slow.records()[0].phase==fast.records()[0].phase &&
+          slow.records()[0].elevation==fast.records()[0].elevation && sv.health()==fv.health(),
+          "MONS5 movement depends on rendering FPS");
+    const auto paused=slow.records()[0]; slow.update(level,far,walls,sv,1,false);
+    slow.update(level,far,walls,sv,1,true);
+    check(slow.records()[0].x==paused.x && slow.records()[0].phase==paused.phase,
+          "MONS5 advanced during pause/resume");
+    // Real cross-sector movement, including a grounded half-speed phase near the portal.
+    level=arena(); level.monsBank=5; level.enemies[0].angle=0;
+    level.sectors.push_back(level.sectors[0]); level.sectors[1].gx=1000;
+    level.sectors[0].walls.erase(level.sectors[0].walls.begin()+1); level.sectors[1].walls.pop_back();
+    level.sectors[0].routes={{1,1000,500}}; level.sectors[1].routes={{0,1000,500}};
+    walls=collision::staticWorld(level);
+    for(unsigned behavior : {1u,2u,3u,4u}) {
+        level.enemies[0].behavior=behavior; reset();
+        if(behavior==2) system.hit(0,0,0);
+        for(unsigned n=0;n<90;++n) tick({1600,500,0});
+        if(behavior==1) check(system.records()[0].sector==0 && system.records()[0].x==500,
+                              "MONS5 behavior 1 left its home sector");
+        else check(system.records()[0].sector==1 && system.scene().objects[0].x>1400 && vitals.health()<1000,
+                   "MONS5 failed routed pursuit and attack across sectors");
+    }
+}
+void originalMons5(const std::filesystem::path& lab)
+{
+    const auto original=game_lab::loadLevel(lab,2).level;
+    check(original.monsBank==5 && original.enemies.size()==18,"Native level 3 MONS5 placements differ");
+    const auto walls=collision::staticWorld(original);
+    for(unsigned index=0;index<original.enemies.size();++index) {
+        auto level=original; level.enemies={original.enemies[index]};
+        enemies::System system; system.load(level,lab.parent_path()/"DATA");
+        check(system.scene().bank.images.size()==16 && system.scene().objects[0].height==180,
+              "Native MONS5 resources/profile differ");
+        const auto start=system.scene().objects[0];
+        const auto from=collision::locate(level,{start.x,start.y},level.enemies[0].sector);
+        std::optional<Camera> camera;
+        for(int dx=-400;dx<=400 && !camera;dx+=50) for(int dy=-400;dy<=400 && !camera;dy+=50) {
+            if(std::max(std::abs(dx),std::abs(dy))<150) continue;
+            const collision::Point goal{start.x+dx,start.y+dy};
+            const auto to=collision::locate(level,goal,from->sector);
+            if(!to || to->sector!=from->sector || to->polygon!=from->polygon ||
+               collision::rayDistance(walls,{start.x,start.y},{double(dx),double(dy)},1)) continue;
+            if(std::any_of(walls.begin(),walls.end(),[&](const auto& wall) {
+                return collision::distanceToSegment(wall,goal)<40;
+            })) continue;
+            camera=Camera{goal.x,goal.y,std::atan2(-dy,-dx)};
+        }
+        check(camera.has_value(),("No original MONS5 same-polygon approach probe: "+std::to_string(index)).c_str());
+        player::Vitals vitals; system.update(level,*camera,walls,vitals,0,true);
+        bool horizontal=false,vertical=false,attacked=false;
+        for(unsigned tick=0;tick<120;++tick) {
+            system.update(level,*camera,walls,vitals,1./18,true);
+            const auto object=system.scene().objects[0];
+            horizontal|=std::hypot(object.x-start.x,object.y-start.y)>20;
+            vertical|=object.z>0; attacked|=system.records()[0].state==2;
+            check(collision::locate(level,{object.x,object.y}).has_value(),"Native MONS5 left polygon bounds");
+        }
+        check(horizontal && vertical && attacked && vitals.health()<1000,
+              ("Native MONS5 movement/attack failed: "+std::to_string(index)).c_str());
+        system.hit(0,0,0);
+        check(system.records()[0].state==4,"Native MONS5 hit did not interrupt action");
+        for(unsigned hit=0;hit<20 && system.records()[0].state!=5;++hit) system.hit(0,4,0);
+        for(unsigned tick=0;tick<8;++tick) system.update(level,*camera,walls,vitals,1./18,true);
+        check(system.records()[0].health==0xffff && system.scene().objects.empty(),
+              "Native MONS5 placement did not retire after death");
+    }
+}
 void original(const std::filesystem::path& lab)
 {
     const auto level2=game_lab::loadLevel(lab,1).level;
     enemies::System mons; mons.load(level2,lab.parent_path()/"DATA");
     check(level2.monsBank==3 && mons.records().size()==12 && mons.scene().bank.images.size()==16 &&
           mons.scene().objects[0].height==190,"Original MONS3 resources differ");
+    // Native level 2 behavior-1 placements must move, not merely change frames.
+    for (unsigned i=0;i<level2.enemies.size();++i) {
+        if (level2.enemies[i].behavior!=1) continue;
+        auto single=level2; single.enemies={level2.enemies[i]};
+        enemies::System walker; walker.load(single,lab.parent_path()/"DATA");
+        const auto start=walker.scene().objects[0];
+        const auto from=collision::locate(single,{start.x,start.y},single.enemies[0].sector);
+        const auto walls=collision::staticWorld(single);
+        bool tested=false;
+        std::vector<collision::Point> candidates;
+        for(int dx=-300;dx<=300;dx+=50) for(int dy=-300;dy<=300;dy+=50)
+            if (std::max(std::abs(dx),std::abs(dy))>=150) candidates.push_back({double(dx),double(dy)});
+        for (collision::Point delta : candidates) {
+            const Camera camera{start.x+delta.x,start.y+delta.y,0};
+            const auto to=collision::locate(single,{camera.x,camera.y},from->sector);
+            if (!to || to->sector!=from->sector || to->polygon!=from->polygon ||
+                collision::rayDistance(walls,{start.x,start.y},delta,1)) continue;
+            player::Vitals vitals; walker.update(single,camera,walls,vitals,0,true);
+            for(unsigned tick=0;tick<12;++tick) walker.update(single,camera,walls,vitals,1./18,true);
+            const auto end=walker.scene().objects[0];
+            check(std::hypot(end.x-start.x,end.y-start.y)>20,
+                  "Native MONS3 behavior 1 animated without displacement");
+            tested=true; break;
+        }
+        check(tested,"No same-polygon movement probe for native MONS3 placement");
+    }
     const auto target=mons.scene().objects[0];
     const Camera view{target.x-200,target.y,0};
     auto nativeHit=mons.trace(view,{view.x,view.y},{1,0},250);
@@ -438,8 +755,8 @@ int main(int argc,char** argv)
 {
     try {
         if (argc<2) return 1;
-        placement(argv[1]); otherBanks(argv[1]); allBanks(argv[1],true); combat(argv[1]); combat(argv[1],3); mons3(argv[1]); deathEffects(); navigation();
-        if (argc>2) { original(argv[2]); allBanks(std::filesystem::path(argv[2]).parent_path()/"DATA",false); }
+        sectorVisibility(argv[1]); placement(argv[1]); otherBanks(argv[1]); allBanks(argv[1],true); combat(argv[1]); combat(argv[1],3); mons3(argv[1]); deathEffects(); navigation(); sharedMovement(argv[1]); mons5(argv[1]);
+        if (argc>2) { originalMons5(argv[2]); original(argv[2]); allBanks(std::filesystem::path(argv[2]).parent_path()/"DATA",false); }
         std::cout<<"Enemy placement/resource tests passed\n";
         return 0;
     } catch(const std::exception& e) { std::cerr<<e.what()<<'\n'; return 1; }

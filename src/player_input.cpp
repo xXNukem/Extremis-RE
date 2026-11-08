@@ -5,9 +5,9 @@
 #include <utility>
 
 namespace {
-constexpr std::array<SDL_Scancode,8> movementKeys{SDL_SCANCODE_W,SDL_SCANCODE_S,
+constexpr std::array<SDL_Scancode,10> movementKeys{SDL_SCANCODE_W,SDL_SCANCODE_S,
     SDL_SCANCODE_D,SDL_SCANCODE_A,SDL_SCANCODE_LEFT,SDL_SCANCODE_RIGHT,
-    SDL_SCANCODE_LSHIFT,SDL_SCANCODE_RSHIFT};
+    SDL_SCANCODE_LSHIFT,SDL_SCANCODE_RSHIFT,SDL_SCANCODE_LALT,SDL_SCANCODE_RALT};
 }
 
 PlayerInput::PlayerInput(SDL_Window* window, DoorControl& doors)
@@ -36,9 +36,11 @@ void PlayerInput::handleEvent(const SDL_Event& event, bool gameplay)
         event.window.windowID == SDL_GetWindowID(window_)) {
         reset_=true; firePressed_=false; fireReady_=false;
     }
+#ifdef EXTREMIS_DEBUG_MENU
     // Even multiple TAB toggles in one event pump must discard accumulated motion.
     if (event.type == SDL_EVENT_KEY_DOWN && event.key.windowID == SDL_GetWindowID(window_) &&
         event.key.key == SDLK_TAB && !event.key.repeat) reset_ = true;
+#endif
 }
 
 PlayerInput::CaptureStatus PlayerInput::updateCapture(bool desired)
@@ -63,7 +65,7 @@ PlayerInput::CaptureStatus PlayerInput::updateCapture(bool desired)
     return CaptureStatus::Ready;
 }
 
-bool PlayerInput::update(Camera* camera, bool view3D, double seconds)
+bool PlayerInput::update(Camera* camera, bool view3D, double seconds, bool deferMovement)
 {
     movementDistance_ = 0; running_=false; fireReady_=false;
     doors_.prepareFrame(camera, seconds, settings_.collision);
@@ -74,19 +76,34 @@ bool PlayerInput::update(Camera* camera, bool view3D, double seconds)
     float mouseX = 0;
     SDL_GetRelativeMouseState(&mouseX, nullptr);
     const bool* keys = SDL_GetKeyboardState(nullptr);
-    std::array<bool,8> pressed{};
+    std::array<bool,10> pressed{};
     for (unsigned i=0;i<movementKeys.size();++i) {
         if (!keys[movementKeys[i]]) blockedKeys_[i]=false;
         pressed[i]=keys[movementKeys[i]] && !blockedKeys_[i];
     }
-    const player::Input input{
+    input_={
         double(pressed[0])-double(pressed[1]), double(pressed[2])-double(pressed[3]),
-        double(pressed[4])-double(pressed[5]),mouseX,pressed[6] || pressed[7]};
-    running_=input.run && (input.forward!=0 || input.right!=0);
-    const double beforeX = camera->x, beforeY = camera->y;
-    player::update(*camera, input, seconds, settings_, &doors_.movementWorld());
-    movementDistance_ = std::hypot(camera->x - beforeX, camera->y - beforeY);
+        double(pressed[4])-double(pressed[5]),mouseX,pressed[6] || pressed[7],pressed[8] || pressed[9]};
+    if (!deferMovement) move(*camera,seconds,false);
     return true;
+}
+
+void PlayerInput::move(Camera& camera, double seconds, bool blocked)
+{
+    if (!fireReady_) return; // Capture, modal and focus gates still own input.
+    input_.blockMovement=blocked;
+    const double beforeX=camera.x, beforeY=camera.y;
+    player::update(camera,input_,seconds,settings_,&doors_.movementWorld());
+    input_.mouseX=0; // Relative mouse motion is consumed once, even across ticks.
+    running_=!blocked && input_.run && camera.postureHeight>=150 &&
+        (input_.forward!=0 || input_.right!=0);
+    movementDistance_+=std::hypot(camera.x-beforeX,camera.y-beforeY);
+}
+
+void PlayerInput::recoil(Camera& camera)
+{
+    player::recoil(camera,doors_.movementWorld(),settings_.collision);
+    running_=false;
 }
 
 double PlayerInput::movementDistance() const { return movementDistance_; }

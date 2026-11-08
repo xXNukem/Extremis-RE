@@ -41,13 +41,14 @@ target_compile_features(player_inventory PUBLIC cxx_std_17)
 set_target_properties(player_inventory PROPERTIES CXX_EXTENSIONS NO)
 
 add_library(survival_session STATIC src/survival_session.cpp src/item_session.cpp src/item_animation.cpp src/game_messages.cpp src/map_session.cpp)
+target_compile_definitions(survival_session PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
 target_link_libraries(survival_session PUBLIC player_inventory original_hud game_audio door_control SDL3::SDL3)
 target_compile_features(survival_session PUBLIC cxx_std_17)
 set_target_properties(survival_session PROPERTIES CXX_EXTENSIONS NO)
 
-add_library(sprites STATIC src/sprite_bank.cpp src/sprite_scene.cpp src/sprite_renderer.cpp src/enemy_system.cpp src/enemy_navigation.cpp src/enemy_effects.cpp src/motion_detector.cpp
+add_library(sprites STATIC src/sprite_bank.cpp src/sprite_scene.cpp src/sprite_renderer.cpp src/enemy_system.cpp src/enemy_navigation.cpp src/enemy_mons5.cpp src/enemy_effects.cpp src/motion_detector.cpp
     src/sprite_animation.cpp)
-target_link_libraries(sprites PUBLIC texture_bank game_lab player_collision player_vitals)
+target_link_libraries(sprites PUBLIC texture_bank game_lab player_collision player_vitals doors)
 target_compile_features(sprites PUBLIC cxx_std_17)
 set_target_properties(sprites PROPERTIES CXX_EXTENSIONS NO)
 
@@ -93,7 +94,9 @@ target_compile_features(door_control PUBLIC cxx_std_17)
 set_target_properties(door_control PROPERTIES CXX_EXTENSIONS NO)
 
 add_executable(InExtremisPort src/main.cpp src/map_view.cpp src/first_person_view.cpp
-    src/texture_preview.cpp src/player_input.cpp src/player_debug.cpp src/plane_appearance.cpp)
+    src/texture_preview.cpp src/player_input.cpp src/plane_appearance.cpp)
+target_sources(InExtremisPort PRIVATE $<$<CONFIG:Debug>:src/debug_menu.cpp>)
+target_compile_definitions(InExtremisPort PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
 set_target_properties(InExtremisPort PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED YES
@@ -115,6 +118,9 @@ target_link_libraries(render_benchmark PRIVATE horizontal_planes wall_material d
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(player_recoil_tests tests/player_recoil_tests.cpp)
+    target_link_libraries(player_recoil_tests PRIVATE sprites player_control)
+    add_test(NAME player_recoil COMMAND player_recoil_tests "${CMAKE_CURRENT_BINARY_DIR}/recoil-test-data")
     add_executable(original_map_tests tests/original_map_tests.cpp src/first_person_view.cpp)
     target_link_libraries(original_map_tests PRIVATE survival_session weapon_fire horizontal_planes wall_material SDL3::SDL3)
     add_test(NAME original_map COMMAND original_map_tests ${CMAKE_BINARY_DIR}/map-test-data)
@@ -193,3 +199,9 @@ endif()
 # Bounded resource validation; no gameplay sessions.
 add_executable(check_level_banks EXCLUDE_FROM_ALL tools/check_level_banks.cpp)
 target_link_libraries(check_level_banks PRIVATE sprites)
+
+if(BUILD_TESTING AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_executable(debug_menu_tests tests/debug_menu_tests.cpp src/debug_menu.cpp)
+    target_compile_definitions(debug_menu_tests PRIVATE EXTREMIS_DEBUG_MENU=1)
+    target_link_libraries(debug_menu_tests PRIVATE survival_session SDL3::SDL3)
+endif()

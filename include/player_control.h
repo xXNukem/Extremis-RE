@@ -17,9 +17,14 @@ struct Input {
     double turnLeft = 0;
     double mouseX = 0;
     bool run = false;
+    bool crouch = false;
+    bool blockMovement = false; // Reaction suppresses translation, not turning/posture.
 };
 
-// Planar movement without SDL or vertical changes; optionally resolves static collisions.
+// Planar movement and fixed-step camera posture without SDL; optionally resolves static collisions.
 void update(Camera& camera, const Input& input, double seconds,
             const Settings& settings = {}, const collision::World* world = nullptr);
+// One reaction tick; duration and damage remain owned by enemies::System.
+void recoil(Camera& camera, const collision::World& world,
+            const collision::Settings& settings = {});
 } // namespace player

@@ -22,6 +22,12 @@ struct Door {
     double progress = 0.0; // 0 = closed, 1 = completely retracted.
 };
 
+// DOS 0x1184f: dynamic doors override the original connection word.
+bool connectionEnabled(const game_lab::Level& level, std::uint16_t stateIndex,
+                       const std::vector<Door>& dynamicDoors);
+std::vector<bool> connectedSectors(const game_lab::Level& level, std::size_t start,
+                                   const std::vector<Door>& dynamicDoors);
+
 // Provisional: one second for a full stroke, independent of frame rate.
 void update(Door& door, double elapsedSeconds);
 void updateAll(std::vector<Door>& doors, double elapsedSeconds);

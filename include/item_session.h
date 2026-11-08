@@ -36,6 +36,7 @@ private:
     std::vector<std::uint16_t> codeTargets_;
     bool authorized_ = false, available_ = true;
     std::array<bool,30> plans_{};
+    std::array<bool,16> securities_{};
     unsigned zone_ = 0;
     std::optional<Travel> travel_;
     bool take_ = false, injector_ = false, oxygen_ = false;

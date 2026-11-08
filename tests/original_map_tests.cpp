@@ -247,7 +247,7 @@ void originals(const std::filesystem::path& directory)
     session.handleEvent(key(SDL_SCANCODE_M),17,&camera,true,items.planTransferred(),false,true,player);
     check(session.modal(),"Real transfer did not unlock playable map");
     enemies::System enemies; enemies.load(level,directory);
-    check(!enemies.blocksInterface(level,camera,walls),"Initial location incorrectly blocked by alien");
+    check(!enemies.blocksInterface(level,camera),"Initial location incorrectly blocked by alien");
     enemies.update(level,camera,walls,player.vitals(),0,true);
     const auto beforeTicks=enemies.simulationTicks();
     enemies.update(level,camera,walls,player.vitals(),10,!session.blocksSimulation());

@@ -15,7 +15,6 @@
 namespace {
 constexpr double pi = 3.14159265358979323846;
 constexpr double wallHeight = 256.0;
-constexpr double eyeHeight = Camera::eyeHeight;
 constexpr double fov = Camera::horizontalFov;
 
 struct Point {
@@ -31,7 +30,7 @@ struct PolygonBounds {
 struct CameraProjection {
     int width, height;
     double forwardX, forwardY;
-    double plane, focal;
+    double plane, focal, eyeHeight;
 };
 
 struct ProjectedColumn {
@@ -164,9 +163,9 @@ ProjectedColumn projectWall(const CameraProjection& projection, double distance)
 {
     const double depth = std::max(0.01, distance);
     const double unclippedTop = projection.height * 0.5 -
-        (wallHeight - eyeHeight) * projection.focal / depth;
+        (wallHeight - projection.eyeHeight) * projection.focal / depth;
     const double unclippedBottom = projection.height * 0.5 +
-        eyeHeight * projection.focal / depth;
+        projection.eyeHeight * projection.focal / depth;
     const float top = float(std::clamp(unclippedTop, 0.0, double(projection.height)));
     const float bottom = float(std::clamp(unclippedBottom, 0.0, double(projection.height)));
     return {top, bottom, depth, unclippedTop, unclippedBottom};
@@ -291,7 +290,7 @@ bool renderVisibleColumns(const game_lab::Level& level, const Camera& camera,
 {
     const double plane = std::tan(fov * 0.5);
     const CameraProjection projection{width, height, std::cos(camera.angle),
-                                      std::sin(camera.angle), plane, width / (2 * plane)};
+                                      std::sin(camera.angle), plane, width / (2 * plane), camera.viewHeight()};
     for (int column = 0; column < width; ++column) {
         const auto direction = columnRay(projection, column);
         const auto hit = castSceneRay(level, camera, direction.x, direction.y, doors);
@@ -342,15 +341,29 @@ WallHit castWallRay(const game_lab::Level& level, const Camera& camera,
                     double dx, double dy)
 {
     WallHit hit{std::numeric_limits<double>::infinity(), 0};
+    bool hitFacesCamera = false;
     for (const auto& sector : level.sectors) {
         for (const auto& wall : sector.walls) {
             if ((wall.type & 0xf000) == 0x1000) {
                 continue; // Portals are not visible surfaces in this prototype.
             }
-            const auto intersection = intersectSegment(camera, {dx, dy},
-                globalVertex(sector, wall.vertexA), globalVertex(sector, wall.vertexB));
-            if (intersection && intersection->distance < hit.distance) {
+            const auto a = globalVertex(sector, wall.vertexA);
+            const auto b = globalVertex(sector, wall.vertexB);
+            const auto intersection = intersectSegment(camera, {dx, dy}, a, b);
+            if (!intersection) continue;
+            const bool facesCamera = cross({b.x - a.x, b.y - a.y},
+                                           {camera.x - a.x, camera.y - a.y}) < 0;
+            // Shared boundaries can have opposite faces with different segment
+            // cuts. Roundoff must not choose alternating materials/U directions.
+            // Use the original A-left/B-right convention only to resolve ties;
+            // isolated walls retain their existing two-sided rendering.
+            const bool coincident = std::isfinite(hit.distance) &&
+                std::abs(intersection->distance - hit.distance) <=
+                    1e-9 * std::max(1.0, std::abs(hit.distance));
+            if (coincident ? (facesCamera && !hitFacesCamera)
+                           : intersection->distance < hit.distance) {
                 hit = {intersection->distance, wall.type, intersection->position};
+                hitFacesCamera = facesCamera;
             }
         }
     }
@@ -482,7 +495,7 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
     if (spriteScene || projectileScene || enemyScene) depth_.assign(pixels_.size(), std::numeric_limits<double>::infinity());
     const double focal = width / (2 * std::tan(fov * 0.5));
     if (planes) {
-        planes::render(pixels_, camera, {width, height, focal, eyeHeight, wallHeight}, *planes);
+        planes::render(pixels_, camera, {width, height, focal, camera.viewHeight(), wallHeight}, *planes);
     }
     const bool wallsDrawn = renderVisibleColumns(level, camera, width, height, doors,
         [&](int column, const WallHit& hit, const ProjectedColumn& projected) {
@@ -493,13 +506,13 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
         });
     if (!wallsDrawn) return false;
     if (spriteScene) sprites::render(pixels_, depth_, *spriteScene, camera,
-                                    {width, height, focal, eyeHeight});
+                                    {width, height, focal, camera.viewHeight()});
     if (enemyScene) sprites::render(pixels_,depth_,*enemyScene,camera,
-                                   {width,height,focal,eyeHeight});
+                                   {width,height,focal,camera.viewHeight()});
     if (enemyScene && enemyEffects) sprites::render(pixels_,depth_,enemyScene->bank,*enemyEffects,camera,
-                                                   {width,height,focal,eyeHeight});
+                                                   {width,height,focal,camera.viewHeight()});
     if (projectileScene) sprites::render(pixels_,depth_,*projectileScene,camera,
-                                        {width,height,focal,eyeHeight});
+                                        {width,height,focal,camera.viewHeight()});
     if (hudRenderer) {
         std::copy(pixels_.begin(),pixels_.end(),composed_.begin());
         if (!hudRenderer->draw(composed_,hudState)) return SDL_SetError("Invalid HUD framebuffer");

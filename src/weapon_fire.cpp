@@ -56,6 +56,7 @@ FireResult WeaponFire::attempt(const Camera& camera, Inventory& inventory)
     // Port aiming convention: projectile line is the optical axis, not DOS's
     // camera-30 plane / alternating parallel barrel offsets. Keep visual recoil.
     *free={1,weapon_,0,camera.x,camera.y,camera.angle};
+    free->launchHeight=camera.viewHeight();
     // Project the center of the ORIGINAL ARME[2] firing layer back into world
     // coordinates at the first native projectile step. No guessed world offset.
     constexpr std::array<std::array<int,2>,6> flashSizes{{{14,11},{13,12},{13,13},{14,21},{28,18},{15,25}}};
@@ -75,12 +76,14 @@ void WeaponFire::advanceProjectiles(const Camera& camera, const collision::World
     scene_.objects.clear();
     for (auto& p:projectiles_) {
         if (!p.state) continue;
+        auto shotView=camera;
+        shotView.postureHeight=p.launchHeight;
         std::optional<::enemies::ShotHit> enemyImpact;
         if (p.state==1) {
             const double distance=weaponDefinitions[p.weapon].speed;
             const collision::Point direction{std::cos(p.angle),std::sin(p.angle)};
             const auto wall=collision::rayDistance(walls,{p.x,p.y},direction,distance);
-            const auto enemy=enemies ? enemies->trace(camera,{p.x,p.y},direction,wall.value_or(std::nextafter(distance,std::numeric_limits<double>::infinity()))) : std::nullopt;
+            const auto enemy=enemies ? enemies->trace(shotView,{p.x,p.y},direction,wall.value_or(std::nextafter(distance,std::numeric_limits<double>::infinity()))) : std::nullopt;
             const auto hit=enemy ? std::optional<double>{enemy->distance} : wall;
             const double travel=hit?std::max(0.0,*hit-(enemy?0:collision::Settings{}.skin)):distance;
             enemyImpact=enemy;
@@ -108,7 +111,7 @@ void WeaponFire::advanceProjectiles(const Camera& camera, const collision::World
             auto remaining=collision::rayDistance(walls,{p.x,p.y},
                 {std::cos(p.angle),std::sin(p.angle)},32767);
             if (enemies) {
-                const auto target=enemies->trace(camera,{p.x,p.y},{std::cos(p.angle),std::sin(p.angle)},remaining.value_or(32767));
+                const auto target=enemies->trace(shotView,{p.x,p.y},{std::cos(p.angle),std::sin(p.angle)},remaining.value_or(32767));
                 if (target) remaining=target->distance;
             }
             const double extent=remaining.value_or(0)+std::max(0.0,p.traveled-d.speed);
@@ -118,7 +121,7 @@ void WeaponFire::advanceProjectiles(const Camera& camera, const collision::World
         const double visualY=p.y-std::cos(p.angle)*p.visualSide*blend;
         // Collision and impacts stay on the aiming line. Only flight sprites
         // converge from the muzzle to the nearest real surface, in world space.
-        scene_.objects.push_back({visualX,visualY,Camera::eyeHeight-p.visualDrop*blend,
+        scene_.objects.push_back({visualX,visualY,p.launchHeight-p.visualDrop*blend,
                                   double(d.frames[frame].worldHeight),p.weapon*4+frame,0,0});
         // EXE 0x180e9..0x180fe: impact phases 1..5, then FREE, no invented TTL.
         if (p.state==2 && ++p.phase==6) p.state=0;

@@ -173,7 +173,7 @@ static Level1 decodeLevel(const std::vector<std::uint8_t>& bytes, unsigned zoneI
         const auto next = std::upper_bound(sectorOffsets.begin(), sectorOffsets.end(),
                                            sector.localOffset);
         const auto sectorEnd = next == sectorOffsets.end() ? end : begin + *next;
-        const auto context = "Level 1 sector " + std::to_string(i);
+        const auto context = "Level " + std::to_string(zoneIndex+1) + " sector " + std::to_string(i);
         Reader reader(bytes, begin + sector.localOffset, sectorEnd, context);
         const auto neighborCount = reader.u16();
         reader.require(std::size_t(neighborCount) * 2);
@@ -236,13 +236,21 @@ static Level1 decodeLevel(const std::vector<std::uint8_t>& bytes, unsigned zoneI
             Polygon polygon{};
             const auto count = polygonReader.u16();
             polygonReader.require(std::size_t(count) * 2 + 4);
+            bool invalidOriginalPolygon=false;
             for (unsigned v = 0; v < count; ++v) {
                 const auto index = polygonReader.u16();
                 if (index >= vertexCount) {
-                    throw std::runtime_error(polygonContext + ": invalid vertex index");
+                    // Shipped LAB 0x3be74: level 28, sector 14, polygon 3
+                    // is [0,1,2,19] although the sector has only 17 vertices.
+                    // Keep its table index/connections, but do not fabricate geometry.
+                    if (zoneIndex==27 && i==14 && n==3 && vertexCount==17 &&
+                        count==4 && v==3 && index==19 &&
+                        polygon.vertices==std::vector<std::uint16_t>{0,1,2}) invalidOriginalPolygon=true;
+                    else throw std::runtime_error(polygonContext + ": invalid vertex index");
                 }
                 polygon.vertices.push_back(index);
             }
+            if (invalidOriginalPolygon) polygon.vertices.clear();
             polygon.extra = polygonReader.u16();
             const auto connectionCount = polygonReader.u16();
             polygonReader.require(std::size_t(connectionCount) * 6);

@@ -13,14 +13,15 @@ void check(bool ok, const char* message)
     if (!ok) throw std::runtime_error(message);
 }
 
-void testTextureSampling()
+void testTextureSampling(double height)
 {
     game_lab::Level level{};
     game_lab::Sector sector{};
     sector.vertices = {{100, 0}, {100, 100}};
     sector.walls = {{0, 1, 0, 0}};
     level.sectors.push_back(sector);
-    const Camera camera{50, 50, 0};
+    Camera camera{50, 50, 0};
+    camera.postureHeight=height;
     wall_textures::Texture texture{60, 74, {}};
     for (int y = 0; y < texture.height; ++y) {
         for (int x = 0; x < texture.width; ++x) {
@@ -45,7 +46,7 @@ void testTextureSampling()
             check(view.draw(level, camera, &texture) && SDL_RenderPresent(renderer.get()),
                   "Textured rendering failed");
             const double focal = size.x / (2 * std::tan(70.0 * 3.14159265358979323846 / 360));
-            const double top = size.y * 0.5 - 128 * focal / 50;
+            const double top = size.y * 0.5 - (256-camera.viewHeight()) * focal / 50;
             const double wallPixels = 256 * focal / 50;
             const double shade = 0.2 + 0.8 / (1 + 50.0 / 700);
             for (const int x : {0, size.x / 2, size.x - 1}) {
@@ -142,13 +143,44 @@ void testWallMaterials()
     check(pixel(0).r == pixel(0).g && pixel(0).g == pixel(0).b,
           "Malformed material texture was sampled");
 }
+
+void testSharedDiagonal()
+{
+    // Level 2, sectors 4/6: same boundary, reversed 133/133/134 cuts.
+    game_lab::Sector a{}, b{};
+    a.vertices = {{4000,2000},{3867,1867},{3734,1734},{3600,1600}};
+    a.walls = {{0,1,0x1a,0},{1,2,0x1c,0},{2,3,0x1d,0}};
+    b.vertices = {{3600,1600},{3733,1733},{3866,1866},{4000,2000}};
+    b.walls = {{0,1,0x24,0},{1,2,0x26,0},{2,3,0x27,0}};
+    for (bool reverseOrder : {false,true}) {
+        game_lab::Level shared{};
+        shared.sectors = reverseOrder ? std::vector<game_lab::Sector>{b,a}
+                                      : std::vector<game_lab::Sector>{a,b};
+        for (int side : {-1,1}) {
+            game_lab::Level facing{};
+            facing.sectors = {side == -1 ? a : b};
+            for (int i=1; i<400; ++i) {
+                const double x=3600+i+0.123, y=1600+i+0.123;
+                const Camera camera{x+side*50,y-side*50,0};
+                const auto expected=castWallRay(facing,camera,-side,side);
+                const auto actual=castWallRay(shared,camera,-side,side);
+                check(actual.type==expected.type &&
+                      std::abs(actual.distance-expected.distance)<1e-9 &&
+                      std::abs(actual.segmentPosition-expected.segmentPosition)<1e-9,
+                      "Shared diagonal selected opposite face or changed texture U");
+            }
+        }
+    }
+}
 }
 
 int main()
 {
     try {
-        testTextureSampling();
+        testTextureSampling(165);
+        testTextureSampling(100);
         testWallMaterials();
+        testSharedDiagonal();
         game_lab::Level level{};
         game_lab::Sector sector{};
         sector.vertices = {{0, 0}, {100, 0}, {100, 100}, {0, 100},

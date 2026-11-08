@@ -113,8 +113,9 @@ void muzzleAndImpactProjection()
 {
     const double pi=3.14159265358979323846;
     const sprites::Image image{{5,9,std::vector<wall_textures::Rgb>(45)},2,3,std::vector<std::uint8_t>(45,1)};
-    for(unsigned id=0;id<6;++id) for(double angle:{0.,pi/2,pi,-pi/2,0.39}) {
+    for(double height:{165.,100.}) for(unsigned id=0;id<6;++id) for(double angle:{0.,pi/2,pi,-pi/2,0.39}) {
         Inventory inventory;equip(inventory,id,20);WeaponFire fire;Camera camera{1000,1000,angle};
+        camera.postureHeight=height;
         fire.update(camera,{},inventory,{true,true},true,0);
         constexpr int flashWidth[]{14,13,13,14,28,15};
         constexpr int flashHeight[]{11,12,13,21,18,25};
@@ -122,7 +123,7 @@ void muzzleAndImpactProjection()
         const auto offset=d.muzzle[d.alternating?1:0];
         check(fire.scene().objects.size()==1,"Missing muzzle projectile");
         const auto& point=fire.scene().objects[0];
-        const auto rect=sprites::project(point,image,camera,{320,150,160/std::tan(35*pi/180),Camera::eyeHeight});
+        const auto rect=sprites::project(point,image,camera,{320,150,160/std::tan(35*pi/180),camera.viewHeight()});
         check(rect && std::abs(rect->left+rect->width/5*2-(d.gunX+offset[0]+flashWidth[id]*.5))<1e-8 &&
               std::abs(rect->top+rect->height/9*3-(d.gunY+5+offset[1]+flashHeight[id]*.5))<1e-8,
               "Projectile does not originate at original firing muzzle");
@@ -134,7 +135,7 @@ void muzzleAndImpactProjection()
         for(int step=0;step<5;++step) impact.update(camera,wall,ammo,{},true,0);
         check(!impact.scene().objects.empty(),"Impact projection test has no visible impact");
         for(const auto& point:impact.scene().objects) {
-            const auto rect=sprites::project(point,image,camera,{320,150,200,Camera::eyeHeight});
+            const auto rect=sprites::project(point,image,camera,{320,150,200,camera.viewHeight()});
             check(rect && std::abs(rect->top+rect->height/9*3-75)<1e-8 &&
                   std::abs(rect->left+rect->width/5*2-160)<1e-8,"Impact projection does not align with reticle");
         }

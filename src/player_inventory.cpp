@@ -23,6 +23,11 @@ Transfer Inventory::takeSupply(std::uint16_t& contents)
         contents=previous<0?0xffff:0;
         return previous<0?Transfer::Taken:Transfer::Exchanged;
     }
+    // EXE 0x191a8..0x191d2: one mine slot, initialized to 100 on pickup.
+    if (kind == 6) {
+        if (mine_>=0) return Transfer::Capacity;
+        mine_=100; contents=0xffff; return Transfer::Taken;
+    }
     if (kind == 2) return takeInjector(contents);
     if (kind >= 3 && kind <= 5) return takeCard(contents);
     if (kind != 1 || amount > 1800) return Transfer::Unsupported;

@@ -6,7 +6,7 @@
 #include "first_person_view.h"
 #include "texture_preview.h"
 #include "player_input.h"
-#include "player_debug.h"
+#include "debug_menu.h"
 #include "plane_appearance.h"
 #include "sprite_animation.h"
 #include "game_audio.h"
@@ -24,9 +24,17 @@
 
 int main(int argc, char* argv[])
 {
+#ifdef EXTREMIS_DEBUG_MENU
     const bool vitalsDebug = argc == 3 && std::string_view(argv[2]) == "--vitals-debug";
+#else
+    const bool vitalsDebug = false;
+#endif
     if (argc > 3 || (argc == 3 && !vitalsDebug)) {
-        std::cerr << "Usage: " << argv[0] << " [path/to/GAME.LAB [--vitals-debug]]\n";
+        std::cerr << "Usage: " << argv[0] << " [path/to/GAME.LAB"
+#ifdef EXTREMIS_DEBUG_MENU
+                  << " [--vitals-debug]"
+#endif
+                  << "]\n";
         return 1;
     }
     std::optional<game_lab::Level1> data;
@@ -124,9 +132,8 @@ int main(int argc, char* argv[])
                       << "Sectors: " << level.sectors.size() << " | Walls: " << walls
                       << " | Entities A: " << entities << '\n'
                       << "Polygons B: " << polygons << " | Connections: " << connections << '\n'
-                      << "Press P to toggle polygon contours.\n"
                       << "M / physical semicolon: toggle original map after plan transfer; Space: close map.\n"
-                      << "TAB: debug 2D/3D view; Left/Right: rotate in 3D; O: toggle doors (debug).\n"
+                      << "Left/Right: rotate in 3D.\n"
                       << "WASD: move/navigate; Shift: run; mouse: look; left button: fire equipped weapon.\n"
                       << "E: interact/confirm; I: toggle inventory; Z: heal; X: oxygen; Escape: close interface.\n"
                       << "F: toggle floor and ceiling textures together.\n"
@@ -179,19 +186,41 @@ int main(int argc, char* argv[])
         PlayerInput playerInput(window, doorControl);
         GameAudio gameAudio;
         if (data) gameAudio.load(std::filesystem::path(argv[1]).parent_path() / "DATA");
+#ifdef EXTREMIS_DEBUG_MENU
+        DebugMenu debugMenu;
+        if (data) {
+            try { debugMenu.load(argv[1]); }
+            catch (const std::exception& error) { SDL_Log("Debug catalog: %s",error.what()); }
+        }
+#endif
         bool running = true;
         bool showPolygons = false;
         bool show3D = camera.has_value();
         Uint64 previousTicks = SDL_GetTicks();
         while (running) {
+            auto* activeEnemies=enemySystem?&*enemySystem:nullptr;
+            bool debugPaused=false;
+#ifdef EXTREMIS_DEBUG_MENU
+            if (!debugMenu.enemiesEnabled()) activeEnemies=nullptr;
+            debugPaused=debugMenu.open();
+#endif
             mapSession.beginFrame(data?data->level.zoneIndex:0);
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
+#ifdef EXTREMIS_DEBUG_MENU
+                if (data && event.type!=SDL_EVENT_QUIT && event.type!=SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+                    !((event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_KEY_UP) && event.key.windowID!=SDL_GetWindowID(window)) &&
+                    debugMenu.event(event,survival.inventory(),data->level.zoneIndex)) {
+                    items.clearInput(); playerInput.handleEvent(event,false); playerInput.invalidateContext();
+                    activeEnemies=debugMenu.enemiesEnabled() && enemySystem?&*enemySystem:nullptr;
+                    continue;
+                }
+#endif
                 const bool wasMap=mapSession.modal();
                 const bool mapKey=event.type==SDL_EVENT_KEY_DOWN &&
                     (event.key.scancode==SDL_SCANCODE_M || event.key.scancode==SDL_SCANCODE_SEMICOLON);
-                const bool mapBlocked=mapKey && enemySystem && camera && data &&
-                    enemySystem->blocksInterface(data->level,*camera,doorControl.movementWorld());
+                const bool mapBlocked=mapKey && activeEnemies && camera && data &&
+                    activeEnemies->blocksInterface(data->level,*camera,levelDoors);
                 const bool mapEvent=mapSession.handleEvent(event,SDL_GetWindowID(window),
                     camera?&*camera:nullptr,show3D && !items.busy() && SDL_GetKeyboardFocus()==window,
                     items.planTransferred(),mapBlocked,originalMap.has_value() && originalHud.has_value(),survival);
@@ -207,16 +236,12 @@ int main(int argc, char* argv[])
                     event.key.windowID!=SDL_GetWindowID(window)) continue;
                 survival.handleEvent(event, SDL_GetWindowID(window));
                 planeAppearance.handleEvent(event, SDL_GetWindowID(window));
+#ifdef EXTREMIS_DEBUG_MENU
                 if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
                     event.key.windowID==SDL_GetWindowID(window) &&
                     (event.key.scancode == SDL_SCANCODE_PAGEDOWN || event.key.scancode == SDL_SCANCODE_PAGEUP)) {
                     texturePreview.changeIndex(event.key.scancode == SDL_SCANCODE_PAGEUP ? 1 : -1);
                     SDL_SetWindowTitle(window, survival.windowTitle(texturePreview.windowTitle()).c_str());
-                }
-                if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_TAB &&
-                    !event.key.repeat && camera) {
-                    show3D = !show3D;
-                    SDL_Log("View: %s", show3D ? "3D" : "2D");
                 }
                 if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_P &&
                     !event.key.repeat) {
@@ -227,6 +252,7 @@ int main(int argc, char* argv[])
                     !event.key.repeat) {
                     doors::toggleAll(levelDoors);
                 }
+#endif
                 if (event.type == SDL_EVENT_QUIT ||
                     event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED ||
                     (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE && !event.key.repeat)) {
@@ -241,11 +267,25 @@ int main(int argc, char* argv[])
             const Uint64 ticks = SDL_GetTicks();
             const double elapsedSeconds = double(ticks - previousTicks) / 1000.0;
             previousTicks = ticks;
-            const bool inputActive = camera && show3D && SDL_GetKeyboardFocus() == window;
+#ifdef EXTREMIS_DEBUG_MENU
+            debugPaused=debugMenu.open();
+            activeEnemies=debugMenu.enemiesEnabled() && enemySystem?&*enemySystem:nullptr;
+#endif
+            const bool inputActive = camera && show3D && !debugPaused && SDL_GetKeyboardFocus() == window;
             // Resolve context changes before polling continuous WASD/Shift state.
             items.update(camera ? &*camera : nullptr,inputActive && !mapSession.blocksSimulation(),
                          doorControl.movementWorld(),survival,gameAudio,&doorControl,elapsedSeconds);
-                if (const auto travel=items.takeTravel()) {
+                auto travel=items.takeTravel();
+#ifdef EXTREMIS_DEBUG_MENU
+                if (auto requested=debugMenu.takeTravel()) {
+                    travel=requested;
+                    // Dismiss an interrupted interface without resetting collected items.
+                    items.setAvailable(false);
+                    items.setAvailable(interactionRenderer.has_value() && originalHud.has_value());
+                    mapSession=original_map::Session{};
+                }
+#endif
+                if (travel) {
 
                     // An elevator travelling within the same level must not reload the world.
                     if (data && travel->zone == data->level.zoneIndex) {
@@ -303,41 +343,48 @@ int main(int argc, char* argv[])
                 previousTicks=SDL_GetTicks();
                 continue; // No simulation with elapsed time or input from the old world.
             }
-            const bool modalBlocked = items.modal() || mapSession.blocksSimulation();
+            const bool modalBlocked = debugPaused || items.modal() || mapSession.blocksSimulation();
             const bool simulationActive = inputActive && !modalBlocked;
-            mapSession.update(elapsedSeconds,SDL_GetKeyboardFocus()==window);
+            mapSession.update(debugPaused?0:elapsedSeconds,SDL_GetKeyboardFocus()==window);
             texturePreview.update(modalBlocked?0:elapsedSeconds);
             if (spriteScene && !modalBlocked) spriteAnimation.update(*spriteScene, elapsedSeconds);
             const Camera beforeMovement=camera.value_or(Camera{});
             if (!playerInput.update(camera ? &*camera : nullptr, show3D && survival.alive() && !modalBlocked,
-                                    modalBlocked?0:elapsedSeconds)) {
+                                    modalBlocked?0:elapsedSeconds,activeEnemies && data)) {
                 SDL_Log("Player input failed: %s", SDL_GetError());
                 exitCode = 1;
                 break;
             }
 
-            if (enemySystem && camera && data && simulationActive && survival.alive())
-                enemySystem->constrainPlayer(data->level,beforeMovement,*camera,doorControl.movementWorld());
+            if (activeEnemies && camera && data)
+                activeEnemies->update(data->level,*camera,doorControl.movementWorld(),survival.vitals(),
+                    elapsedSeconds,simulationActive && survival.alive(),
+                    [&](double seconds) {
+                        const auto before=*camera;
+                        playerInput.move(*camera,seconds,activeEnemies->reacting());
+                        activeEnemies->constrainPlayer(data->level,before,*camera,doorControl.movementWorld());
+                    },
+                    [&]() {
+                        const auto before=*camera;
+                        playerInput.recoil(*camera);
+                        activeEnemies->constrainPlayer(data->level,before,*camera,doorControl.movementWorld());
+                    },levelDoors);
             const double effectiveMovement=camera ? std::hypot(camera->x-beforeMovement.x,camera->y-beforeMovement.y) : 0;
-
-            if (enemySystem && camera && data)
-                enemySystem->update(data->level,*camera,doorControl.movementWorld(),survival.vitals(),
-                                    elapsedSeconds,simulationActive && survival.alive());
-            if (enemySystem) for (const auto sound:enemySystem->takeSounds()) gameAudio.enemyEffect(sound);
+            if (activeEnemies) for (const auto sound:activeEnemies->takeSounds()) gameAudio.enemyEffect(sound);
             if (survival.update(elapsedSeconds,simulationActive,gameAudio,playerInput.running() && effectiveMovement>0))
                 SDL_SetWindowTitle(window,survival.windowTitle(texturePreview.windowTitle()).c_str());
             const auto fired=weaponFire.update(camera?*camera:Camera{},doorControl.movementWorld(),
                 survival.inventory(),playerInput.takeFireTrigger(),
                 simulationActive && survival.alive() && playerInput.fireReady() && originalHud && weaponGraphicsReady,
-                elapsedSeconds,enemySystem?&*enemySystem:nullptr);
+                elapsedSeconds,activeEnemies);
             if (fired==player::FireResult::Fired) gameAudio.fireWeapon(survival.inventory().weapon());
             else if (fired==player::FireResult::Empty || fired==player::FireResult::Full) gameAudio.emptyWeapon();
-            if (enemySystem) for (const auto sound:enemySystem->takeSounds()) gameAudio.enemyEffect(sound);
+            if (activeEnemies) for (const auto sound:activeEnemies->takeSounds()) gameAudio.enemyEffect(sound);
             auto hudState=survival.hudState();
-            if (enemySystem && camera && data) {
-                hudState.slimePhase=enemySystem->effects().slimePhase();
-                hudState.detector=detector::scan(data->level,enemySystem->records(),*camera,
-                    enemySystem->simulationTicks(),survival.inventory().detectorEnabled());
+            if (activeEnemies && camera && data) {
+                hudState.slimePhase=activeEnemies->effects().slimePhase();
+                hudState.detector=detector::scan(data->level,activeEnemies->records(),*camera,
+                    activeEnemies->simulationTicks(),survival.inventory().detectorEnabled());
             }
             hudState.firing=weaponFire.firing(); hudState.barrelPhase=weaponFire.barrelPhase();
             gameAudio.update(levelDoors, effectiveMovement);
@@ -350,11 +397,13 @@ int main(int argc, char* argv[])
                                        originalHud ? &*originalHud : nullptr, hudState,
                                        interactionRenderer ? &*interactionRenderer : nullptr,items.interfaceState(),
                                        weaponGraphicsReady?&weaponFire.scene():nullptr,
-                                       enemySystem?&enemySystem->scene():nullptr,
-                                       enemySystem?&enemySystem->effects().objects():nullptr,
+                                       activeEnemies?&activeEnemies->scene():nullptr,
+                                       activeEnemies?&activeEnemies->effects().objects():nullptr,
                                        originalMap?&*originalMap:nullptr,mapSession.state())
                     : drawMap(renderer, data->level, showPolygons, camera ? &*camera : nullptr))) ||
-                (camera && (!show3D || !originalHud) && !drawPlayerDebug(renderer, *camera)) ||
+#ifdef EXTREMIS_DEBUG_MENU
+                !debugMenu.draw(renderer,data?data->level.zoneIndex:0) ||
+#endif
                 !SDL_RenderPresent(renderer)) {
                 SDL_Log("Rendering failed: %s", SDL_GetError());
                 exitCode = 1;

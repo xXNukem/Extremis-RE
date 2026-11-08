@@ -14,6 +14,7 @@ struct Panel {
     bool codePanel = false;
     bool codeReader = false;
     bool elevator = false;
+    bool securityPanel = false; // Logical type 4: N-card security, not a door.
 };
 
 struct Collection {

@@ -17,7 +17,9 @@ public:
     PlayerInput& operator=(const PlayerInput&) = delete;
     void handleEvent(const SDL_Event& event, bool gameplay = true);
     void invalidateContext() { reset_=true; firePressed_=false; fireReady_=false; }
-    bool update(Camera* camera, bool view3D, double seconds);
+    bool update(Camera* camera, bool view3D, double seconds, bool deferMovement = false);
+    void move(Camera& camera, double seconds, bool blocked);
+    void recoil(Camera& camera);
     double movementDistance() const;
     bool running() const;
     player::FireTrigger takeFireTrigger();
@@ -30,8 +32,9 @@ private:
     double movementDistance_ = 0;
     bool running_ = false;
     bool fireHeld_ = false, firePressed_ = false, fireReady_ = false, fireSuppressed_ = false;
-    std::array<bool,8> blockedKeys_{};
+    std::array<bool,10> blockedKeys_{};
     player::Settings settings_;
+    player::Input input_;
     enum class CaptureStatus { Failed, Waiting, Ready };
     CaptureStatus updateCapture(bool desired);
 };

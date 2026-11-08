@@ -6,6 +6,8 @@
 #include "door_control.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <cmath>
+#include <map>
 #include <iostream>
 #include <stdexcept>
 
@@ -325,6 +327,145 @@ void originalTravel()
     card=0x4001; code.player.inventory().takeSupply(card);
     code.press(SDL_SCANCODE_E); code.press(SDL_SCANCODE_SPACE);
     check(code.items.interfaceState()->notice=="CODE ZONE A002  CJBAIK","A002 code missing");
+}
+void missingVariants()
+{
+    // DOS uses CH_OBJ4A[11] for the mine name (0x1985a..0x1986e).
+    auto resources=fixture(); const interaction::Renderer renderer(resources);
+    interaction::State visual; visual.screen=interaction::Screen::Supply; visual.contents=0x6064;
+    std::vector<std::uint32_t> pixels(320*200); renderer.draw(pixels,visual);
+    check(pixels[32*320+75]==color(12),"Mine rendered as a card");
+    visual.screen=interaction::Screen::Inventory; visual.selection=4; visual.mine=100;
+    renderer.draw(pixels,visual);
+    check(pixels[60*320+198]==color(23),"Owned mine absent from inventory");
+    Session mine(0x3205,0x6064);
+    mine.press(SDL_SCANCODE_E); mine.code();
+    check(mine.items.modal() && mine.items.interfaceState()->screen==interaction::Screen::Supply,
+          "Mine cabinet was filtered out");
+    mine.press(SDL_SCANCODE_E);
+    check(mine.player.inventory().mine()==100,"Mine was not transferred into original fixed slot");
+    mine.press(SDL_SCANCODE_E);
+    check(!mine.items.modal(),"Empty mine cabinet reopened");
+    mine.items.load(mine.level); mine.press(SDL_SCANCODE_E); mine.code(); mine.press(SDL_SCANCODE_E);
+    check(mine.items.interfaceState()->notice=="ALREADY HAVE A MINE" &&
+          mine.items.interfaceState()->contents==0x6064,"Full mine slot consumed cabinet");
+    for(std::uint16_t contents:{0x0384,0x1384,0x2064}) {
+        Session full(0x3205,contents);
+        auto held=contents; full.player.inventory().takeSupply(held);
+        if((contents>>12)==2) { held=contents; full.player.inventory().takeSupply(held); }
+        const auto battery=full.player.inventory().batteryCharge();
+        const auto oxygen=full.player.inventory().oxygenReserve();
+        const auto injectors=full.player.inventory().injectors();
+        full.press(SDL_SCANCODE_E); full.code(); full.press(SDL_SCANCODE_E);
+        check(full.items.modal() && full.items.interfaceState()->contents==contents &&
+              full.player.inventory().batteryCharge()==battery && full.player.inventory().oxygenReserve()==oxygen &&
+              full.player.inventory().injectors()==injectors,"Full inventory lost a supply");
+        full.press(SDL_SCANCODE_ESCAPE); full.press(SDL_SCANCODE_E);
+        check(full.items.interfaceState()->contents==contents,"Full inventory consumed world contents");
+    }
+    Session empty(0x3205,0xffff); empty.press(SDL_SCANCODE_E);
+    check(!empty.items.modal() && empty.player.hudState().messages[0]=="THIS COMPARTMENT IS EMPTY!",
+          "Initially empty cabinet disappeared from interaction detection");
+    Session n(0x3422,0x0101);
+    std::uint16_t card=0x4001; n.player.inventory().takeSupply(card);
+    card=0x5002; n.player.inventory().takeSupply(card);
+    card=0x5001; n.player.inventory().takeSupply(card);
+    n.press(SDL_SCANCODE_E); n.press(SDL_SCANCODE_E);
+    check(n.items.interfaceState()->notice=="Incompatible card type","N reader accepted C card");
+    n.press(SDL_SCANCODE_DOWN); n.press(SDL_SCANCODE_E);
+    check(n.items.interfaceState()->notice=="IMPOSSIBLE TO DEACTIVATE THE SECURITY",
+          "N reader accepted wrong identifier");
+    n.press(SDL_SCANCODE_ESCAPE); n.press(SDL_SCANCODE_E);
+    n.press(SDL_SCANCODE_DOWN); n.press(SDL_SCANCODE_DOWN); n.press(SDL_SCANCODE_E);
+    check(!n.items.modal() && n.player.inventory().cards()[2]==0x2001 && n.doors[0].originalState==0x400,
+          "N reader consumed card or altered a door");
+    n.items.load(n.level); n.press(SDL_SCANCODE_E);
+    check(!n.items.modal(),"Disabled N security lost state on level return");
+    n.items.resetPlans(); n.press(SDL_SCANCODE_E);
+    check(n.items.modal(),"New game retained disabled N security");
+}
+void allPanelsLab(const char* path)
+{
+    unsigned count=0, empty=0, disabled=0, cards=0;
+    std::map<unsigned,unsigned> types, supplies;
+    for(unsigned zone=0;zone<30;++zone) {
+        const auto level=game_lab::loadLevel(path,zone).level;
+        items::World world(level);
+        unsigned raw=0, tested=0;
+        for(const auto& sector:level.sectors) for(const auto& wall:sector.walls)
+            if((wall.type&0xf000)==0x3000) ++raw;
+        check(world.panels().size()==raw,"Original interactive wall variant omitted");
+        for(std::size_t index=0;index<world.panels().size();++index) {
+            const auto& panel=world.panels()[index];
+            ++types[level.sectors[panel.sector].walls[panel.wall].type];
+            if(panel.elevator) continue; // Travel implementation is outside this audit.
+            Session s; s.level=level; s.items.load(level);
+            s.obstacles=collision::staticWorld(level); s.doors=doors::closedDoors(level);
+            const double dx=panel.face.b.x-panel.face.a.x, dy=panel.face.b.y-panel.face.a.y;
+            const double length=std::hypot(dx,dy);
+            check(length>0,"Degenerate original panel");
+            s.camera={(panel.face.a.x+panel.face.b.x)/2+50*dy/length,
+                      (panel.face.a.y+panel.face.b.y)/2-50*dx/length,std::atan2(dx,-dy)};
+            s.control.resetLevel(); s.control.prepareFrame(&s.camera,0,{});
+            s.obstacles=s.control.movementWorld();
+            check(world.target(s.camera,s.obstacles)==index,"Original panel occluded or unreachable");
+            for(const auto& wall:s.obstacles)
+                check(!collision::overlaps(wall,{s.camera.x,s.camera.y},30),"Panel test pose inside collision");
+            const auto before=s.player.inventory().cards();
+            s.press(SDL_SCANCODE_E); ++tested; ++count;
+            if(panel.contents==0xffff && !panel.cardReader && !panel.codeReader && !panel.codePanel && !panel.securityPanel) {
+                check(!s.items.modal(),"Empty cabinet opened"); ++empty; continue;
+            }
+            if(panel.cardReader && s.control.useCardReader(panel.contents,{})==DoorControl::CardResult::AlreadyDisabled) {
+                check(!s.items.modal(),"Already disabled door reader opened"); ++disabled; continue;
+            }
+            check(s.items.modal(),"E did not start original panel interaction");
+            check(s.items.interfaceState()->zoneName==interaction::original::codes[zone].zone,
+                  "Panel displays another zone's code name");
+            check(s.player.inventory().cards()==before,"Opening invented a card");
+            if(panel.cardReader || panel.codeReader || panel.securityPanel) {
+                check(s.items.interfaceState()->screen==interaction::Screen::Cards,"Reader skipped selection");
+                s.press(SDL_SCANCODE_ESCAPE);
+                std::uint16_t card=std::uint16_t((panel.securityPanel?0x5000:0x4000)|
+                    (panel.codeReader?(panel.contents&255):(panel.contents>>8)));
+                s.player.inventory().takeSupply(card);
+                s.press(SDL_SCANCODE_E); s.press(SDL_SCANCODE_E);
+                if(panel.codeReader) check(s.items.interfaceState() &&
+                    s.items.interfaceState()->screen==interaction::Screen::Codes,"Correct C card rejected");
+                else if(panel.cardReader) check(s.control.useCardReader(panel.contents,{})==DoorControl::CardResult::AlreadyDisabled,
+                    "Correct C card did not unlock original target");
+                else { s.press(SDL_SCANCODE_E); check(!s.items.modal(),"N security did not remain disabled"); }
+                continue;
+            }
+            check(level.accessCode==interaction::codeChecksum(interaction::original::codes[zone].letters),
+                  "Zone code catalogue differs from GAME.LAB");
+            if(zone<4) {
+                s.code(*level.accessCode==0?"BBBBBB":"AAAAAA");
+                check(s.items.interfaceState() && !s.items.interfaceState()->codeAccepted &&
+                      s.items.interfaceState()->notice=="WRONG CODE!!...","Original zone access bypassed");
+                s.press(SDL_SCANCODE_ESCAPE); s.press(SDL_SCANCODE_E);
+            }
+            s.code(interaction::original::codes[zone].letters);
+            if(panel.codePanel) {
+                for(unsigned i=0;i<500 && s.items.modal();++i) s.tick();
+                check(s.items.planTransferred(),"Original plan transfer failed"); continue;
+            }
+            const unsigned kind=panel.contents>>12;
+            if(!panel.weapon) ++supplies[kind];
+            check(s.items.modal() && s.items.interfaceState()->screen==
+                (panel.weapon?interaction::Screen::Weapon:interaction::Screen::Supply),"Correct zone code rejected");
+            s.press(SDL_SCANCODE_E);
+            check(!s.items.modal(),"Original object did not transfer to empty inventory");
+            if(!panel.weapon && kind>=3 && kind<=5) {
+                check(s.player.inventory().cards()[0]==int(panel.contents)-0x3000,"Original card was changed or lost");
+                ++cards;
+            }
+        }
+        std::cout<<"Zone "<<zone+1<<": "<<tested<<" non-elevator panels verified.\n";
+    }
+    for(const auto& [type,n]:types) std::cout<<"Type "<<std::hex<<type<<std::dec<<": "<<n<<"\n";
+    for(const auto& [kind,n]:supplies) std::cout<<"Supply class "<<kind<<": "<<n<<"\n";
+    std::cout<<count<<" panels; "<<cards<<" cards transferred; "<<empty<<" empty; "<<disabled<<" disabled readers.\n";
 }
 void originalTravelLab(const char* path)
 {
@@ -660,7 +801,7 @@ void originals(const std::filesystem::path& directory)
 }
 int main(int argc,char* argv[])
 {
-    try { graphics(); checksum(); flows(); selectionRegressions(); detectorInventory(); inventoryAndElevator(); originalTravel(); unifiedControls(); cardCountsAndLiftDirections(); capacityAndPlan(); pauseAndFailures(); codeTerminal(); sequenceTiming(); if(argc==2) originals(argv[1]); if(argc==3 && std::string_view(argv[1])=="--lab") originalTravelLab(argv[2]);
+    try { graphics(); checksum(); flows(); selectionRegressions(); detectorInventory(); inventoryAndElevator(); originalTravel(); unifiedControls(); cardCountsAndLiftDirections(); capacityAndPlan(); pauseAndFailures(); codeTerminal(); sequenceTiming(); missingVariants(); if(argc==2) originals(argv[1]); if(argc==3 && std::string_view(argv[1])=="--lab") { originalTravelLab(argv[2]); allPanelsLab(argv[2]); }
         std::cout<<"Original interaction coordinates, bounds, resources and code format passed.\n";
     } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
 }

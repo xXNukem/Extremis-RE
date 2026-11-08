@@ -19,6 +19,7 @@ public:
     const std::array<int,3>& cards() const;
     const std::array<int,2>& injectors() const;
     int oxygenReserve() const;
+    int mine() const { return mine_; }
     unsigned weapon() const;
     int ammunition() const;
     bool consumeShot();
@@ -32,6 +33,7 @@ private:
     std::array<int,3> cards_{-1,-1,-1};
     std::array<int,2> injectors_{-1,-1};
     int oxygenReserve_ = -1;
+    int mine_ = -1;
     int battery_ = -1; // Original new-game template0x1d8be DWORD -1.
     bool detector_ = false;
     double batteryFraction_ = 0;

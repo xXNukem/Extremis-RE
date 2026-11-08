@@ -37,6 +37,9 @@ struct State {
     bool elevator = false;
     unsigned elevatorIndex = 0;
     unsigned elevatorZone = 0, elevatorSector = 0;
+    std::string zoneName = "C200";
+    int mine = -1;
+    bool securityPanel = false;
     bool codeReader = false;
     unsigned codeIndex = 0;
 };

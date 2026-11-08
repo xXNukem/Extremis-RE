@@ -253,6 +253,49 @@ void fallingDrops()
     check(initial.objects[0].z == 0,"Large delta lost initial z=256 transition");
 }
 
+void originalPlacement(const std::filesystem::path& lab)
+{
+    const auto directory = lab.parent_path() / "DATA";
+    for (unsigned zone : {0u, 1u}) {
+        const auto level = game_lab::loadLevel(lab, zone).level;
+        const auto scene = sprites::loadScene(level, directory);
+        check(level.objetBank == zone + 1, "Unexpected level 1/2 OBJET bank");
+        check(!scene.objects.empty() && scene.skipped == 0, "Original decorations missing");
+        if (zone == 0) check(scene.objects.size() == 27, "OBJET1 placement regressed");
+        std::size_t index = 0;
+        for (const auto& sector : level.sectors) for (const auto& entity : sector.entitiesA) {
+            const auto& object = scene.objects.at(index++);
+            const auto& vertex = sector.vertices.at(entity.vertex);
+            check(object.image == (entity.type & 0xff) && object.type == entity.type &&
+                  object.x == double(sector.gx) + vertex.x &&
+                  object.y == double(sector.gy) + vertex.y && object.z == entity.param1 &&
+                  object.param2 == entity.param2, "Original placement record changed");
+            // Exercise each real image through the existing renderer, without walls.
+            auto isolated = scene;
+            isolated.objects = {object};
+            std::vector<std::uint32_t> pixels(160 * 100, 0);
+            std::vector<double> depth(pixels.size(), std::numeric_limits<double>::infinity());
+            sprites::render(pixels, depth, isolated, {object.x - 300, object.y, 0},
+                            {160,100,100,object.z});
+            check(std::any_of(depth.begin(), depth.end(), [](double d) { return std::isfinite(d); }),
+                  "Original decorative image produced no pixels");
+        }
+        std::cout << "Level " << zone + 1 << ": OBJET" << level.objetBank << ", "
+                  << scene.objects.size() << " decorations placed/rendered, 0 skipped.\n";
+    }
+    // Only bank headers and resources; do not load the remaining level geometry.
+    std::array<bool,11> checked{};
+    for (const auto& level : game_lab::loadBankTable(lab)) {
+        check(level.objetBank > 0 && level.objetBank < checked.size(), "Invalid OBJET bank");
+        if (checked[level.objetBank]) continue;
+        checked[level.objetBank] = true;
+        const auto scene = sprites::loadScene(level, directory);
+        for (std::size_t i = 0; const auto height = sprites::worldHeight(level.objetBank, i); ++i)
+            check(i < scene.bank.images.size(), "Height table exceeds sprite bank");
+    }
+    std::cout << "OBJET bank height bounds and initial composition passed.\n";
+}
+
 void original(const std::filesystem::path& lab)
 {
     const auto data = game_lab::loadLevel1(lab);
@@ -286,6 +329,7 @@ int main(int argc, char* argv[])
     try {
         decoding(); placement(); projection(); spriteDepth(); sceneOcclusion(); fallingDrops();
         if (argc == 2) original(argv[1]);
+        if (argc == 3 && std::string(argv[2]) == "--placement-only") originalPlacement(argv[1]);
         std::cout << "SPR decoding, anchors, projection, transparency and scene depth passed.\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n'; return 1;

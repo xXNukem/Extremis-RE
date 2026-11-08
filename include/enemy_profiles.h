@@ -18,6 +18,20 @@ inline constexpr std::array<Profile,9> profiles{{
 inline constexpr unsigned attack6[]{5,6,7,8,7,6,5}; // 0xf23f
 inline constexpr unsigned waiting6[]{4,3,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,4,4,4,4,4,4,4,4,4,4,4,4}; // 0xf24d
 inline constexpr unsigned waiting5[]{0,0,0,0,5,5,5,5,0,0,0,0,5,5,5,5,0,0,0,0,5,5,5,5,6,6,6,6,5,5,5,5}; // 0xf28d
+// MONS5: EXE 0xf129..0xf156, (270-height)*sin(phase), Q14 table at 0x3704.
+// Quarter-wave samples after the original integer multiplication/shift.
+inline constexpr unsigned elevation5[]{
+    0,0,1,2,3,3,4,5,6,7,7,8,9,10,10,11,12,13,14,14,
+    15,16,17,17,18,19,20,21,21,22,23,24,24,25,26,27,27,28,29,30,
+    30,31,32,32,33,34,35,35,36,37,38,38,39,40,40,41,42,42,43,44,
+    45,45,46,47,47,48,49,49,50,50,51,52,52,53,54,54,55,56,56,57,
+    57,58,59,59,60,60,61,61,62,63,63,64,64,65,65,66,66,67,67,68,
+    68,69,69,70,70,71,71,72,72,73,73,74,74,75,75,75,76,76,77,77,
+    77,78,78,79,79,79,80,80,80,81,81,81,82,82,82,83,83,83,84,84,
+    84,84,85,85,85,85,86,86,86,86,86,87,87,87,87,87,88,88,88,88,
+    88,88,88,89,89,89,89,89,89,89,89,89,89,89,89,89,89,89,89,89,
+    90,
+};
 // File 0x5ad5, eight 66-byte descriptors; MONS9 has NO death descriptor.
 // Seven (phase,lateral,z) bursts followed by four (image,lateral,z) fragments.
 inline constexpr int effects[8][11][3]{

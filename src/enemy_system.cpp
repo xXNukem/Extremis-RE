@@ -33,15 +33,7 @@ std::vector<std::uint8_t> read(const std::filesystem::path& path)
         throw std::runtime_error("Truncated monster resource");
     return bytes;
 }
-bool visible(collision::Point enemy, const Camera& camera, const collision::World& walls)
-{
-    const double dx=enemy.x-camera.x,dy=enemy.y-camera.y;
-    const double forward=dx*std::cos(camera.angle)+dy*std::sin(camera.angle);
-    const double side=dx*std::sin(camera.angle)-dy*std::cos(camera.angle);
-    if (forward<=0 || std::abs(side)>forward*std::tan(Camera::horizontalFov*.5)+87.75) return false;
-    const double distance=std::hypot(dx,dy);
-    return distance<1e-6 || !collision::rayDistance(walls,{camera.x,camera.y},{dx/distance,dy/distance},distance);
-}
+
 }
 void System::load(const game_lab::Level& level, const std::filesystem::path& directory)
 {
@@ -75,6 +67,7 @@ void System::load(const game_lab::Level& level, const std::filesystem::path& dir
     bank_=level.monsBank; terminalDefeated_=false;
     directionalCycle_ = bank_!=1; // Preserve the established MONS1 presentation.
     baseHeight_=profile.height; speed_=profile.speed; baseElevation_=profile.elevation;
+    recoil5_.assign(level.enemies.size(),0);
     records_=level.enemies; origins_=std::move(origins); masks_=std::move(masks);
     scene_.bank=std::move(bank); accumulator_=0; reaction_=attackSound_=ticks_=0; wasActive_=false;
     sounds_.clear(); effects_.reset(); rebuildScene();
@@ -86,35 +79,54 @@ void System::rebuildScene()
         const auto& e=records_[i];
         if (e.health==0xffff) continue;
         const auto image=std::size_t(e.sprite&255);
-        if (image >= scene_.bank.images.size()) throw std::runtime_error("Invalid monster scene frame");
+        if (image >= scene_.bank.images.size()) throw std::runtime_error(
+            "Invalid monster scene frame: MONS" + std::to_string(bank_) +
+            " enemy=" + std::to_string(i) +
+            " image=" + std::to_string(image) +
+            " total=" + std::to_string(scene_.bank.images.size()) +
+            " state=" + std::to_string(e.state) +
+            " phase=" + std::to_string(e.phase) +
+            " sprite=" + std::to_string(e.sprite));
         const double height=baseHeight_*scene_.bank.images[image].texture.height/scene_.bank.images[0].texture.height;
         scene_.objects.push_back({origins_[i].x+e.x,origins_[i].y+e.y,baseElevation_+double(e.elevation&255),
             height,image,std::uint16_t((e.sprite&0x2000)?0x0200:0),std::uint16_t(i)});
     }
 }
 void System::update(const game_lab::Level& level, const Camera& camera, const collision::World& walls,
-                    player::Vitals& vitals, double seconds, bool active)
+                    player::Vitals& vitals, double seconds, bool active,
+                    const std::function<void(double)>& movePlayer,
+                    const std::function<void()>& recoilPlayer,
+                    const std::vector<doors::Door>& dynamicDoors)
 {
     if (!active || !vitals.alive() || !std::isfinite(seconds) || seconds<0) {
         wasActive_=false; accumulator_=0; return;
     }
     if (!wasActive_) { wasActive_=true; return; } // Discard modal/focus resume interval.
-    accumulator_+=std::min(seconds,0.25);
-    while (accumulator_+1e-12>=stepSeconds && vitals.alive()) {
-        accumulator_-=stepSeconds; step(level,camera,walls,vitals);
+    double remaining=std::min(seconds,0.25);
+    while (remaining>1e-12 && vitals.alive()) {
+        const double interval=std::min(remaining,stepSeconds-accumulator_);
+        // Movement observes reaction_ until the exact tick that expires it.
+        if (movePlayer) movePlayer(interval);
+        accumulator_+=interval; remaining-=interval;
+        if (accumulator_+1e-12>=stepSeconds) {
+            accumulator_=0; step(level,camera,walls,vitals,recoilPlayer,dynamicDoors);
+        }
     }
     rebuildScene(); effects_.compose(camera,scene_.bank);
 }
 void System::step(const game_lab::Level& level, const Camera& camera, const collision::World& walls,
-                  player::Vitals& vitals)
+                  player::Vitals& vitals, const std::function<void()>& recoilPlayer,
+                    const std::vector<doors::Door>& dynamicDoors)
 {
     ++ticks_; effects_.step(camera,walls);
     const auto location=collision::locate(level,{camera.x,camera.y});
+    const auto visible=doors::connectedSectors(level,location ? location->sector : level.sectors.size(),dynamicDoors);
     for (std::size_t i=0;i<records_.size();++i) {
         auto& e=records_[i];
         if (e.health==0xffff) continue;
+        if (e.behavior==2 && e.sector<visible.size() && visible[e.sector]) e.behavior=3;
+        if (bank_==5) { advance5(i,level,camera,walls,location); continue; }
         if (e.state==5) {
-            if(bank_==5) e.elevation=std::uint16_t((e.elevation&255)/2);
             frame(e,(e.phase&1)?9:5);
             if (++e.phase>=8) {
                 e.health=0xffff;
@@ -127,9 +139,8 @@ void System::step(const game_lab::Level& level, const Camera& camera, const coll
             }
         } else if (e.state==4 && e.phase<(bank_==6?3u:1u)) {
             ++e.phase; frame(e,(e.phase&1)?9:5);
-            if(bank_==5) e.elevation=std::uint16_t((e.elevation&255)/2);
         }
-        else if (e.state==2 && bank_!=5) {
+        else if (e.state==2) {
             if (++e.phase>=7) {
                 e.phase=0; e.state=0; advance(i,level,camera,walls,location);
             }
@@ -143,26 +154,24 @@ void System::step(const game_lab::Level& level, const Camera& camera, const coll
                 }
             }
         } else {
-            if (e.state==4) { e.state=0; e.phase=0; if(bank_==5) e.elevation=0; }
+            if (e.state==4) { e.state=0; e.phase=0; }
             advance(i,level,camera,walls,location);
         }
     }
     // EXE 0x165db..0x166b5: one shared reaction, 2 health units × 8 updates.
-    if (reaction_) { vitals.applyDamage(2); --reaction_; }
+    if (reaction_) {
+        if (recoilPlayer) {
+            rebuildScene(); // Enemy collision boxes must use this tick's positions.
+            recoilPlayer();
+        }
+        vitals.applyDamage(2); --reaction_;
+    }
 }
 void System::advance(std::size_t i, const game_lab::Level& level, const Camera& camera,
                      const collision::World& walls, std::optional<collision::Location> playerLocation)
 {
     auto& e=records_[i];
     const collision::Point p{origins_[i].x+e.x,origins_[i].y+e.y};
-    if (e.behavior==2 && ((playerLocation && playerLocation->sector==e.sector) || visible(p,camera,walls))) e.behavior=3;
-    if (bank_==5) {
-        // EXE 0xe9f5: jump phases/elevation are not the common walk cycle.
-        // Only its confirmed idle/hit/death subset is enabled here.
-        e.state=6; e.phase=(e.phase+1)&31;
-        if (!e.phase) e.sprite^=0x2000;
-        frame(e,original::waiting5[e.phase]); return;
-    }
     if (bank_==6) {
         // EXE 0xe90b..0xe9f0: stationary, same-sector Chebyshev proximity.
         if (playerLocation && playerLocation->sector==e.sector &&
@@ -177,20 +186,25 @@ void System::advance(std::size_t i, const game_lab::Level& level, const Camera& 
     if (!location) return;
     e.polygon=std::uint16_t(location->polygon);
     std::optional<collision::Point> destination;
-    if (e.behavior>=3 && playerLocation)
+    const bool pursuing=playerLocation &&
+        (e.behavior>=3 || (e.behavior==1 && location->sector==playerLocation->sector));
+    if (pursuing)
         destination=waypoint(level,*location,p,*playerLocation,{camera.x,camera.y});
-    else if (e.behavior>=1)
-        destination=collision::Point{origins_[i].x+e.homeX,origins_[i].y+e.homeY};
+    else if (e.behavior>=1) {
+        const collision::Point home{origins_[i].x+e.homeX,origins_[i].y+e.homeY};
+        const auto homeLocation=collision::locate(level,home,location->sector);
+        if (homeLocation) destination=waypoint(level,*location,p,*homeLocation,home);
+    }
     if (!destination) { e.state=6; e.phase=(e.phase+1)&31; frame(e,waiting[e.phase]); return; }
     const double dx=destination->x-p.x,dy=destination->y-p.y;
     const bool samePlayerPolygon=playerLocation && location->sector==playerLocation->sector &&
                                  location->polygon==playerLocation->polygon;
     const double distance=std::hypot(camera.x-p.x,camera.y-p.y);
-    if (samePlayerPolygon && e.behavior>=3 && std::abs(camera.x-p.x)<100 && std::abs(camera.y-p.y)<100 &&
+    if (samePlayerPolygon && pursuing && std::abs(camera.x-p.x)<100 && std::abs(camera.y-p.y)<100 &&
         (distance<1e-6 || !collision::rayDistance(walls,p,{(camera.x-p.x)/distance,(camera.y-p.y)/distance},distance))) {
         e.state=2; e.phase=1; e.sprite^=0x2000; frame(e,attack[1]); return;
     }
-    if (e.behavior<3 && std::max(std::abs(dx),std::abs(dy))<50) {
+    if (!pursuing && std::max(std::abs(dx),std::abs(dy))<50) {
         e.state=6; e.phase=(e.phase+1)&31;
         if (!e.phase) e.sprite^=0x2000;
         frame(e,waiting[e.phase]); return;
@@ -224,6 +238,7 @@ void System::move(std::size_t i, const game_lab::Level& level, collision::Point 
         // Keep MONS1's established forward-only animation unchanged.
         const bool reverse=directionalCycle_ &&
             std::abs(std::remainder(camera.angle*360/pi-e.angle,720))<180;
+        if (e.state!=0 || e.phase>=5) e.phase=0;
         if (reverse) e.phase=e.phase==0?4:e.phase-1;
         else {
             e.phase=(e.phase+1)%5;
@@ -250,7 +265,7 @@ std::optional<ShotHit> System::trace(const Camera& view, collision::Point origin
                           (origin.y+direction.y*distance-object.y)*c;
         const double anchor=(object.type&0x0200)?image.texture.width-image.anchorX:image.anchorX;
         const double u=anchor+side/scale;
-        const double v=image.anchorY+(object.z-Camera::eyeHeight)/scale;
+        const double v=image.anchorY+(object.z-view.viewHeight())/scale;
         if (u<0 || v<0 || u>=image.texture.width || v>=image.texture.height) continue;
         const unsigned column=unsigned(u*8/image.texture.width),row=unsigned(v*8/image.texture.height);
         if (masks_[object.image*8+row]&(1u<<column)) continue; // Native bit1 means MISS.
@@ -266,6 +281,9 @@ void System::hit(std::size_t index, unsigned weapon, double angle)
     sounds_.push_back(16);
     if (e.state==5) return;
     e.angle=std::uint16_t((int(std::lround(std::remainder(angle,2*pi)*360/pi))+360+720)%720);
+    // MONS5 0xeaa9: (weapon descriptor +30 - 2)*10. The port retains the
+    // impacting weapon; DOS rereads the selected weapon during hurt/death.
+    if (bank_==5) recoil5_[index]=damage[weapon]>2 ? (damage[weapon]-2)*10 : 0;
     e.phase=0; e.health=std::uint16_t(std::max(0,int(e.health)-int(damage[weapon])));
     e.state=e.health?4:5; frame(e,5);
     if (e.behavior==2) e.behavior=3;
@@ -294,14 +312,13 @@ void System::constrainPlayer(const game_lab::Level& level, const Camera& before,
     after.x=corrected.x; after.y=corrected.y;
 }
 bool System::blocksInterface(const game_lab::Level& level, const Camera& camera,
-                             const collision::World& walls) const
+                             const std::vector<doors::Door>& dynamicDoors) const
 {
     const auto location=collision::locate(level,{camera.x,camera.y});
+    const auto visible=doors::connectedSectors(level,location ? location->sector : level.sectors.size(),dynamicDoors);
     for (const auto& e:records_) {
         if (e.health==0xffff || e.sector>=level.sectors.size()) continue;
-        const auto& sector=level.sectors[e.sector];
-        if ((location && location->sector==e.sector) ||
-            visible({double(sector.gx)+e.x,double(sector.gy)+e.y},camera,walls)) return true;
+        if (visible[e.sector]) return true;
     }
     return false;
 }

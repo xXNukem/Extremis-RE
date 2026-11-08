@@ -36,7 +36,7 @@ void Renderer::shutters(std::vector<std::uint32_t>& pixels,const State& s) const
         smallText(pixels,"TRANSFER ",142,51);
         const auto value=std::min(s.transfer,100u);
         const char digits[]{char('0'+value/100),char('0'+value/10%10),char('0'+value%10),0};
-        smallText(pixels,digits,154,81); smallText(pixels,"ZONE C200",140,112);
+        smallText(pixels,digits,154,81); smallText(pixels,"ZONE "+s.zoneName,140,112);
     } else {
         const unsigned kind=s.contents>>12;
         if(kind<(weapon?6u:7u)) {

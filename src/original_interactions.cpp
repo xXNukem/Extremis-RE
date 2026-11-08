@@ -140,7 +140,7 @@ void Renderer::code(std::vector<std::uint32_t>& pixels, const State& s) const
     image(pixels,resources_.keyboard[6],handX,handY,true,25,125,62,258);
     image(pixels,resources_.keyboard[s.fingerPhase==2?9:s.fingerPhase?8:7],handX+42,handY+9,true,25,125,62,258);
     if (!s.notice.empty()) { smallText(pixels,s.notice,77,36); return; }
-    constexpr std::string_view prompt="TYPE IN CODE ZONE C200    ";
+    const std::string prompt="TYPE IN CODE ZONE "+s.zoneName+"    ";
     smallText(pixels,prompt,77,36);
     smallText(pixels,s.entered,77+4*int(prompt.size()),36);
     for (std::size_t i=s.entered.size();i<6;++i)
@@ -161,7 +161,7 @@ void Renderer::supply(std::vector<std::uint32_t>& pixels, const State& s, bool w
     }
     if (weapon && kind>=6) return;
     if (!weapon && kind>=7) return;
-    image(pixels,bank[weapon?kind+6:kind<3?kind+7:10],75,32);
+    image(pixels,bank[weapon?kind+6:kind<3?kind+7:kind==6?11:10],75,32);
     if (!weapon && kind>=3 && kind<=5) {
         image(pixels,bank[27],145,32);
         image(pixels,bank[28+kind-3],214,36);
@@ -261,7 +261,8 @@ void Renderer::inventory(std::vector<std::uint32_t>& pixels, const State& s) con
         if (!row) menuText(pixels,"No cards",146,false);
         break;
     }
-    case 4: image(pixels,bank[15],198,60); menuText(pixels,"No mine",146,false); break;
+    case 4: image(pixels,bank[s.mine<0?15:22],198,60);
+        menuText(pixels,s.mine<0?"No mine":"Mine",146,false); break;
     case 5: menuText(pixels,"Exit",146,false); break;
     }
 }

@@ -56,6 +56,7 @@ private:
         unsigned state=0, weapon=0, phase=0;
         double x=0, y=0, angle=0;
         double traveled=0, visualSide=0, visualDrop=0;
+        double launchHeight=Camera::eyeHeight;
     };
     std::array<Projectile,20> projectiles_{};
     sprites::Scene scene_;

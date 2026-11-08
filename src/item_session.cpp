@@ -24,7 +24,7 @@ void ItemSession::load(const game_lab::Level& level)
 bool ItemSession::modal() const { return interface_.has_value(); }
 bool ItemSession::planTransferred() const { return planTransferred(zone_); }
 bool ItemSession::planTransferred(unsigned zone) const { return zone<plans_.size() && plans_[zone]; }
-void ItemSession::resetPlans() { plans_.fill(false); }
+void ItemSession::resetPlans() { plans_.fill(false); securities_.fill(false); }
 void ItemSession::clearInput()
 {
     action_=Action::None; inventoryRequested_=take_=injector_=oxygen_=false;
@@ -100,16 +100,18 @@ void ItemSession::open(std::size_t index, SurvivalSession& player)
     interface_.emplace(); blink_=0;
     const auto& panel=world_->panels()[index];
     interface_->contents=panel.contents;
+    interface_->zoneName=interaction::original::codes[zone_].zone;
+    interface_->securityPanel=panel.securityPanel;
     interface_->codeReader=panel.codeReader;
     interface_->elevator=panel.elevator;
     interface_->elevatorIndex=panel.contents;
     interface_->elevatorZone=zone_;
     interface_->elevatorSector=unsigned(panel.sector);
-    if (panel.elevator || panel.cardReader || panel.codeReader) showContents(player);
+    if (panel.elevator || panel.cardReader || panel.codeReader || panel.securityPanel) showContents(player);
     else {
         interface_->screen=interaction::Screen::Code;
         interface_->codeAccepted=authorized_;
-        if(authorized_) interface_->notice="CODE ZONE C200 ALREADY SEIZED";
+        if(authorized_) interface_->notice="CODE ZONE "+interface_->zoneName+" ALREADY SEIZED";
     }
     startPhase(interaction::Phase::Opening);
 }
@@ -118,7 +120,7 @@ void ItemSession::showContents(const SurvivalSession& player)
     auto& s=*interface_; s.selection=0; s.notice.clear();
     const auto& panel=world_->panels()[*panel_];
     if (panel.codePanel) s.screen=interaction::Screen::Plan;
-    else if (panel.elevator || panel.cardReader || panel.codeReader) {
+    else if (panel.elevator || panel.cardReader || panel.codeReader || panel.securityPanel) {
         s.screen=interaction::Screen::Cards;
         s.cards=player.inventory().cards();
         // Availability is not compatibility. Show even one incompatible card;
@@ -198,7 +200,7 @@ void ItemSession::confirmCard(SurvivalSession& player, GameAudio& audio, DoorCon
         s.useSelection=*card&0xff; s.notice.clear(); pendingCard_=card;
         startPhase(interaction::Phase::Opening); return;
     }
-    if ((*card&0xf000)!=0x1000) { s.notice="Incompatible card type"; return; }
+    if ((*card&0xf000)!=(s.securityPanel?0x2000:0x1000)) { s.notice="Incompatible card type"; return; }
     pendingCard_=card;
     s.screen=interaction::Screen::Reader; s.notice.clear();
     startPhase(interaction::Phase::Opening);
@@ -215,6 +217,17 @@ void ItemSession::usePendingCard(SurvivalSession& player, GameAudio& audio, Door
             audio.acceptCard(); s.cardAccepted=true;
             s.notice="CARD ACCEPTED...."; s.selection=0; s.codeIndex=0;
         }
+        return;
+    }
+    if (s.securityPanel) {
+        const unsigned id=s.contents&0xff;
+        // EXE 0x95e4: global byte[0x60a7 + id - 1]; never touches a door.
+        s.cardAccepted=id>=1 && id<=securities_.size() &&
+            (*pendingCard_&0xff)==(s.contents>>8);
+        if (s.cardAccepted) {
+            securities_[id-1]=true; audio.acceptCard();
+            s.notice="SECURITY "+std::to_string(id)+" DEACTIVATED..";
+        } else s.notice="IMPOSSIBLE TO DEACTIVATE THE SECURITY";
         return;
     }
     if (!security) { interface_.reset(); return; }
@@ -279,7 +292,9 @@ void ItemSession::confirm(SurvivalSession& player, GameAudio& audio, DoorControl
     } else if ((interface_->contents>>12)>=3 && (interface_->contents>>12)<=5) {
         interface_->screen=Screen::Cards; interface_->cards=player.inventory().cards();
         interface_->selection=0; interface_->replacing=true;
-    } else interface_->notice=(interface_->contents>>12)==1?
+    } else if ((interface_->contents>>12)==6) interface_->notice="ALREADY HAVE A MINE";
+    else if ((interface_->contents>>12)==0) interface_->notice="ALREADY HAVE A BATTERY";
+    else interface_->notice=(interface_->contents>>12)==1?
         "ALREADY HAVE AN OXYGEN BOTTLE":"ALREADY HAVE TWO INJECTORS";
 }
 void ItemSession::update(const Camera* camera, bool active, const collision::World& obstacles,
@@ -322,12 +337,16 @@ void ItemSession::update(const Camera* camera, bool active, const collision::Wor
         if (target) {
             if (!available_) return; // Never open an invisible interface or activate a door behind it.
             const auto& panel=world_->panels()[*target];
+            if (panel.securityPanel && (panel.contents&0xff)>=1 &&
+                (panel.contents&0xff)<=securities_.size() && securities_[(panel.contents&0xff)-1]) {
+                player.postMessage(messages::Id::AlreadyDisabled); return;
+            }
             if (panel.cardReader && security &&
                 security->useCardReader(panel.contents,{})==DoorControl::CardResult::AlreadyDisabled) {
                 player.postMessage(messages::Id::AlreadyDisabled);
                 return;
             }
-            if (!panel.codePanel && !panel.cardReader && !panel.codeReader && !panel.elevator && panel.contents==0xffff)
+            if (!panel.codePanel && !panel.cardReader && !panel.codeReader && !panel.elevator && !panel.securityPanel && panel.contents==0xffff)
                 player.postMessage(messages::Id::EmptyPanel);
             else {
                 if (panel.elevator) audio.interfaceMotor();
@@ -346,7 +365,7 @@ void ItemSession::refreshInventory(const SurvivalSession& player)
 {
     auto& s=*interface_;
     s.cards=player.inventory().cards(); s.injectors=player.inventory().injectors();
-    s.oxygenReserve=player.inventory().oxygenReserve();
+    s.oxygenReserve=player.inventory().oxygenReserve(); s.mine=player.inventory().mine();
     s.batteryCharge=player.inventory().batteryCharge(); s.detectorEnabled=player.inventory().detectorEnabled();
 }
 void ItemSession::confirmInventory(SurvivalSession& player)

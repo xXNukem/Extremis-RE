@@ -45,6 +45,41 @@ bool reversedPair(const Candidate& a, const Candidate& b)
 }
 } // namespace
 
+bool connectionEnabled(const game_lab::Level& level, std::uint16_t stateIndex,
+                       const std::vector<Door>& dynamicDoors)
+{
+    if (stateIndex >= level.connectionStates.size()) return false;
+    for (const auto& door : dynamicDoors) {
+        if (door.stateIndex != stateIndex) continue;
+        return door.state == State::Opening || door.state == State::Open ||
+               (door.state == State::Closing && door.progress > 0);
+    }
+    return (level.connectionStates[stateIndex] & 0x01ff) != 0;
+}
+
+std::vector<bool> connectedSectors(const game_lab::Level& level, std::size_t start,
+                                   const std::vector<Door>& dynamicDoors)
+{
+    std::vector<bool> visible(level.sectors.size(), false);
+    if (start >= visible.size()) return visible;
+    std::vector<std::size_t> pending{start};
+    visible[start] = true;
+    while (!pending.empty()) {
+        const auto current = pending.back();
+        pending.pop_back();
+        const auto& sector = level.sectors[current];
+        // DOS: connection wall i corresponds to neighbor i, before geometric clipping.
+        for (std::size_t i = 0; i < sector.neighbors.size() && i < sector.walls.size(); ++i) {
+            const auto next = sector.neighbors[i];
+            if (next >= visible.size() || visible[next] ||
+                !connectionEnabled(level, sector.walls[i].extra, dynamicDoors)) continue;
+            visible[next] = true;
+            pending.push_back(next);
+        }
+    }
+    return visible;
+}
+
 void toggle(Door& door)
 {
     door.state = door.state == State::Closed || door.state == State::Closing
