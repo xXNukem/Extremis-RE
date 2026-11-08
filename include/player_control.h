@@ -1,6 +1,7 @@
 #pragma once
 
 #include "camera.h"
+#include <functional>
 #include "player_collision.h"
 
 namespace player {
@@ -22,9 +23,12 @@ struct Input {
 };
 
 // Planar movement and fixed-step camera posture without SDL; optionally resolves static collisions.
-void update(Camera& camera, const Input& input, double seconds,
-            const Settings& settings = {}, const collision::World* world = nullptr);
+using MovementConstraint = std::function<void(const Camera&, Camera&)>;
+unsigned update(Camera& camera, const Input& input, double seconds,
+            const Settings& settings = {}, const collision::World* world = nullptr,
+            bool audioEnabled = true, const MovementConstraint& constrain = {},
+            const MovementConstraint& beforeWalls = {});
 // One reaction tick; duration and damage remain owned by enemies::System.
 void recoil(Camera& camera, const collision::World& world,
-            const collision::Settings& settings = {});
+            const collision::Settings& settings = {}, const MovementConstraint& beforeWalls = {});
 } // namespace player

@@ -1,4 +1,5 @@
 #include "player_control.h"
+#include "objet_collision.h"
 
 #include <algorithm>
 #include <cmath>
@@ -123,9 +124,98 @@ void testPlayerIntegration()
     player::update(camera, {1, 0, 1}, 0.1, settings, &wall);
     check(camera.angle != initialAngle, "Wall blocked camera rotation");
 }
+void testObjets()
+{
+    game_lab::Level level{};
+    level.objetBank = 1;
+    game_lab::Sector sector{};
+    sector.gx = 1000; sector.gy = 2000;
+    sector.vertices = {{500,500}};
+    sector.entitiesA = {{0,0x5004,256,42}};
+    level.sectors = {sector,sector};
+    const auto resolve = [&](Point before, Point candidate) {
+        return collision::constrainObjets(level,0,before,candidate);
+    };
+    check(resolve({1400,2500},{1500,2500}).x == 1420,"OBJET west collision failed");
+    check(resolve({1600,2500},{1500,2500}).x == 1580,"OBJET east collision failed");
+    check(resolve({1500,2400},{1500,2500}).y == 2420,"OBJET south collision failed");
+    check(resolve({1500,2600},{1500,2500}).y == 2580,"OBJET north collision failed");
+    const auto corner = resolve({1400,2400},{1500,2500});
+    check(corner.x == 1500 && corner.y == 2420,"OBJET corner did not prioritize Y");
+    check(resolve({1400,2500},{1580,2500}).x == 1580,"Upper X bound not excluded");
+    check(resolve({1600,2500},{1420,2500}).x == 1580,"Lower X bound not included");
+    check(resolve({1500,2400},{1500,2580}).y == 2580,"Upper Y bound not excluded");
+    check(resolve({1500,2600},{1500,2420}).y == 2580,"Lower Y bound not included");
+    check(resolve({1500,2500},{1501,2501}).x == 1501,"OBJET invented inside-box depenetration");
+    check(resolve({1400,2500},{1600,2500}).x == 1600,"OBJET invented swept collision");
+    for (auto type : {0x4004,0x7004,0x5007}) {
+        level.sectors[0].entitiesA[0].type = std::uint16_t(type);
+        check(resolve({1400,2500},{1500,2500}).x == 1500,"Traversable OBJET blocked player");
+    }
+    level.sectors[0].entitiesA.clear();
+    check(resolve({1400,2500},{1500,2500}).x == 1500,"OBJET from another sector blocked player");
+    level.sectors[0] = sector;
+    sprites::Scene scene;
+    scene.objetBank = 1;
+    scene.objects.push_back({1500,2500,256,255,21,0x5004,42,0,0});
+    check(collision::constrainObjets(level,0,{1300,2500},{1400,2500},&scene).x == 1350,
+          "OBJET collision ignored live image extent");
+    scene.objects[0].sourceSector = 1;
+    check(collision::constrainObjets(level,0,{1300,2500},{1400,2500},&scene).x == 1400,
+          "OBJET live image matched wrong sector");
+    for (unsigned bank = 1; bank <= 10; ++bank)
+        check(collision::objetExtent(bank,0) == (bank == 9 ? 80u : bank == 10 ? 120u : 200u),
+              "OBJET bank table selection failed");
+    check(collision::objetExtent(0,0) == 0 && collision::objetExtent(11,0) == 0 &&
+          collision::objetExtent(2,21) == 0,"Invalid OBJET lookup accepted");
+
+    double observedCandidate = 0;
+    const player::MovementConstraint constraint = [&](const Camera& before, Camera& after) {
+        observedCandidate = after.x;
+        const auto p = resolve({before.x,before.y},{after.x,after.y});
+        after.x = p.x; after.y = p.y;
+    };
+    player::Settings settings;
+    settings.moveSpeed = 1800; settings.collision = body;
+    const collision::World walls{{{1450,2000},{1450,3000}}};
+    Camera camera{1400,2500,0};
+    player::update(camera,{1,0},1.0/18,settings,&walls,true,{},constraint);
+    check(observedCandidate == 1500 && camera.x == 1420 && camera.angle == 0,
+          "OBJET correction was not applied before walls");
+    for (bool run : {false,true}) {
+        Camera moving{1400,2500,0};
+        player::Input input{1,0}; input.run = run; input.crouch = true;
+        player::update(moving,input,0.5,{},nullptr,true,{},constraint);
+        check(moving.x == 1420 && moving.postureHeight == 100,"OBJET broke running/crouching");
+    }
+    Camera recoil{1590,2500,0};
+    player::recoil(recoil,{},body,constraint);
+    check(recoil.x == 1580 && recoil.y == 2500 && recoil.angle == 0,
+          "Damage recoil bypassed OBJET collision");
+}
+
+void originalObjets(const std::filesystem::path& path)
+{
+    const auto banks = game_lab::loadBankTable(path);
+    std::size_t total = 0;
+    for (const auto& entry : banks) {
+        const auto level = game_lab::loadLevel(path,entry.zoneIndex).level;
+        std::vector<unsigned> indices(256);
+        for (const auto& sector : level.sectors) for (const auto& entity : sector.entitiesA) {
+            if ((entity.type & 0x2000) || !(entity.type & 0x1000) ||
+                !collision::objetExtent(level.objetBank,entity.type&255)) continue;
+            ++indices[entity.type&255]; ++total;
+        }
+        std::cout << "Level " << entry.zoneIndex+1 << " OBJET" << level.objetBank << " solid index:count";
+        for (unsigned i = 0; i < indices.size(); ++i) if (indices[i]) std::cout << ' ' << i << ':' << indices[i];
+        std::cout << '\n';
+    }
+    check(total > 0,"No effective original OBJET obstacles found");
+    std::cout << "Effective OBJET obstacles: " << total << '\n';
+}
 } // namespace
 
-int main()
+int main(int argc, char* argv[])
 {
     try {
         testWallAndSliding();
@@ -134,6 +224,8 @@ int main()
         testFastMotionAndTime();
         testPortalsAndGeometry();
         testPlayerIntegration();
+        testObjets();
+        if (argc == 2) originalObjets(argv[1]);
         std::cout << "Static swept circle collisions, sliding, endpoints, portals and player integration passed.\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

@@ -322,10 +322,10 @@ void footstepEvents(const std::filesystem::path& directory)
     const std::vector<doors::Door> idleDoors;
     for (int frame = 0; frame < 100; ++frame) game.update(idleDoors,0);
     check(game.effectStatistics(7)->started == 0, "Idle player triggered footsteps");
-    game.update(idleDoors,89);
-    check(game.effectStatistics(7)->started == 0, "Step triggered before distance threshold");
     game.update(idleDoors,1);
     check(game.effectStatistics(7)->started == 1, "Effective movement did not start original ID 7");
+    game.update(idleDoors,3);
+    check(game.effectStatistics(7)->started == 1, "Duplicate cycle events overlapped a step");
     const auto until = SDL_GetTicks() + 1500;
     while (game.effectStatistics(7)->completed < 1 && SDL_GetTicks() < until) {
         game.update(idleDoors,0);
@@ -336,7 +336,7 @@ void footstepEvents(const std::filesystem::path& directory)
           "Footstep failed to finish once after stopping movement");
     std::vector<doors::Door> doors(1);
     doors[0].state = doors::State::Opening; doors[0].progress = 0.5;
-    game.update(doors,80); // A new full step and the door cue share the existing mixer.
+    game.update(doors,1); // A new full step and the door cue share the existing mixer.
     check(game.effectStatistics(7)->started == 2 && game.doorStatistics()->started == 1,
           "Footstep suppressed or restarted door audio");
     waitForCompletion(game,doors,1);

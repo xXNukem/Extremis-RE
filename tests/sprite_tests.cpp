@@ -1,6 +1,7 @@
 #include "first_person_view.h"
 #include "sprite_renderer.h"
 #include "sprite_animation.h"
+#include "decorative_animation.h"
 
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -167,6 +168,7 @@ void sceneOcclusion()
     {
         FirstPersonRenderer view(renderer);
         const auto red = [&](const std::vector<doors::Door>* list, Camera camera) {
+            camera.postureHeight = 128;
             check(view.draw(level,camera,nullptr,nullptr,list,nullptr,&scene) &&
                   SDL_RenderPresent(renderer), "Sprite integration rendering failed");
             Uint8 r,g,b,alpha;
@@ -224,6 +226,7 @@ void captureOriginal(const game_lab::Level& level, const sprites::Scene& scene,
 void fallingDrops()
 {
     sprites::Scene scene;
+    scene.objetBank = 1;
     for (double z : {0.,64.,128.,192.,256.})
         scene.objects.push_back({1200,1600,z,10,14,0x400e,0});
     scene.objects.push_back({1200,1600,256,50,12,0x410c,0});
@@ -247,10 +250,350 @@ void fallingDrops()
     animation.update(scene,std::numeric_limits<double>::infinity());
     check(scene.objects[0].z == before.objects[0].z,"Invalid delta changed drop height");
     sprites::Scene initial;
+    initial.objetBank = 1;
     initial.objects.push_back({0,0,256,10,14,0x400e,0});
     sprites::Animation largeDelta;
     largeDelta.update(initial,6.4);
     check(initial.objects[0].z == 0,"Large delta lost initial z=256 transition");
+}
+
+void fallingDropSelection()
+{
+    const std::array<std::vector<std::size_t>, 10> falling{{
+        {14}, {3}, {5}, {11,15}, {}, {2,5}, {2,23}, {12,14}, {}, {}
+    }};
+    for (unsigned bank = 0; bank <= 11; ++bank) {
+        sprites::Scene scene;
+        scene.objetBank = bank;
+        for (std::size_t image = 0; image < 44; ++image)
+            scene.objects.push_back({1200,1600,20,35,image,
+                std::uint16_t(0x4100 | image),123});
+        const auto before = scene.objects;
+        sprites::Animation animation;
+        animation.update(scene,0.1);
+        for (std::size_t image = 0; image < scene.objects.size(); ++image) {
+            bool selected = false;
+            if (bank >= 1 && bank <= falling.size())
+                for (const auto candidate : falling[bank-1])
+                    if (candidate == image) selected = true;
+            check(scene.objects[image].z == (selected ? 0 : 20),
+                  "Wrong falling sprite selection or ground transition");
+        }
+        animation.update(scene,0.1);
+        for (std::size_t image = 0; image < scene.objects.size(); ++image) {
+            const auto& object = scene.objects[image];
+            const auto& original = before[image];
+            bool selected = false;
+            if (bank >= 1 && bank <= falling.size())
+                for (const auto candidate : falling[bank-1])
+                    if (candidate == image) selected = true;
+            check(object.z == (selected ? 236 : 20),
+                  "Wrong falling sprite wrap or unrelated sprite moved");
+            check(object.x == original.x && object.y == original.y &&
+                  object.height == original.height && object.image == original.image &&
+                  object.type == original.type && object.param2 == original.param2,
+                  "Falling animation changed unrelated instance properties");
+        }
+    }
+}
+
+void decorativeFrames()
+{
+    sprites::Scene initial;
+    initial.objetBank = 2;
+    for (std::size_t image = 0; image < 22; ++image)
+        initial.objects.push_back({1200,1600,128,150,image,
+                                   std::uint16_t(0x4300 | image),123});
+    auto scene = initial;
+    sprites::DecorativeAnimation animation;
+    check(animation.tick() == 0, "Decorative counter did not start at zero");
+    for (unsigned step = 1; step <= 6; ++step) {
+        animation.step(scene);
+        check(animation.tick() == step, "Decorative counter missed a step");
+        for (std::size_t i = 0; i < scene.objects.size(); ++i) {
+            const auto& object = scene.objects[i];
+            const auto& before = initial.objects[i];
+            const auto expected = i >= 9 && i <= 11 ? 9 + (i-9+step/2)%3 : i;
+            check(object.image == expected, "OBJET2 sequence/parity or selection failed");
+            check(object.x == before.x && object.y == before.y && object.z == before.z &&
+                  object.height == before.height && object.type == before.type &&
+                  object.param2 == before.param2, "OBJET2 changed instance properties");
+        }
+    }
+    for (unsigned bank = 1; bank <= 10; ++bank) {
+        if (bank == 2 || bank == 3 || bank == 4 || bank == 9) continue;
+        auto other = initial;
+        other.objetBank = bank;
+        sprites::DecorativeAnimation clock;
+        clock.update(other,1);
+        for (std::size_t i = 0; i < other.objects.size(); ++i)
+            check(other.objects[i].image == i, "Another OBJET bank was animated");
+    }
+    auto batch = initial, partitioned = initial;
+    sprites::DecorativeAnimation batchClock, frameClock;
+    batchClock.update(batch,1);
+    for (unsigned frame = 0; frame < 60; ++frame) frameClock.update(partitioned,1.0/60);
+    check(batchClock.tick() == 18 && frameClock.tick() == 18, "18 Hz accumulation failed");
+    for (std::size_t i = 0; i < batch.objects.size(); ++i)
+        check(batch.objects[i].image == partitioned.objects[i].image,
+              "OBJET2 animation depends on render FPS");
+    auto wrapped = initial;
+    sprites::DecorativeAnimation wrapClock;
+    wrapClock.update(wrapped,65535 * sprites::DecorativeAnimation::stepSeconds);
+    check(wrapClock.tick() == 65535 && wrapped.objects[9].image == 10,
+          "Accumulated steps lost OBJET2 advances");
+    wrapClock.update(wrapped,sprites::DecorativeAnimation::stepSeconds);
+    check(wrapClock.tick() == 0 && wrapped.objects[9].image == 11,
+          "16-bit wrap did not advance on even zero");
+    wrapClock.step(wrapped);
+    check(wrapClock.tick() == 1 && wrapped.objects[9].image == 11,
+          "Odd step after wrap advanced OBJET2");
+}
+
+void objet3Frames()
+{
+    // Exact selections for counter values 0..15, including repeated endpoints.
+    const std::array<std::size_t,16> sequence{
+        15,15,16,16,17,17,18,18,18,18,17,17,16,16,15,15};
+    // Saved DOS selection at counter values 0..31; 22 rests across the boundary.
+    const std::array<std::size_t,32> pulseSequence{
+        22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,
+        22,23,24,25,26,27,28,27,26,25,24,23,22,22,22,22};
+    sprites::Scene initial;
+    initial.objetBank = 3;
+    for (std::size_t i = 0; i < 34; ++i)
+        initial.objects.push_back({1200,1600,128,270,i,std::uint16_t(0x4300|i),123});
+    auto scene = initial;
+    sprites::DecorativeAnimation clock;
+    for (unsigned step = 1; step <= 66; ++step) {
+        clock.step(scene);
+        for (std::size_t i = 0; i < scene.objects.size(); ++i) {
+            const auto& object = scene.objects[i];
+            const auto& before = initial.objects[i];
+            const auto expected = i >= 15 && i <= 18 ? sequence[step%16]
+                : i >= 22 && i <= 28 ? pulseSequence[step%32] : i;
+            check(object.image == expected,
+                  "OBJET3 sequence, endpoints or selection failed");
+            check(object.x == before.x && object.y == before.y && object.z == before.z &&
+                  object.height == before.height && object.type == before.type &&
+                  object.param2 == before.param2, "OBJET3 changed instance properties");
+        }
+    }
+    auto batch = initial, partitioned = initial;
+    sprites::DecorativeAnimation batchClock, frameClock;
+    batchClock.update(batch,2);
+    for (unsigned frame = 0; frame < 120; ++frame) frameClock.update(partitioned,1.0/60);
+    check(batchClock.tick() == 36 && frameClock.tick() == 36, "OBJET3 lost fixed steps");
+    for (std::size_t i = 0; i < batch.objects.size(); ++i)
+        check(batch.objects[i].image == partitioned.objects[i].image &&
+              batch.objects[i].image == (i >= 15 && i <= 18 ? 17
+                  : i >= 22 && i <= 28 ? 22 : i),
+              "OBJET3 animation depends on render FPS");
+    auto wrapped = initial;
+    sprites::DecorativeAnimation wrapClock;
+    wrapClock.update(wrapped,65535 * sprites::DecorativeAnimation::stepSeconds);
+    for (unsigned step = 0; step < 34; ++step) {
+        check(wrapped.objects[15].image == sequence[wrapClock.tick()%16],
+              "OBJET3 sequence broke at counter wrap");
+        for (std::size_t i = 22; i <= 28; ++i)
+            check(wrapped.objects[i].image == pulseSequence[wrapClock.tick()%32],
+                  "OBJET3 pulse or pause broke at counter wrap");
+        wrapClock.step(wrapped);
+    }
+}
+
+void objet4Frames()
+{
+    const std::array<std::size_t,8> sequence{26,27,28,29,29,28,27,26};
+    sprites::Scene initial;
+    initial.objetBank = 4;
+    for (std::size_t i = 0; i < 34; ++i)
+        initial.objects.push_back({1200,1600,128,150,i,std::uint16_t(0x4300|i),123});
+    auto scene = initial;
+    sprites::DecorativeAnimation clock;
+    for (unsigned step = 1; step <= 18; ++step) {
+        clock.step(scene);
+        for (std::size_t i = 0; i < scene.objects.size(); ++i) {
+            const auto& object = scene.objects[i];
+            const auto& before = initial.objects[i];
+            check(object.image == (i >= 26 && i <= 29 ? sequence[step%8] : i),
+                  "OBJET4 cycle, repeated endpoints or selection failed");
+            check(object.x == before.x && object.y == before.y && object.z == before.z &&
+                  object.height == before.height && object.type == before.type &&
+                  object.param2 == before.param2, "OBJET4 changed instance properties");
+        }
+    }
+    auto batch = initial, partitioned = initial;
+    sprites::DecorativeAnimation batchClock, frameClock;
+    batchClock.update(batch,1);
+    for (unsigned frame = 0; frame < 60; ++frame) frameClock.update(partitioned,1.0/60);
+    check(batchClock.tick() == 18 && frameClock.tick() == 18, "OBJET4 lost fixed steps");
+    for (std::size_t i = 0; i < batch.objects.size(); ++i)
+        check(batch.objects[i].image == partitioned.objects[i].image &&
+              batch.objects[i].image == (i >= 26 && i <= 29 ? 28 : i),
+              "OBJET4 animation depends on render FPS");
+    auto wrapped = initial;
+    sprites::DecorativeAnimation wrapClock;
+    wrapClock.update(wrapped,65535 * sprites::DecorativeAnimation::stepSeconds);
+    for (unsigned step = 0; step < 10; ++step) {
+        check(wrapClock.tick() == std::uint16_t(65535u + step), "OBJET4 counter wrap failed");
+        for (std::size_t i = 26; i <= 29; ++i)
+            check(wrapped.objects[i].image == sequence[wrapClock.tick()%8],
+                  "OBJET4 cycle broke at counter wrap");
+        wrapClock.step(wrapped);
+    }
+}
+
+void objet9Frames()
+{
+    const std::array<std::array<std::size_t,8>,3> sequences{{
+        {{13,14,15,16,16,15,14,13}},
+        {{19,20,21,22,22,21,20,19}},
+        {{23,24,25,26,26,25,24,23}}
+    }};
+    sprites::Scene initial;
+    initial.objetBank = 9;
+    for (std::size_t i = 0; i < 38; ++i)
+        initial.objects.push_back({1200,1600,128,180,i,std::uint16_t(0x4300|i),123});
+    const auto verify = [&](const sprites::Scene& scene, unsigned tick) {
+        for (std::size_t i = 0; i < scene.objects.size(); ++i) {
+            const auto& object = scene.objects[i];
+            const auto& before = initial.objects[i];
+            std::size_t expected = i;
+            for (const auto& sequence : sequences)
+                if (i >= sequence[0] && i <= sequence[3]) expected = sequence[tick%8];
+            check(object.image == expected, "OBJET9 sequence, endpoints or selection failed");
+            check(object.x == before.x && object.y == before.y && object.z == before.z &&
+                  object.height == before.height && object.type == before.type &&
+                  object.param2 == before.param2, "OBJET9 changed instance properties");
+        }
+    };
+    auto scene = initial;
+    sprites::DecorativeAnimation clock;
+    for (unsigned step = 1; step <= 18; ++step) {
+        clock.step(scene);
+        verify(scene,step);
+    }
+    auto batch = initial, partitioned = initial;
+    sprites::DecorativeAnimation batchClock, frameClock;
+    batchClock.update(batch,1);
+    for (unsigned frame = 0; frame < 60; ++frame) frameClock.update(partitioned,1.0/60);
+    check(batchClock.tick() == 18 && frameClock.tick() == 18, "OBJET9 lost fixed steps");
+    verify(batch,18);
+    verify(partitioned,18);
+    auto wrapped = initial;
+    sprites::DecorativeAnimation wrapClock;
+    wrapClock.update(wrapped,65535 * sprites::DecorativeAnimation::stepSeconds);
+    for (unsigned step = 0; step < 10; ++step) {
+        check(wrapClock.tick() == std::uint16_t(65535u + step), "OBJET9 counter wrap failed");
+        verify(wrapped,wrapClock.tick());
+        wrapClock.step(wrapped);
+    }
+}
+
+void composedAnimations()
+{
+    sprites::Scene scene;
+    scene.objetBank = 1;
+    scene.animateImages = true;
+    for (unsigned i = 0; i < 44; ++i) {
+        auto img = image(std::uint8_t(i));
+        for (auto& color : img.texture.pixels) color = {std::uint8_t(i),0,0};
+        scene.bank.images.push_back(std::move(img));
+    }
+    for (unsigned i : {4u,5u,15u,16u,17u}) {
+        auto& img = scene.bank.images[i];
+        img.texture.width = img.texture.height = 128;
+        img.indices.resize(128*128);
+        img.texture.pixels.resize(128*128);
+        for (unsigned y = 0; y < 128; ++y) for (unsigned x = 0; x < 128; ++x) {
+            img.indices[y*128+x] = std::uint8_t(y);
+            img.texture.pixels[y*128+x] = {std::uint8_t(y),0,0};
+        }
+    }
+    // A transparent source must erase the previous patch, including RGB storage.
+    scene.bank.images[24].indices[0] = 0;
+    scene.bank.images[24].texture.pixels[0] = {0,0,0};
+    const auto raw = scene;
+    sprites::composeImages(scene,0,false);
+    check(scene.bank.images[15].indices[27*128+3] == 22 &&
+          scene.bank.images[4].indices == raw.bank.images[4].indices,
+          "Initial composition scrolled columns or selected wrong patch");
+    const auto initial = scene;
+    sprites::DecorativeAnimation clock;
+    const auto verify = [&](const sprites::Scene& current, unsigned steps) {
+        const auto tick = std::uint16_t(steps);
+        const unsigned source = 22 + 2*(tick&3);
+        const auto& patch = current.bank.images[15];
+        check(patch.indices[27*128+3] == (source == 24 ? 0 : source) &&
+              patch.texture.pixels[27*128+3].r == (source == 24 ? 0 : source),
+              "Patch phase or transparent overwrite failed");
+        const auto& flow = current.bank.images[4];
+        // Column x=3: even ticks, rows 11..45. x=4: odd ticks, rows 10..46.
+        for (unsigned row = 0; row < 35; ++row) {
+            const auto expected = 11 + (row + steps/2)%35;
+            check(flow.indices[(11+row)*128+3] == expected &&
+                  flow.texture.pixels[(11+row)*128+3].r == expected,
+                  "Even column lost cumulative rotation");
+        }
+        for (unsigned row = 0; row < 37; ++row)
+            check(flow.indices[(10+row)*128+4] == 10+(row+(steps+1)/2)%37,
+                  "Odd column parity or wrap failed");
+        check(flow.indices[10*128+3] == 10 && flow.indices[46*128+3] == 46,
+              "Rotation changed pixels outside its span");
+    };
+    for (unsigned step = 1; step <= 4; ++step) { clock.step(scene); verify(scene,step); }
+    auto batch = initial, partitioned = initial;
+    sprites::DecorativeAnimation batchClock, frameClock;
+    batchClock.update(batch,1);
+    for (unsigned frame = 0; frame < 60; ++frame) frameClock.update(partitioned,1.0/60);
+    verify(batch,18); verify(partitioned,18);
+    auto wrapped = initial;
+    sprites::DecorativeAnimation wrapClock;
+    wrapClock.update(wrapped,65535 * sprites::DecorativeAnimation::stepSeconds);
+    verify(wrapped,65535);
+    wrapClock.step(wrapped); verify(wrapped,65536);
+    check(wrapClock.tick() == 0, "Composition counter did not wrap");
+    scene.objects = {{100,0,128,50,15,0x400f,0},{100,50,128,50,15,0x400f,0}};
+    const auto beforeRender = scene.bank;
+    std::vector<std::uint32_t> pixels(20000);
+    std::vector<double> depth(20000,std::numeric_limits<double>::infinity());
+    for (unsigned frame = 0; frame < 3; ++frame)
+        sprites::render(pixels,depth,scene,{}, {200,100,100,128});
+    for (std::size_t i = 0; i < scene.bank.images.size(); ++i)
+        check(scene.bank.images[i].indices == beforeRender.images[i].indices,
+              "Rendering advanced composition");
+    for (unsigned bank : {6u,10u}) {
+        auto unchanged = initial; unchanged.objetBank = bank;
+        sprites::DecorativeAnimation other;
+        other.update(unchanged,1);
+        for (std::size_t i = 0; i < unchanged.bank.images.size(); ++i)
+            check(unchanged.bank.images[i].indices == initial.bank.images[i].indices,
+                  "OBJET6/10 composition changed");
+    }
+    auto invalid = initial;
+    invalid.bank.images[24].texture.width = 128;
+    bool rejected = false;
+    try { sprites::composeImages(invalid,1); }
+    catch (const std::runtime_error&) { rejected = true; }
+    check(rejected,"Oversized patch source accepted");
+}
+
+void originalCompositions(const std::filesystem::path& directory)
+{
+    for (unsigned bank = 1; bank <= 10; ++bank) {
+        if (!std::filesystem::exists(directory / ("OBJET"+std::to_string(bank)+".SPR"))) {
+            std::cout << "OBJET" << bank << " missing; composition resource check skipped.\n";
+            continue;
+        }
+        sprites::Scene scene;
+        scene.bank = sprites::load(directory,bank,1);
+        scene.objetBank = bank; scene.animateImages = true;
+        sprites::composeImages(scene,0,false);
+        sprites::DecorativeAnimation clock;
+        // Covers every patch source and both column parities in every bank.
+        for (unsigned step = 0; step < 224; ++step) clock.step(scene);
+    }
 }
 
 void originalPlacement(const std::filesystem::path& lab)
@@ -327,7 +670,23 @@ void original(const std::filesystem::path& lab)
 int main(int argc, char* argv[])
 {
     try {
+        if (argc == 3 && std::string(argv[2]) == "--composition-only") {
+            originalCompositions(argv[1]);
+            std::cout << "Available OBJET composition bounds passed.\n";
+            return 0;
+        }
+        if (argc == 2 && std::string(argv[1]) == "--falling-only") {
+            fallingDrops(); fallingDropSelection();
+            std::cout << "OBJET falling selection, displacement and wrap passed.\n";
+            return 0;
+        }
         decoding(); placement(); projection(); spriteDepth(); sceneOcclusion(); fallingDrops();
+        fallingDropSelection();
+        decorativeFrames();
+        objet3Frames();
+        objet4Frames();
+        objet9Frames();
+        composedAnimations();
         if (argc == 2) original(argv[1]);
         if (argc == 3 && std::string(argv[2]) == "--placement-only") originalPlacement(argv[1]);
         std::cout << "SPR decoding, anchors, projection, transparency and scene depth passed.\n";

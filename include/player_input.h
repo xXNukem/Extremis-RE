@@ -18,7 +18,10 @@ public:
     void handleEvent(const SDL_Event& event, bool gameplay = true);
     void invalidateContext() { reset_=true; firePressed_=false; fireReady_=false; }
     bool update(Camera* camera, bool view3D, double seconds, bool deferMovement = false);
-    void move(Camera& camera, double seconds, bool blocked);
+    void move(Camera& camera, double seconds, bool blocked, const player::MovementConstraint& constrain = {});
+    void setAudioEnabled(bool enabled) { audioEnabled_ = enabled; }
+    void setObjectConstraint(const player::MovementConstraint& constraint) { objectConstraint_ = constraint; }
+    unsigned footsteps() const { return footsteps_; }
     void recoil(Camera& camera);
     double movementDistance() const;
     bool running() const;
@@ -30,11 +33,14 @@ private:
     bool active_ = false;
     bool reset_ = false;
     double movementDistance_ = 0;
+    unsigned footsteps_ = 0;
+    bool audioEnabled_ = false;
     bool running_ = false;
     bool fireHeld_ = false, firePressed_ = false, fireReady_ = false, fireSuppressed_ = false;
     std::array<bool,10> blockedKeys_{};
     player::Settings settings_;
     player::Input input_;
+    player::MovementConstraint objectConstraint_;
     enum class CaptureStatus { Failed, Waiting, Ready };
     CaptureStatus updateCapture(bool desired);
 };

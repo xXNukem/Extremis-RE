@@ -110,8 +110,10 @@ Scene makeScene(const game_lab::Level& level, Bank bank)
 {
     Scene scene{std::move(bank), {}, 0};
     scene.objetBank=level.objetBank;
-    for (const auto& sector : level.sectors) {
-        for (const auto& entity : sector.entitiesA) {
+    for (std::size_t s = 0; s < level.sectors.size(); ++s) {
+        const auto& sector = level.sectors[s];
+        for (std::size_t e = 0; e < sector.entitiesA.size(); ++e) {
+            const auto& entity = sector.entitiesA[e];
             const auto image = imageIndex(entity.type, scene.bank.images.size());
             const auto height=image?worldHeight(level.objetBank,*image):std::nullopt;
             if (!height || *height==0 ||
@@ -122,7 +124,7 @@ Scene makeScene(const game_lab::Level& level, Bank bank)
             const auto& vertex = sector.vertices[entity.vertex];
             scene.objects.push_back({double(sector.gx) + vertex.x,
                 double(sector.gy) + vertex.y, double(entity.param1), *height,
-                *image, entity.type, entity.param2});
+                *image, entity.type, entity.param2, s, e});
         }
     }
     return scene;

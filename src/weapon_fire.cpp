@@ -78,6 +78,7 @@ void WeaponFire::advanceProjectiles(const Camera& camera, const collision::World
         if (!p.state) continue;
         auto shotView=camera;
         shotView.postureHeight=p.launchHeight;
+        shotView.bobPhase=0; // launchHeight already includes the camera offset at firing.
         std::optional<::enemies::ShotHit> enemyImpact;
         if (p.state==1) {
             const double distance=weaponDefinitions[p.weapon].speed;

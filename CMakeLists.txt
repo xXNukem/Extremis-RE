@@ -47,7 +47,7 @@ target_compile_features(survival_session PUBLIC cxx_std_17)
 set_target_properties(survival_session PROPERTIES CXX_EXTENSIONS NO)
 
 add_library(sprites STATIC src/sprite_bank.cpp src/sprite_scene.cpp src/sprite_renderer.cpp src/enemy_system.cpp src/enemy_navigation.cpp src/enemy_mons5.cpp src/enemy_effects.cpp src/motion_detector.cpp
-    src/sprite_animation.cpp)
+    src/sprite_animation.cpp src/decorative_animation.cpp)
 target_link_libraries(sprites PUBLIC texture_bank game_lab player_collision player_vitals doors)
 target_compile_features(sprites PUBLIC cxx_std_17)
 set_target_properties(sprites PROPERTIES CXX_EXTENSIONS NO)
@@ -77,7 +77,7 @@ target_link_libraries(doors PUBLIC game_lab)
 target_compile_features(doors PUBLIC cxx_std_17)
 set_target_properties(doors PROPERTIES CXX_EXTENSIONS NO)
 
-add_library(player_collision STATIC src/player_collision.cpp)
+add_library(player_collision STATIC src/player_collision.cpp src/objet_collision.cpp)
 target_link_libraries(player_collision PUBLIC game_lab)
 target_compile_features(player_collision PUBLIC cxx_std_17)
 set_target_properties(player_collision PROPERTIES CXX_EXTENSIONS NO)

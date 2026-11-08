@@ -9,5 +9,10 @@ struct Camera {
     double postureHeight = eyeHeight;
     double postureTime = 0;
     double movementStep = 10; // DOS walking step at 18 Hz; scaled to port speed.
-    double viewHeight() const { return postureHeight; }
+    unsigned bobPhase = 0;
+    double bobStartX = 0, bobStartY = 0;
+    double viewHeight() const {
+        constexpr int bob[] = {0,5,8,9,10,9,8,5,0};
+        return postureHeight + bob[bobPhase >> 4];
+    }
 };

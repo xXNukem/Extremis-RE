@@ -108,6 +108,54 @@ void testPosture()
     check(near(standing.x,low.x) && low.x<70.001,"Posture changed planar collision radius");
 }
 
+void testHeadbob()
+{
+    constexpr double tick=1./18;
+    Camera c{};
+    constexpr int heights[]={170,173,174,175,174,173,170,165};
+    for(int height:heights) {
+        check(player::update(c,{1,0},tick)==0 && c.viewHeight()==height,"Walking bob sequence");
+    }
+    check(player::update(c,{1,0},tick)==1 && c.bobPhase==28,"Enabled cycle transition");
+    const auto phase=c.bobPhase; const auto height=c.viewHeight();
+    check(player::update(c,{},1)==0 && c.bobPhase==phase,"Stopped phase");
+    check(player::update(c,{0,0,1,100},1)==0 && c.viewHeight()==height,"Turning bob");
+    Camera silent{};
+    check(player::update(silent,{1,0},9*tick,{},nullptr,false)==1 && silent.bobPhase==7,"Disabled cycle transition");
+    Camera run{}; player::update(run,{1,0,0,0,true},tick);
+    check(run.bobPhase==32 && run.viewHeight()==173,"Running increment");
+    Camera strafe{};player::update(strafe,{1,0},4*tick);
+    check(player::update(strafe,{0,1},20*tick)==0 && strafe.bobPhase==16,"Strafe reset");
+    Camera crouch{};player::update(crouch,{1,0,0,0,false,true},7*tick);
+    check(crouch.postureHeight==100 && crouch.viewHeight()==105,"Crouched bob");
+    const collision::World wall{{{100,-1000},{100,1000}}};
+    Camera blocked{};player::update(blocked,{1,0},1,{},&wall);
+    const auto stopped=blocked.bobPhase;
+    check(player::update(blocked,{1,0},1,{},&wall)==0 && blocked.bobPhase==stopped,"Wall bob");
+    Camera constrained{};
+    player::update(constrained,{1,0},1,{},nullptr,true,
+        [](const Camera& before,Camera& after){after.x=before.x;after.y=before.y;});
+    check(constrained.bobPhase==0,"Final enemy constraint ignored");
+    Camera recoil{};player::update(recoil,{1,0},tick);
+    const auto recoilPhase=recoil.bobPhase;
+    player::recoil(recoil,{});
+    player::Input reaction{};reaction.blockMovement=true;reaction.crouch=true;
+    check(player::update(recoil,reaction,tick)==0 && recoil.bobPhase==recoilPhase &&
+          recoil.viewHeight()==160,"Recoil changed gait or posture sum");
+    for(bool running:{false,true}) for(int fps:{15,30,60,120,144,240}) {
+        Camera whole{},split{};player::Input input{1,0,0,0,running};
+        const auto expected=player::update(whole,input,4);
+        unsigned events=0;
+        for(int f=0;f<4*fps;++f) events+=player::update(split,input,1./fps);
+        check(events==expected && split.bobPhase==whole.bobPhase &&
+              split.viewHeight()==whole.viewHeight(),"Bob depends on render FPS");
+    }
+    Camera partial{}; player::update(partial,{1,0},tick/2);
+    check(partial.bobPhase==0,"Phase advanced outside fixed tick");
+    player::update(partial,{},tick/2);
+    check(partial.bobPhase==16,"Partial tick movement lost");
+}
+
 void testRotation()
 {
     Camera left{}, right{}, mouse{}, splitMouse{}, splitKeys{};
@@ -133,7 +181,7 @@ int main()
     try {
         testDirections();
         testDiagonalAndTime();
-        testRotation(); testRunning(); testPosture();
+        testRotation(); testRunning(); testPosture(); testHeadbob();
         std::cout << "Planar WASD, normalized diagonals, timing and rotation passed (no SDL).\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

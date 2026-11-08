@@ -9,6 +9,8 @@
 #include "debug_menu.h"
 #include "plane_appearance.h"
 #include "sprite_animation.h"
+#include "decorative_animation.h"
+#include "objet_collision.h"
 #include "game_audio.h"
 #include "survival_session.h"
 #include "item_session.h"
@@ -43,6 +45,7 @@ int main(int argc, char* argv[])
     PlaneAppearance planeAppearance;
     std::optional<sprites::Scene> spriteScene;
     sprites::Animation spriteAnimation;
+    sprites::DecorativeAnimation decorativeAnimation;
     std::optional<enemies::System> enemySystem;
     std::optional<hud::Renderer> originalHud;
     std::optional<interaction::Renderer> interactionRenderer;
@@ -325,6 +328,7 @@ int main(int argc, char* argv[])
                     collisionWorld=std::move(nextWorld); levelDoors=std::move(nextDoors);
                     doorControl.resetLevel();
                     spriteScene=std::move(nextSprites); spriteAnimation=sprites::Animation{};
+                    decorativeAnimation=sprites::DecorativeAnimation{};
                     enemySystem=std::move(nextEnemies); originalHud=std::move(nextHud);
                     weaponFire=std::move(nextWeapon); weaponGraphicsReady=true;
                     texturePreview=std::move(nextTextures); planeAppearance=std::move(nextPlanes);
@@ -348,7 +352,17 @@ int main(int argc, char* argv[])
             mapSession.update(debugPaused?0:elapsedSeconds,SDL_GetKeyboardFocus()==window);
             texturePreview.update(modalBlocked?0:elapsedSeconds);
             if (spriteScene && !modalBlocked) spriteAnimation.update(*spriteScene, elapsedSeconds);
+            if (spriteScene && simulationActive) decorativeAnimation.update(*spriteScene, elapsedSeconds);
             const Camera beforeMovement=camera.value_or(Camera{});
+            playerInput.setAudioEnabled(gameAudio.enabled());
+            playerInput.setObjectConstraint([&](const Camera& before, Camera& candidate) {
+                if (!data) return;
+                const auto location = collision::locate(data->level,{before.x,before.y});
+                if (!location) return;
+                const auto corrected = collision::constrainObjets(data->level,location->sector,
+                    {before.x,before.y},{candidate.x,candidate.y},spriteScene ? &*spriteScene : nullptr);
+                candidate.x = corrected.x; candidate.y = corrected.y;
+            });
             if (!playerInput.update(camera ? &*camera : nullptr, show3D && survival.alive() && !modalBlocked,
                                     modalBlocked?0:elapsedSeconds,activeEnemies && data)) {
                 SDL_Log("Player input failed: %s", SDL_GetError());
@@ -360,9 +374,10 @@ int main(int argc, char* argv[])
                 activeEnemies->update(data->level,*camera,doorControl.movementWorld(),survival.vitals(),
                     elapsedSeconds,simulationActive && survival.alive(),
                     [&](double seconds) {
-                        const auto before=*camera;
-                        playerInput.move(*camera,seconds,activeEnemies->reacting());
-                        activeEnemies->constrainPlayer(data->level,before,*camera,doorControl.movementWorld());
+                        playerInput.move(*camera,seconds,activeEnemies->reacting(),
+                            [&](const Camera& before, Camera& after) {
+                                activeEnemies->constrainPlayer(data->level,before,after,doorControl.movementWorld());
+                            });
                     },
                     [&]() {
                         const auto before=*camera;
@@ -387,7 +402,7 @@ int main(int argc, char* argv[])
                     activeEnemies->simulationTicks(),survival.inventory().detectorEnabled());
             }
             hudState.firing=weaponFire.firing(); hudState.barrelPhase=weaponFire.barrelPhase();
-            gameAudio.update(levelDoors, effectiveMovement);
+            gameAudio.update(levelDoors, playerInput.footsteps());
             if (!SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) ||
                 !SDL_RenderClear(renderer) ||
                 (data && !(show3D && camera

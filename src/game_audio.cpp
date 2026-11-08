@@ -6,13 +6,14 @@ void GameAudio::load(const std::filesystem::path& directory)
 {
     doorRequested_ = false;
     reportedCompletions_ = 0;
-    footsteps_ = {};
+    enabled_ = false;
     death_.reset();
     std::string error;
     if (!player_.open(directory / "BANK.DSS",error)) {
         std::cerr << "Audio unavailable: " << error << ". Continuing without sound.\n";
         return;
     }
+    enabled_ = true;
     std::cout << "Audio: " << player_.effectCount() << " original effects; 5000 Hz mono, "
                  "4 voices. Door movement: BANK[27]; footsteps: BANK[7].\n";
 }
@@ -51,15 +52,15 @@ void GameAudio::interfaceMotor()
     player_.play(11,false,audio::Playback::Once);
 }
 
-void GameAudio::update(const std::vector<doors::Door>& doors, double effectiveDistance)
+void GameAudio::update(const std::vector<doors::Door>& doors, unsigned footsteps)
 {
     updateDoors(doors);
-    updateFootsteps(effectiveDistance);
+    updateFootsteps(footsteps);
 }
 
-void GameAudio::updateFootsteps(double effectiveDistance)
+void GameAudio::updateFootsteps(unsigned footsteps)
 {
-    if (footsteps_.advance(effectiveDistance) && !player_.playing(7)) {
+    if (footsteps != 0 && !player_.playing(7)) {
         // Do not queue a burst after a long frame or overlap an existing step.
         // Keep the original bank volume (16/64) and play the complete one-shot.
         player_.play(7);

@@ -4,7 +4,7 @@
 
 namespace sprites {
 
-// Level-1 drops: EXE 0x11d0f..0x11d66. Real-time cadence is not calibrated.
+// Original OBJET falling sprites. Real-time cadence is not calibrated.
 class Animation {
 public:
     static constexpr double provisionalStepSeconds = 0.1;
