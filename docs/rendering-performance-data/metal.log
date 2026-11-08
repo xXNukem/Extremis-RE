@@ -1,9 +1,0 @@
-SDL,3004018,cpu_count,10,ram_mb,16384,camera,3500,900,1.5708
-target,metal,640,400,default_vsync,0
-display_refresh_hz,60,video_driver,cocoa
-target,metal,960,600,default_vsync,0
-display_refresh_hz,60,video_driver,cocoa
-target,metal,1280,800,default_vsync,0
-display_refresh_hz,60,video_driver,cocoa
-target,metal,1920,1080,default_vsync,0
-display_refresh_hz,60,video_driver,cocoa
