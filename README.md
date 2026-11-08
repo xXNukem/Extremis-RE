@@ -10,7 +10,7 @@ Playable DOS map: [implementation, controls and validation](docs/step-206-origin
 of the 1993 DOS first-person shooter *In Extremis*.
 
 Developed from scratch using reverse engineering, C++17,
-SDL3, CMake, AI-assisted development, and extensive testing.
+SDL3, CMake, AI-assisted development, hand-written code and a lot of extensive testing.
 
 ## License
 
