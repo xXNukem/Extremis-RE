@@ -184,7 +184,9 @@ int main(int argc, char* argv[])
     }
 
     int exitCode = 0;
-    const auto credits=showStartupCredits(window,renderer);
+    const auto credits=showStartupCredits(window,renderer,
+        argc>=2 ? std::filesystem::path(argv[1]).parent_path() / "DATA"
+                : std::filesystem::path{});
     if (credits==StartupCreditsResult::Error) {
         SDL_Log("Startup credits failed: %s",SDL_GetError());
         exitCode=1;

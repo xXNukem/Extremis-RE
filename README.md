@@ -1,16 +1,12 @@
 <div align="center">
 
-<img src="docs/images/extremis-slime-banner.svg" alt="EXTREMIS RE — a forgotten nightmare revived in alien green slime" width="100%">
+<img src="docs/images/extremis-re-title.png" alt="Extremis RE" width="100%">
 
 <br>
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-0b140d?style=for-the-badge&labelColor=173b26&color=48de78)](https://isocpp.org/)
 [![SDL3](https://img.shields.io/badge/SDL-3-0b140d?style=for-the-badge&labelColor=173b26&color=48de78)](https://www.libsdl.org/)
 ![Work in progress](https://img.shields.io/badge/STATUS-WORK%20IN%20PROGRESS-151515?style=for-the-badge&labelColor=501119&color=fe4457)
-
-**ONE VERY OBSCURE DOS FPS. THIRTY LEVELS. ONE NIGHTMARE WORTH PRESERVING.**
-
-*The original nightmare reawakens.*
 
 </div>
 
@@ -23,8 +19,6 @@
 We're rebuilding its behaviour from the original DOS executable and game data: the maps, enemies, weapons, survival systems, interfaces, strange little rules, and all the other things that make it *In Extremis*.
 
 This is **not a modern remake**. The mission is to make the original game playable on modern systems while preserving its identity, not replacing it.
-
-> **BIOHAZARD WARNING:** Green slime, limited oxygen, unreliable machinery, hostile lifeforms, and at least one elevator you shouldn't trust.
 
 ## 🧪 Resurrection progress
 
@@ -71,7 +65,7 @@ The port already has substantial working systems, including:
 - Original-style 320×200 HUD, motion detector and map interfaces.
 - Original audio resource decoding and gameplay sound effects.
 - Automated regression tests and technical documentation rooted in reverse engineering.
-- An original **Extremis RE** startup presentation: green phosphor, failing ECG and terminal glitches.
+- An **Extremis RE** startup sequence with ECG animation, CRT interference and the original `CASQUE.SPR` font.
 
 **Important:** *Working* does **not** mean every feature has been verified in all 30 levels. This is an active reconstruction, not a finished campaign release.
 
@@ -133,15 +127,3 @@ This is an **independent, unofficial, non-commercial preservation project**. *In
 The source-code license is specified in [LICENSE](LICENSE); attribution information is in [NOTICE](NOTICE).
 
 Bug reports, reproducible tests and corrections to the reverse-engineering notes are welcome. Please do **not** include original copyrighted game assets in issues or pull requests.
-
----
-
-<div align="center">
-
-**🟢 THE OXYGEN IS LOW. SOMETHING IS MOVING BEHIND THE WALL. 🟢**
-
-`[ SIGNAL LOST ... ]`
-
-**EXTREMIS RE — THE ORIGINAL NIGHTMARE REAWAKENS**
-
-</div>

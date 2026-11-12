@@ -94,7 +94,8 @@ target_compile_features(door_control PUBLIC cxx_std_17)
 set_target_properties(door_control PROPERTIES CXX_EXTENSIONS NO)
 
 add_executable(InExtremisPort src/main.cpp src/map_view.cpp src/first_person_view.cpp
-    src/texture_preview.cpp src/player_input.cpp src/plane_appearance.cpp src/startup_credits.cpp)
+    src/texture_preview.cpp src/player_input.cpp src/plane_appearance.cpp src/startup_credits.cpp
+    src/original_font.cpp)
 target_sources(InExtremisPort PRIVATE $<$<CONFIG:Debug>:src/debug_menu.cpp>)
 target_compile_definitions(InExtremisPort PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
 set_target_properties(InExtremisPort PROPERTIES
