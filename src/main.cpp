@@ -16,6 +16,7 @@
 #include "item_session.h"
 #include "map_session.h"
 #include "enemy_system.h"
+#include "startup_credits.h"
 
 #include <exception>
 #include <cmath>
@@ -183,7 +184,12 @@ int main(int argc, char* argv[])
     }
 
     int exitCode = 0;
-    {
+    const auto credits=showStartupCredits(window,renderer);
+    if (credits==StartupCreditsResult::Error) {
+        SDL_Log("Startup credits failed: %s",SDL_GetError());
+        exitCode=1;
+    }
+    if (credits==StartupCreditsResult::Continue) {
         FirstPersonRenderer firstPerson(renderer);
         DoorControl doorControl(collisionWorld, levelDoors);
         PlayerInput playerInput(window, doorControl);
@@ -383,7 +389,7 @@ int main(int argc, char* argv[])
                         const auto before=*camera;
                         playerInput.recoil(*camera);
                         activeEnemies->constrainPlayer(data->level,before,*camera,doorControl.movementWorld());
-                    },levelDoors);
+                    },levelDoors,spriteScene ? &*spriteScene : nullptr);
             const double effectiveMovement=camera ? std::hypot(camera->x-beforeMovement.x,camera->y-beforeMovement.y) : 0;
             if (activeEnemies) for (const auto sound:activeEnemies->takeSounds()) gameAudio.enemyEffect(sound);
             if (survival.update(elapsedSeconds,simulationActive,gameAudio,playerInput.running() && effectiveMovement>0))

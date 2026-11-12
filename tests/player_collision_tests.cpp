@@ -218,6 +218,11 @@ void originalObjets(const std::filesystem::path& path)
 int main(int argc, char* argv[])
 {
     try {
+        if (argc==2 && std::string(argv[1])=="--objets") {
+            testObjets();
+            std::cout << "Player OBJET collision tests passed\n";
+            return 0;
+        }
         testWallAndSliding();
         testCorners();
         testObliqueAndEndpoints();

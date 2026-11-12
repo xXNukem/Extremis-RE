@@ -27,7 +27,8 @@ unsigned objetExtent(unsigned bank, std::size_t image)
 }
 
 Point constrainObjets(const game_lab::Level& level, unsigned sectorIndex,
-                      Point before, Point candidate, const sprites::Scene* scene)
+                      Point before, Point candidate, const sprites::Scene* scene,
+                      std::uint16_t* enemyAngle)
 {
     if (sectorIndex >= level.sectors.size()) return candidate;
     const auto& sector = level.sectors[sectorIndex];
@@ -48,10 +49,23 @@ Point constrainObjets(const game_lab::Level& level, unsigned sectorIndex,
         const double x = double(sector.gx)+vertex.x, y = double(sector.gy)+vertex.y;
         if (candidate.x < x-r || candidate.x >= x+r ||
             candidate.y < y-r || candidate.y >= y+r) continue;
-        if (before.y >= y+r) candidate.y = y+r;
-        else if (before.y <= y-r) candidate.y = y-r;
-        else if (before.x >= x+r) candidate.x = x+r;
-        else if (before.x <= x-r) candidate.x = x-r;
+        int normal;
+        if (before.y >= y+r) { candidate.y = y+r; normal = 540; }
+        else if (before.y <= y-r) { candidate.y = y-r; normal = 180; }
+        else if (before.x >= x+r) { candidate.x = x+r; normal = 360; }
+        else if (before.x <= x-r) { candidate.x = x-r; normal = 0; }
+        else continue;
+        if (enemyAngle) {
+            // DOS 0x10ff7 / 0x3e9e: normalize each angle to [-360,360]
+            // before subtracting; preserve the sign at the antipodal tie.
+            const auto signedAngle = [](int angle) {
+                while (angle > 360) angle -= 720;
+                while (angle < -360) angle += 720;
+                return angle;
+            };
+            const int delta = signedAngle(signedAngle(*enemyAngle)-signedAngle(normal));
+            *enemyAngle = std::uint16_t((int(*enemyAngle)+(delta < 0 ? -80 : 80)+720)%720);
+        }
     }
     return candidate;
 }

@@ -181,13 +181,15 @@ void testTextureRetraction(FirstPersonRenderer& view, SDL_Renderer* renderer,
     const auto initial = drawPixel();
     doors::toggleAll(list);
     const double shade = 0.2 + 0.8 / (1 + 50.0 / 700);
+    // The center pixel is at eye height, measured from the texture's top.
+    const int row = int(74 * (256.0 - Camera::eyeHeight) / 256.0);
     for (int step = 1; step <= 3; ++step) {
         doors::updateAll(list, 0.25);
         const auto color = drawPixel();
         // Fixed world ray: the texture slides 15 columns per quarter stroke.
         const int column = 45 - 15 * step;
         check(color.r == Uint8(column * 4 * shade) &&
-              color.g == Uint8(37 * 3 * shade) && color.b == Uint8(17 * shade),
+              color.g == Uint8(row * 3 * shade) && color.b == Uint8(17 * shade),
               "Moving door stretched/mirrored texture or changed vertical extent");
     }
     doors::updateAll(list, 0.25);

@@ -1,6 +1,7 @@
 #include "enemy_system.h"
 #include "enemy_profiles.h"
 #include "enemy_navigation.h"
+#include "objet_collision.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -96,7 +97,7 @@ void System::update(const game_lab::Level& level, const Camera& camera, const co
                     player::Vitals& vitals, double seconds, bool active,
                     const std::function<void(double)>& movePlayer,
                     const std::function<void()>& recoilPlayer,
-                    const std::vector<doors::Door>& dynamicDoors)
+                    const std::vector<doors::Door>& dynamicDoors, const sprites::Scene* objets)
 {
     if (!active || !vitals.alive() || !std::isfinite(seconds) || seconds<0) {
         wasActive_=false; accumulator_=0; return;
@@ -109,14 +110,14 @@ void System::update(const game_lab::Level& level, const Camera& camera, const co
         if (movePlayer) movePlayer(interval);
         accumulator_+=interval; remaining-=interval;
         if (accumulator_+1e-12>=stepSeconds) {
-            accumulator_=0; step(level,camera,walls,vitals,recoilPlayer,dynamicDoors);
+            accumulator_=0; step(level,camera,walls,vitals,recoilPlayer,dynamicDoors,objets);
         }
     }
     rebuildScene(); effects_.compose(camera,scene_.bank);
 }
 void System::step(const game_lab::Level& level, const Camera& camera, const collision::World& walls,
                   player::Vitals& vitals, const std::function<void()>& recoilPlayer,
-                    const std::vector<doors::Door>& dynamicDoors)
+                    const std::vector<doors::Door>& dynamicDoors, const sprites::Scene* objets)
 {
     ++ticks_; effects_.step(camera,walls);
     const auto location=collision::locate(level,{camera.x,camera.y});
@@ -125,7 +126,7 @@ void System::step(const game_lab::Level& level, const Camera& camera, const coll
         auto& e=records_[i];
         if (e.health==0xffff) continue;
         if (e.behavior==2 && e.sector<visible.size() && visible[e.sector]) e.behavior=3;
-        if (bank_==5) { advance5(i,level,camera,walls,location); continue; }
+        if (bank_==5) { advance5(i,level,camera,walls,location,objets); continue; }
         if (e.state==5) {
             frame(e,(e.phase&1)?9:5);
             if (++e.phase>=8) {
@@ -142,7 +143,7 @@ void System::step(const game_lab::Level& level, const Camera& camera, const coll
         }
         else if (e.state==2) {
             if (++e.phase>=7) {
-                e.phase=0; e.state=0; advance(i,level,camera,walls,location);
+                e.phase=0; e.state=0; advance(i,level,camera,walls,location,objets);
             }
             else {
                 frame(e,bank_==6?original::attack6[e.phase]:attack[e.phase]);
@@ -155,7 +156,7 @@ void System::step(const game_lab::Level& level, const Camera& camera, const coll
             }
         } else {
             if (e.state==4) { e.state=0; e.phase=0; }
-            advance(i,level,camera,walls,location);
+            advance(i,level,camera,walls,location,objets);
         }
     }
     // EXE 0x165db..0x166b5: one shared reaction, 2 health units × 8 updates.
@@ -168,7 +169,8 @@ void System::step(const game_lab::Level& level, const Camera& camera, const coll
     }
 }
 void System::advance(std::size_t i, const game_lab::Level& level, const Camera& camera,
-                     const collision::World& walls, std::optional<collision::Location> playerLocation)
+                     const collision::World& walls, std::optional<collision::Location> playerLocation,
+                     const sprites::Scene* objets)
 {
     auto& e=records_[i];
     const collision::Point p{origins_[i].x+e.x,origins_[i].y+e.y};
@@ -209,10 +211,10 @@ void System::advance(std::size_t i, const game_lab::Level& level, const Camera& 
         if (!e.phase) e.sprite^=0x2000;
         frame(e,waiting[e.phase]); return;
     }
-    move(i,level,*destination,camera,walls);
+    move(i,level,*destination,camera,walls,objets);
 }
 void System::move(std::size_t i, const game_lab::Level& level, collision::Point destination,
-                  const Camera& camera, const collision::World& walls)
+                  const Camera& camera, const collision::World& walls, const sprites::Scene* objets)
 {
     auto& e=records_[i];
     const collision::Point p{origins_[i].x+e.x,origins_[i].y+e.y};
@@ -225,8 +227,12 @@ void System::move(std::size_t i, const game_lab::Level& level, collision::Point 
     }
     if (std::abs(turn)<180) {
         const double angle=e.angle*pi/360;
-        const auto moved=collision::move(walls,p,{speed_*std::cos(angle),speed_*std::sin(angle)});
-        const auto next=collision::locate(level,moved,e.sector);
+        auto moved=collision::move(walls,p,{speed_*std::cos(angle),speed_*std::sin(angle)});
+        auto next=collision::locate(level,moved,e.sector);
+        if (next) {
+            moved=collision::constrainObjets(level,next->sector,p,moved,objets,&e.angle);
+            next=collision::locate(level,moved,next->sector);
+        }
         if (next) {
             const auto& sector=level.sectors[next->sector];
             e.sector=std::uint16_t(next->sector); e.polygon=std::uint16_t(next->polygon);

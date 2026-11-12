@@ -3,6 +3,7 @@
 #include "sprite_renderer.h"
 #include "weapon_fire.h"
 #include "enemy_navigation.h"
+#include "objet_collision.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -69,6 +70,86 @@ game_lab::Level arena()
     sector.walls={{0,1,1,0},{1,2,1,0},{2,3,1,0},{3,0,1,0}};
     level.enemies={{4,4,6,0,0,500,500,0xffff,360,0,0x8000,0,500,500}};
     return level;
+}
+void objetCollisions(const std::filesystem::path& directory)
+{
+    auto level=arena(); level.objetBank=1;
+    level.sectors[0].vertices.push_back({500,500});
+    level.sectors[0].entitiesA={{4,0x5004,256,0}};
+    const auto resolve=[&](collision::Point before, collision::Point candidate,
+                           unsigned angle, collision::Point expected, unsigned expectedAngle) {
+        auto heading=std::uint16_t(angle);
+        const auto result=collision::constrainObjets(level,0,before,candidate,nullptr,&heading);
+        check(result.x==expected.x && result.y==expected.y && heading==expectedAngle,
+              "OBJET enemy bounds/contact angle differs from DOS");
+    };
+    resolve({400,500},{430,500},0,{420,500},80);
+    resolve({400,500},{430,500},700,{420,500},620);
+    resolve({600,500},{570,500},360,{580,500},440);
+    resolve({600,500},{570,500},340,{580,500},260);
+    resolve({500,400},{500,430},180,{500,420},260);
+    resolve({500,400},{500,430},160,{500,420},80);
+    resolve({500,600},{500,570},540,{500,580},620);
+    resolve({500,600},{500,570},520,{500,580},440);
+    resolve({500,600},{500,570},700,{500,580},60); // Wrap after +80.
+    resolve({400,400},{430,430},90,{430,420},10); // Y before X.
+    resolve({400,500},{430,500},360,{420,500},440); // Signed antipodal ties.
+    resolve({600,500},{570,500},0,{580,500},640);
+    resolve({500,400},{500,430},540,{500,420},460);
+    resolve({500,600},{500,570},180,{500,580},260);
+    resolve({600,500},{420,500},360,{580,500},440); // Lower inclusive.
+    resolve({400,500},{580,500},0,{580,500},0); // Upper exclusive.
+    resolve({500,600},{500,420},540,{500,580},620);
+    resolve({500,400},{500,580},180,{500,580},180);
+    resolve({500,500},{501,501},0,{501,501},0); // No invented depenetration.
+    resolve({400,500},{600,500},0,{600,500},0); // Candidate point, not sweep.
+
+    for (unsigned bank : {1u,5u}) {
+        fixture(directory,bank);
+        level.monsBank=bank;
+        for (unsigned type : {0x5004u,0x4004u,0x7004u,0x5007u}) {
+            level.sectors[0].entitiesA[0].type=std::uint16_t(type);
+            level.enemies[0].x=400; level.enemies[0].angle=0;
+            enemies::System system; system.load(level,directory);
+            player::Vitals vitals; const Camera camera{900,500,0};
+            system.update(level,camera,{},vitals,0,true);
+            system.update(level,camera,{},vitals,1./18,true);
+            const auto& e=system.records()[0];
+            const bool solid=type==0x5004;
+            check(e.x==(solid?420:bank==5?450:430) && e.y==500 && e.angle==(solid?80:0),
+                  "Enemy normal/MONS5 movement ignored OBJET solidity or angular response");
+        }
+        // Current image, not the initial entity image or rendered dimensions.
+        level.sectors[0].entitiesA[0].type=0x5007;
+        sprites::Scene scene; scene.objetBank=1;
+        scene.objects.push_back({500,500,256,1,21,0x5007,0,0,0});
+        level.enemies[0].x=340;
+        enemies::System system; system.load(level,directory);
+        player::Vitals vitals; const Camera camera{900,500,0};
+        system.update(level,camera,{},vitals,0,true,{}, {}, {}, &scene);
+        system.update(level,camera,{},vitals,1./18,true,{}, {}, {}, &scene);
+        check(system.records()[0].x==350 && system.records()[0].angle==80,
+              "Enemy ignored current OBJET image extent");
+        scene.objects[0].image=7; scene.objects[0].height=10000;
+        system.load(level,directory);
+        system.update(level,camera,{},vitals,0,true,{}, {}, {}, &scene);
+        system.update(level,camera,{},vitals,1./18,true,{}, {}, {}, &scene);
+        check(system.records()[0].x==(bank==5?390:370) && system.records()[0].angle==0,
+              "Traversable current OBJET image used visual size or stale extent");
+    }
+    // MONS5 hurt recoil moves backwards and still uses the facing angle response.
+    level.sectors[0].entitiesA[0].type=0x5004;
+    level.enemies[0].x=600;
+    for (unsigned health : {4u,20u}) {
+        level.enemies[0].health=std::uint16_t(health);
+        enemies::System system; system.load(level,directory);
+        system.hit(0,4,3.14159265358979323846); // Facing east, recoil 30 west.
+        player::Vitals vitals; const Camera camera{900,500,0};
+        system.update(level,camera,{},vitals,0,true);
+        system.update(level,camera,{},vitals,1./18,true);
+        check(system.records()[0].x==580 && system.records()[0].angle==640,
+              "MONS5 hurt/death recoil bypassed OBJET or used travel direction for angle");
+    }
 }
 void sectorVisibility(const std::filesystem::path& directory)
 {
@@ -755,7 +836,12 @@ int main(int argc,char** argv)
 {
     try {
         if (argc<2) return 1;
-        sectorVisibility(argv[1]); placement(argv[1]); otherBanks(argv[1]); allBanks(argv[1],true); combat(argv[1]); combat(argv[1],3); mons3(argv[1]); deathEffects(); navigation(); sharedMovement(argv[1]); mons5(argv[1]);
+        if (argc==3 && std::string(argv[2])=="--objets") {
+            objetCollisions(argv[1]);
+            std::cout << "Enemy OBJET collision tests passed\n";
+            return 0;
+        }
+        sectorVisibility(argv[1]); placement(argv[1]); otherBanks(argv[1]); allBanks(argv[1],true); combat(argv[1]); combat(argv[1],3); mons3(argv[1]); deathEffects(); navigation(); sharedMovement(argv[1]); mons5(argv[1]); objetCollisions(argv[1]);
         if (argc>2) { originalMons5(argv[2]); original(argv[2]); allBanks(std::filesystem::path(argv[2]).parent_path()/"DATA",false); }
         std::cout<<"Enemy placement/resource tests passed\n";
         return 0;

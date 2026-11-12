@@ -17,7 +17,8 @@ public:
                 player::Vitals& vitals, double seconds, bool active,
                 const std::function<void(double)>& movePlayer = {},
                 const std::function<void()>& recoilPlayer = {},
-                const std::vector<doors::Door>& dynamicDoors = {});
+                const std::vector<doors::Door>& dynamicDoors = {},
+                const sprites::Scene* objets = nullptr);
     std::optional<ShotHit> trace(const Camera& view, collision::Point origin,
                                 collision::Point direction, double range) const;
     void hit(std::size_t enemy, unsigned weapon, double angle);
@@ -52,15 +53,17 @@ private:
     double baseHeight_=270;
     void rebuildScene();
     void advance5(std::size_t index, const game_lab::Level& level, const Camera& camera,
-                  const collision::World& walls, std::optional<collision::Location> playerLocation);
+                  const collision::World& walls, std::optional<collision::Location> playerLocation,
+                 const sprites::Scene* objets);
     void displace5(std::size_t index, const game_lab::Level& level,
-                   const collision::World& walls, double distance, bool crossSector);
+                   const collision::World& walls, double distance, bool crossSector, const sprites::Scene* objets);
     void step(const game_lab::Level& level, const Camera& player, const collision::World& walls,
               player::Vitals& vitals, const std::function<void()>& recoilPlayer,
-              const std::vector<doors::Door>& dynamicDoors);
+              const std::vector<doors::Door>& dynamicDoors, const sprites::Scene* objets);
     void move(std::size_t index, const game_lab::Level& level, collision::Point destination,
-              const Camera& camera, const collision::World& walls);
+              const Camera& camera, const collision::World& walls, const sprites::Scene* objets);
     void advance(std::size_t index, const game_lab::Level& level, const Camera& player,
-                 const collision::World& walls, std::optional<collision::Location> playerLocation);
+                 const collision::World& walls, std::optional<collision::Location> playerLocation,
+                 const sprites::Scene* objets);
 };
 } // namespace enemies

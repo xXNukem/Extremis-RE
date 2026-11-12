@@ -94,7 +94,7 @@ target_compile_features(door_control PUBLIC cxx_std_17)
 set_target_properties(door_control PROPERTIES CXX_EXTENSIONS NO)
 
 add_executable(InExtremisPort src/main.cpp src/map_view.cpp src/first_person_view.cpp
-    src/texture_preview.cpp src/player_input.cpp src/plane_appearance.cpp)
+    src/texture_preview.cpp src/player_input.cpp src/plane_appearance.cpp src/startup_credits.cpp)
 target_sources(InExtremisPort PRIVATE $<$<CONFIG:Debug>:src/debug_menu.cpp>)
 target_compile_definitions(InExtremisPort PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
 set_target_properties(InExtremisPort PROPERTIES
@@ -146,7 +146,8 @@ if(BUILD_TESTING)
     add_executable(vitals_tests tests/vitals_tests.cpp)
     target_link_libraries(vitals_tests PRIVATE player_vitals)
     add_test(NAME player_vitals COMMAND vitals_tests)
-    add_executable(survival_session_tests tests/survival_session_tests.cpp src/player_input.cpp)
+    add_executable(survival_session_tests tests/survival_session_tests.cpp src/player_input.cpp src/survival_session.cpp)
+    target_compile_definitions(survival_session_tests PRIVATE EXTREMIS_DEBUG_MENU=1)
     target_link_libraries(survival_session_tests PRIVATE survival_session player_control SDL3::SDL3)
     add_test(NAME survival_session COMMAND survival_session_tests "${CMAKE_CURRENT_BINARY_DIR}/survival-test-data")
     add_executable(hud_tests tests/hud_tests.cpp src/first_person_view.cpp)

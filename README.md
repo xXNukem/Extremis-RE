@@ -1,46 +1,147 @@
-# Extremis RE
+<div align="center">
 
-*One very obscure DOS shooter. Thirty levels. A surprising amount going on under the hood.*
+<img src="docs/images/extremis-slime-banner.svg" alt="EXTREMIS RE — a forgotten nightmare revived in alien green slime" width="100%">
 
-**Extremis RE** is an independent, open-source reconstruction of **In Extremis (1993)**, built in **C++17 with SDL3 and CMake**. The aim is simple: get the original PC game running on modern systems without losing the peculiar little things that made it *In Extremis*.
+<br>
 
-This isn't a remake dressed up as a port. The levels, enemies, weapons, terminals, old-school interfaces and oddball game rules are being rebuilt from the original data files and reverse-engineered DOS executable. Some parts are already playable; others still need work. That's the fun, and occasionally the headache, of the project.
+[![C++17](https://img.shields.io/badge/C%2B%2B-17-0b140d?style=for-the-badge&labelColor=173b26&color=48de78)](https://isocpp.org/)
+[![SDL3](https://img.shields.io/badge/SDL-3-0b140d?style=for-the-badge&labelColor=173b26&color=48de78)](https://www.libsdl.org/)
+![Work in progress](https://img.shields.io/badge/STATUS-WORK%20IN%20PROGRESS-151515?style=for-the-badge&labelColor=501119&color=fe4457)
 
-## What's working?
+**ONE VERY OBSCURE DOS FPS. THIRTY LEVELS. ONE NIGHTMARE WORTH PRESERVING.**
 
-The engine can read the **30-level GAME.LAB** structure and the game's original graphic and audio banks. It has a first-person view, textured walls, floor and ceiling rendering, doors, elevators, a lower HUD, inventory and terminals, weapons, enemies, the motion detector, and a map based on the original interface. The exact behaviour and completeness vary by system and level.
+*The original nightmare reawakens.*
 
-This is **work in progress**, not a promise of a finished 30-level playthrough. Some timings are adapted to the port, and several visual details and special mechanics still need verification against DOS.
+</div>
 
-## Run it
+---
 
-You'll need your **own copy of the original game data**. No original game assets are included in this repository.
+## ☣️ What is EXTREMIS RE?
+
+**Extremis RE** is an independent, unofficial **C++17 / SDL3 reconstruction and source port of *In Extremis* (1993)**, an obscure first-person shooter with a uniquely unsettling science-fiction atmosphere.
+
+We're rebuilding its behaviour from the original DOS executable and game data: the maps, enemies, weapons, survival systems, interfaces, strange little rules, and all the other things that make it *In Extremis*.
+
+This is **not a modern remake**. The mission is to make the original game playable on modern systems while preserving its identity, not replacing it.
+
+> **BIOHAZARD WARNING:** Green slime, limited oxygen, unreliable machinery, hostile lifeforms, and at least one elevator you shouldn't trust.
+
+## 🧪 Resurrection progress
+
+**Estimated project completion: ~40%** — a rough development assessment, **not** a measurement of how many levels have been fully tested or a percentage derived from CTest.
+
+**🟩🟩🟩🟩🟩🟩🟩🟩⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛ &nbsp; ~40%**
+
+*The core engine and much of the first playable gameplay loop exist. Campaign-wide fidelity, original presentation, save/load, and verification of the full 30-level experience remain substantial work.*
+
+### Mission objectives
+
+| Objective | Status | What's left to accomplish |
+|:--|:--:|:--|
+| **Read original data and all 30 level definitions** | ✅ Working | Validate later-level content and special cases in actual play |
+| **Rebuild the 3D rendering pipeline** | 🟡 Refining | Resolve elevator texture leakage, visual edge cases, aspect ratios and performance |
+| **Player movement, collisions and survival** | 🟡 Refining | Verify original timing, oxygen/health behaviour and remaining collision edge cases |
+| **Doors, security, terminals and elevators** | 🟡 Refining | Finish door timing, special interactions and all cross-level transitions |
+| **Weapons, projectiles and enemy behaviour** | 🟡 Refining | Verify each monster bank, special attacks and late-game behaviour against DOS |
+| **Decorative sprites, animation and collisions** | 🟡 Refining | Validate animation conditions and timing across every bank and level |
+| **Original HUD, motion detector, map and inventory** | 🟡 Refining | Restore remaining interface details and interaction edge cases |
+| **Sound effects and environmental audio** | 🟡 Refining | Check missing cues, sound timing and original ambient behaviour |
+| **Original menus, scenes, death and ending** | 🔴 Incomplete | Recreate the original sequences, including the full-screen green death effect |
+| **Save / load and full game-state restoration** | 🔴 Incomplete | Implement and test the complete persistence cycle |
+| **Complete all 30 levels** | 🔴 Unverified | Play through every level; validate secrets, events, transitions and final triggers |
+| **Cross-platform release quality** | 🔴 Pending | Thorough macOS/Windows testing, packaging and release documentation |
+
+**Legend:** ✅ core functionality working · 🟡 implemented but still being verified/refined · 🔴 substantial work remains.
+
+Progress is updated manually as systems are **implemented and validated**, not just when a new file compiles.
+
+---
+
+## 🟢 What's already alive?
+
+The port already has substantial working systems, including:
+
+- First-person rendering with textured walls, floors, ceilings and sprites.
+- Original level and resource-bank loading, including the game's 30-level structure.
+- Player movement, collision, health and oxygen mechanics.
+- Doors, card readers, security codes, elevators and other interactions.
+- Inventory, weapons, projectiles and combat.
+- Enemy AI, damage, death, navigation and collisions.
+- Decorative **OBJET** sprites, animation and collision handling.
+- Original-style 320×200 HUD, motion detector and map interfaces.
+- Original audio resource decoding and gameplay sound effects.
+- Automated regression tests and technical documentation rooted in reverse engineering.
+- An original **Extremis RE** startup presentation: green phosphor, failing ECG and terminal glitches.
+
+**Important:** *Working* does **not** mean every feature has been verified in all 30 levels. This is an active reconstruction, not a finished campaign release.
+
+## 💻 Build and run
+
+### Requirements
+
+- CMake **3.16+**
+- A C++17-capable compiler
+- **SDL3 3.2+** development libraries
+- Your **own legally obtained copy** of the original *In Extremis* game data
 
 ```sh
 cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release
 cmake --build build/release -j4
 ctest --test-dir build/release --output-on-failure
+```
+
+Run the port, passing the path to the original **`GAME.LAB`** file:
+
+```sh
 ./build/release/InExtremisPort "/path/to/In_Extremis/GAME.LAB"
 ```
 
-CMake needs a working SDL3 development installation. The port expects the relevant original resource files alongside the supplied game-data directory. Check [known differences and test issues](docs/reference/known-differences.md) if something isn't behaving as expected.
+The required original resources must also be available in the expected **`DATA`** directory alongside the game. **No copyrighted original game assets are included in this repository.**
 
-## Fancy a look inside?
+Current development and testing are focused primarily on macOS; other platforms require additional validation.
 
-The most interesting part of this project is what we've learned about the original game. Rather than dump an endless development diary on you, we've put together a **[technical field guide](docs/README.md)**: how levels are wired up, why certain aliens give up chasing you, what makes a door block the map, how decorative sprites actually animate, and where the reconstructed code differs from the DOS version.
+## 📟 Technical field guide
 
-Start with [levels and GAME.LAB](docs/systems/levels.md), [enemy behaviour](docs/systems/enemies.md), or [the graphics pipeline](docs/systems/rendering.md). You don't need to know x86 assembly to follow along.
+The reconstruction is driven by analysis of the original executable, original assets, observations of the DOS game and targeted tests. The documentation distinguishes **confirmed** behaviour, **adaptations**, and **open questions**.
 
-## How it's made
+Start with the [technical field guide](docs/README.md), or jump straight into:
 
-This is original port code developed through reverse engineering, hand-written C++, Ghidra and other inspection tools, AI-assisted development, lots of small tests, and a frankly ridiculous amount of patience. Technical claims are labelled as **confirmed**, **adapted**, or **still under investigation** in the documentation. When the evidence doesn't settle something, we say so.
+| System | Research notes |
+|:--|:--|
+| 🧬 Level data and sectors | [GAME.LAB and levels](docs/systems/levels.md) |
+| 👾 Creatures and combat | [Enemies](docs/systems/enemies.md) · [Weapons](docs/systems/weapons.md) |
+| 🏭 The station | [Doors and elevators](docs/systems/world.md) · [Decorations](docs/systems/decorations.md) |
+| 🫁 Staying alive | [Player and survival](docs/systems/player.md) · [Inventory](docs/systems/items.md) |
+| 📺 Original interfaces | [HUD, map and terminals](docs/systems/interfaces.md) |
+| 🔊 Sound and graphics | [Audio](docs/systems/audio.md) · [Rendering](docs/systems/rendering.md) |
+| ⚠️ What still differs | [Known differences](docs/reference/known-differences.md) |
 
-## Project and credits
+Some reference pages describe an earlier code snapshot; verify unresolved details against the latest source and tests.
 
-**Created by Carlos de la Barrera Pérez (xXNukem).** Original development, reverse engineering, architecture, implementation and project maintenance.
+## 🔬 How it's being reconstructed
 
-Issues, testing, corrections and contributions are welcome. Please don't upload copyrighted game data with a bug report or pull request.
+**Reverse engineering · Ghidra · Original DOS data · Hand-written C++ · AI-assisted development · Testing · Patience.**
 
-## License and disclaimer
+The goal is **preservation through understanding**: no imaginary mechanics, no pretending an approximation is verified, and no unnecessary modernization just because something old looks strange.
 
-The **Extremis RE source code** is published under **Apache License 2.0**; see [LICENSE](LICENSE) and [NOTICE](NOTICE). This is an independent, unofficial project. **In Extremis** and its original intellectual property belong to their respective rights holders. No original game assets are distributed here.
+## 🧟 Credits and rights
+
+**Port, reverse engineering and project maintenance:** **Carlos de la Barrera Pérez (xXNukem)**.
+
+This is an **independent, unofficial, non-commercial preservation project**. *In Extremis* and its original intellectual property belong to their respective rights holders. The original commercial game and its assets are **not distributed** here.
+
+The source-code license is specified in [LICENSE](LICENSE); attribution information is in [NOTICE](NOTICE).
+
+Bug reports, reproducible tests and corrections to the reverse-engineering notes are welcome. Please do **not** include original copyrighted game assets in issues or pull requests.
+
+---
+
+<div align="center">
+
+**🟢 THE OXYGEN IS LOW. SOMETHING IS MOVING BEHIND THE WALL. 🟢**
+
+`[ SIGNAL LOST ... ]`
+
+**EXTREMIS RE — THE ORIGINAL NIGHTMARE REAWAKENS**
+
+</div>

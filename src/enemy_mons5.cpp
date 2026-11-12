@@ -1,5 +1,6 @@
 #include "enemy_system.h"
 #include "enemy_navigation.h"
+#include "objet_collision.h"
 #include "enemy_profiles.h"
 #include <algorithm>
 #include <cmath>
@@ -21,7 +22,7 @@ void pose(game_lab::EnemyRecord& e, bool attack)
 }
 }
 void System::displace5(std::size_t i, const game_lab::Level& level,
-                       const collision::World& walls, double distance, bool crossSector)
+                       const collision::World& walls, double distance, bool crossSector, const sprites::Scene* objets)
 {
     auto& e=records_[i];
     const collision::Point p{origins_[i].x+e.x,origins_[i].y+e.y};
@@ -29,7 +30,10 @@ void System::displace5(std::size_t i, const game_lab::Level& level,
     auto moved=collision::move(walls,p,{distance*std::cos(angle),distance*std::sin(angle)});
     // Commit only a representable, physically located position, also while airborne.
     moved={std::round(moved.x),std::round(moved.y)};
-    const auto next=collision::locate(level,moved,e.sector);
+    auto next=collision::locate(level,moved,e.sector);
+    if (!next || (!crossSector && next->sector!=e.sector)) return;
+    moved=collision::constrainObjets(level,next->sector,p,moved,objets,&e.angle);
+    next=collision::locate(level,moved,next->sector);
     if (!next || (!crossSector && next->sector!=e.sector)) return;
     const auto& sector=level.sectors[next->sector];
     e.sector=std::uint16_t(next->sector); e.polygon=std::uint16_t(next->polygon);
@@ -37,7 +41,8 @@ void System::displace5(std::size_t i, const game_lab::Level& level,
     e.x=std::uint16_t(moved.x-sector.gx); e.y=std::uint16_t(moved.y-sector.gy);
 }
 void System::advance5(std::size_t i, const game_lab::Level& level, const Camera& camera,
-                      const collision::World& walls, std::optional<collision::Location> playerLocation)
+                      const collision::World& walls, std::optional<collision::Location> playerLocation,
+                      const sprites::Scene* objets)
 {
     auto& e=records_[i];
     const collision::Point p{origins_[i].x+e.x,origins_[i].y+e.y};
@@ -55,7 +60,7 @@ void System::advance5(std::size_t i, const game_lab::Level& level, const Camera&
         if (!dying) ++e.phase;
         e.sprite=std::uint16_t(0x8000|(dying ? 0 : e.sprite&0x2000)|((e.phase&1)?9:5));
         e.elevation=std::uint16_t((e.elevation&255)/2);
-        if (e.behavior) displace5(i,level,walls,-double(recoil5_[i]),true);
+        if (e.behavior) displace5(i,level,walls,-double(recoil5_[i]),true,objets);
         if (dying && ++e.phase>=8) {
             e.health=0xffff; sounds_.push_back(17);
             effects_.begin({origins_[i].x+e.x,origins_[i].y+e.y},e.elevation&255,
@@ -133,7 +138,7 @@ void System::advance5(std::size_t i, const game_lab::Level& level, const Camera&
     if (travel) {
         const int phase=signedPhase(e.phase);
         displace5(i,level,walls,phase>=0 && phase<360 ? speed_ : speed_/2,
-                  e.behavior>=3 && (!playerLocation || e.sector!=playerLocation->sector));
+                  e.behavior>=3 && (!playerLocation || e.sector!=playerLocation->sector),objets);
     }
     // 0xf062..0xf156 advances even if collision prevented horizontal displacement.
     int phase=signedPhase(e.phase)+

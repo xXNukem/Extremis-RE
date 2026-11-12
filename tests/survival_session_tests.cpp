@@ -155,6 +155,8 @@ void deadInput()
 void modalPress(ItemSession& items, SDL_Scancode code, const Camera& camera,
                 SurvivalSession& player, GameAudio& audio, DoorControl* control = nullptr)
 {
+    while (items.modal() && items.interfaceState()->phase!=interaction::Phase::Ready)
+        items.update(&camera,true,{},player,audio,control,1.0);
     items.handleEvent(key(code),17);
     items.update(&camera,true,{},player,audio,control);
     auto release=key(code); release.type=SDL_EVENT_KEY_UP; items.handleEvent(release,17);
@@ -174,6 +176,8 @@ void enterZoneCode(ItemSession& items, const Camera& camera, SurvivalSession& pl
     while (items.interfaceState()->selection<13)
         modalPress(items,SDL_SCANCODE_RIGHT,camera,player,audio);
     modalPress(items,SDL_SCANCODE_SPACE,camera,player,audio);
+    while (items.modal() && items.interfaceState()->phase!=interaction::Phase::Ready)
+        items.update(&camera,true,{},player,audio,nullptr,1.0);
 }
 
 void itemSession(GameAudio& audio)
@@ -213,6 +217,8 @@ void itemSession(GameAudio& audio)
     modalPress(items,SDL_SCANCODE_SPACE,camera,player,audio);
     check(player.hudState().injectors == 1 && audio.effectStatistics(12)->requests == requests+1,
           "Accepted item did not reach HUD or original confirmation audio");
+    while (items.modal())
+        items.update(&camera,true,obstacles,player,audio,nullptr,1.0);
     items.handleEvent(key(SDL_SCANCODE_E),17);
     { auto release=key(SDL_SCANCODE_E); release.type=SDL_EVENT_KEY_UP; items.handleEvent(release,17); }
     items.update(&camera,true,obstacles,player,audio);
@@ -307,6 +313,8 @@ void readerSession(GameAudio& audio)
     check(doors[0].originalState==0x0400,"Selector accepted E card as C");
     modalPress(items,SDL_SCANCODE_DOWN,camera,player,audio,&control);
     modalPress(items,SDL_SCANCODE_SPACE,camera,player,audio,&control);
+    while (items.modal() && items.interfaceState()->phase!=interaction::Phase::Ready)
+        items.update(&camera,true,obstacles,player,audio,&control,1.0);
     check(doors[0].originalState == 0 && player.inventory().cards()[1] == 0x1001 &&
           player.hudState().messages[0] == messages::text(messages::Id::DoorUnlocked),
           "Valid C card not retained or unlock message missing from HUD");
