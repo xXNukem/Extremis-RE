@@ -12,6 +12,7 @@ struct Instance {
     std::size_t image;
     std::uint16_t type, param2;
     std::size_t sourceSector = std::size_t(-1), sourceEntity = std::size_t(-1);
+    bool wallImpact = false; // Surface effect; ordinary sprites retain normal depth testing.
 };
 
 struct Scene {

@@ -69,6 +69,43 @@ void decoding()
           pixels[60 * 200 + 110] == 0x112233ff, "Original flip flags not sampled correctly");
 }
 
+void wallImpactDepth()
+{
+    // The right half of this billboard would normally disappear behind a
+    // slanted wall even though its impact point is on the wall itself.
+    sprites::Scene scene;
+    scene.bank.images.push_back(image());
+    scene.objects.push_back({100,0,128,50,0,0,0});
+    constexpr int w=100,h=100;
+    const auto makeDepth=[] {
+        std::vector<double> values(w*h);
+        for (int y=0;y<h;++y) for (int x=0;x<w;++x)
+            values[y*w+x]=1.0/(.01+.00004*(x-50));
+        return values;
+    };
+    std::vector<std::uint32_t> pixels(w*h,0x112233ff);
+    auto depth=makeDepth();
+    sprites::render(pixels,depth,scene,{}, {w,h,100,128});
+    check(pixels[50*w+30]==0xff0000ff && pixels[50*w+70]==0x112233ff,
+          "Ordinary billboard did not obey oblique wall depth");
+
+    scene.objects[0].wallImpact=true;
+    std::fill(pixels.begin(),pixels.end(),0x112233ff);
+    depth=makeDepth();
+    sprites::render(pixels,depth,scene,{}, {w,h,100,128});
+    check(pixels[50*w+30]==0xff0000ff && pixels[50*w+70]==0xff0000ff,
+          "Wall impact was still cut in half by oblique wall depth");
+
+    std::fill(pixels.begin(),pixels.end(),0x112233ff);
+    depth=makeDepth();
+    depth[50*w+70]=40; // A foreground sprite/wall must occlude the impact.
+    depth[50*w+73]=300; // A different wall must not receive the decal.
+    sprites::render(pixels,depth,scene,{}, {w,h,100,128});
+    check(pixels[50*w+70]==0x112233ff && pixels[50*w+73]==0x112233ff &&
+          pixels[50*w+60]==0xff0000ff,
+          "Wall impact ignored nearer geometry or did not render elsewhere");
+}
+
 void placement()
 {
     game_lab::Level level{};
@@ -680,7 +717,7 @@ int main(int argc, char* argv[])
             std::cout << "OBJET falling selection, displacement and wrap passed.\n";
             return 0;
         }
-        decoding(); placement(); projection(); spriteDepth(); sceneOcclusion(); fallingDrops();
+        decoding(); placement(); projection(); spriteDepth(); wallImpactDepth(); sceneOcclusion(); fallingDrops();
         fallingDropSelection();
         decorativeFrames();
         objet3Frames();

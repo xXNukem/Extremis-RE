@@ -57,6 +57,7 @@ private:
         double x=0, y=0, angle=0;
         double traveled=0, visualSide=0, visualDrop=0;
         double launchHeight=Camera::eyeHeight;
+        bool wallImpact=false;
     };
     std::array<Projectile,20> projectiles_{};
     sprites::Scene scene_;

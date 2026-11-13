@@ -27,13 +27,45 @@ void drawObject(std::vector<std::uint32_t>& pixels, std::vector<double>& depth,
     const int x1 = clippedEdge(rect.left + rect.width, projection.width);
     const int y0 = clippedEdge(rect.top, projection.height);
     const int y1 = clippedEdge(rect.top + rect.height, projection.height);
+    // At an oblique wall, a camera-facing impact billboard straddles the
+    // wall's Z buffer. Estimate the struck wall surface from its inverse-depth
+    // slope at the impact point (inverse depth is linear in screen X).
+    // Only marked wall impacts use this; every other sprite is unchanged.
+    bool wallSurface=false;
+    int centerX=0;
+    double inverseCenter=0, inverseSlope=0;
+    if (object.wallImpact && rect.width>0 && rect.height>0) {
+        const double scale=rect.width / texture.width;
+        const int cx=int(std::floor(rect.left + image.anchorX*scale));
+        const int cy=int(std::floor(rect.top + image.anchorY*scale));
+        if (cx>0 && cx+1<projection.width && cy>=0 && cy<projection.height) {
+            const std::size_t center=std::size_t(cy)*projection.width+cx;
+            const double middle=depth[center], left=depth[center-1], right=depth[center+1];
+            if (std::isfinite(middle) && std::isfinite(left) && std::isfinite(right) &&
+                middle>0 && left>0 && right>0 &&
+                std::abs(middle-rect.depth)<=std::max(1.0,rect.depth*.02) &&
+                std::abs(left-middle)<=middle*.4 && std::abs(right-middle)<=middle*.4) {
+                wallSurface=true;
+                centerX=cx;
+                inverseCenter=1.0/middle;
+                inverseSlope=(1.0/right-1.0/left)*.5;
+            }
+        }
+    }
     for (int y = y0; y < y1; ++y) {
         int v = std::clamp(int((y + 0.5 - rect.top) * texture.height / rect.height),
                            0, texture.height - 1);
         if (object.type & 0x0100) v = texture.height - 1 - v;
         for (int x = x0; x < x1; ++x) {
             const auto target = std::size_t(y) * projection.width + x;
-            if (rect.depth >= depth[target]) continue;
+            if (wallSurface) {
+                const double inverse=inverseCenter+(x-centerX)*inverseSlope;
+                if (inverse<=0) continue;
+                const double expected=1.0/inverse;
+                // Reject a foreground object or a different wall plane.
+                if (!std::isfinite(depth[target]) ||
+                    std::abs(depth[target]-expected)>std::max(.5,expected*.015)) continue;
+            } else if (rect.depth >= depth[target]) continue;
             int u = std::clamp(int((x + 0.5 - rect.left) * texture.width / rect.width),
                                0, texture.width - 1);
             if (object.type & 0x0200) u = texture.width - 1 - u;
@@ -42,7 +74,7 @@ void drawObject(std::vector<std::uint32_t>& pixels, std::vector<double>& depth,
             const auto c = texture.pixels[source];
             pixels[target] = (std::uint32_t(c.r) << 24) | (std::uint32_t(c.g) << 16) |
                              (std::uint32_t(c.b) << 8) | 255;
-            depth[target] = rect.depth;
+            depth[target] = std::min(depth[target],rect.depth);
         }
     }
 }

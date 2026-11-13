@@ -89,7 +89,7 @@ void WeaponFire::advanceProjectiles(const Camera& camera, const collision::World
             const double travel=hit?std::max(0.0,*hit-(enemy?0:collision::Settings{}.skin)):distance;
             enemyImpact=enemy;
             p.x+=direction.x*travel; p.y+=direction.y*travel; p.traveled+=travel;
-            if (hit) { p.state=2; p.phase=1; }
+            if (hit) { p.state=2; p.phase=1; p.wallImpact=!enemy; }
         }
         const double dx=p.x-camera.x, dy=p.y-camera.y;
         const double forward=dx*std::cos(camera.angle)+dy*std::sin(camera.angle);
@@ -124,6 +124,7 @@ void WeaponFire::advanceProjectiles(const Camera& camera, const collision::World
         // converge from the muzzle to the nearest real surface, in world space.
         scene_.objects.push_back({visualX,visualY,p.launchHeight-p.visualDrop*blend,
                                   double(d.frames[frame].worldHeight),p.weapon*4+frame,0,0});
+        scene_.objects.back().wallImpact=p.wallImpact;
         // EXE 0x180e9..0x180fe: impact phases 1..5, then FREE, no invented TTL.
         if (p.state==2 && ++p.phase==6) p.state=0;
     }

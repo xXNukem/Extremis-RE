@@ -12,6 +12,20 @@
 
 ---
 
+<div align="center">
+
+## ☕ Support the project
+
+If you enjoy the port and want to buy me a coffee, you can do it here. Every bit helps with future updates and projects. No pressure, of course.
+
+<a href="https://ko-fi.com/xxnukem"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support xXNukem on Ko-fi" height="48"></a>
+
+**[ko-fi.com/xxnukem](https://ko-fi.com/xxnukem)**
+
+</div>
+
+---
+
 ## ☣️ What is EXTREMIS RE?
 
 **Extremis RE** is an independent, unofficial **C++17 / SDL3 reconstruction and source port of *In Extremis* (1993)**, an obscure first-person shooter with a uniquely unsettling science-fiction atmosphere.
