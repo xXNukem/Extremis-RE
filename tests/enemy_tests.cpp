@@ -158,34 +158,34 @@ void sectorVisibility(const std::filesystem::path& directory)
     level.sectors[0].neighbors={1}; level.sectors[1].neighbors={0};
     level.connectionStates={0x0400};
     std::vector<doors::Door> dynamic(1);
-    auto& door=dynamic[0]; door.stateIndex=0; door.originalState=0x0400;
-    const auto connected=[&]() -> bool { return doors::connectedSectors(level,1,dynamic)[0]; };
+    dynamic[0].stateIndex=0;
+    const auto connected=[&]() -> bool { return doors::connectedSectors(level,1)[0]; };
     check(!connected(),"Closed locked connection enabled");
-    door.originalState=0;
+    level.connectionStates[0]=0;
     check(!connected(),"Unlocking enabled a closed connection");
-    door.state=doors::State::Opening;
+    level.connectionStates[0]=0x100;
     check(connected(),"Opening at zero progress did not enable connection");
-    door.state=doors::State::Open; door.progress=1;
+    level.connectionStates[0]=90;
     check(connected(),"Open connection disabled");
-    door.state=doors::State::Closing; door.progress=.5;
+    level.connectionStates[0]=30;
     check(connected(),"Closing positive progress disabled connection");
-    door.progress=0;
+    level.connectionStates[0]=0;
     check(!connected(),"Closing zero progress enabled connection");
-    door.state=doors::State::Closed;
+    level.connectionStates[0]=0;
     check(!connected(),"Finished closure enabled connection");
     level.connectionStates[0]=0x0100;
-    check(doors::connectedSectors(level,1,{})==std::vector<bool>({true,true}),
+    check(doors::connectedSectors(level,1)==std::vector<bool>({true,true}),
           "Original connection or cyclic traversal failed");
-    check(!connected(),"Original word overrode dynamic closed door");
+    check(connected(),"Geometry must not override authoritative connection word");
     level.connectionStates[0]=0x0400;
-    check(!doors::connectedSectors(level,1,{})[0],"Lock bit enabled original connection");
+    check(!doors::connectedSectors(level,1)[0],"Lock bit enabled original connection");
     level.sectors[1].neighbors={99,0}; // Invalid neighbor and missing connection wall.
     level.sectors[1].walls.resize(1);
-    check(doors::connectedSectors(level,1,{})==std::vector<bool>({false,true}),
+    check(doors::connectedSectors(level,1)==std::vector<bool>({false,true}),
           "Invalid neighbor traversed");
     level.sectors[1].neighbors={0}; level.sectors[1].walls[0].extra=99;
     check(!connected(),"Invalid connection state traversed");
-    check(doors::connectedSectors(level,99,dynamic)==std::vector<bool>({false,false}),
+    check(doors::connectedSectors(level,99)==std::vector<bool>({false,false}),
           "Invalid player sector traversed");
     level.sectors[1].walls[0].extra=0;
     const Camera camera{1500,500,0}; // Enemy is behind, in the other sector.
@@ -194,12 +194,12 @@ void sectorVisibility(const std::filesystem::path& directory)
         fixture(directory,bank); level.monsBank=bank;
         level.enemies[0].behavior=2;
         enemies::System system; system.load(level,directory); player::Vitals vitals;
-        door.state=doors::State::Closed; door.progress=0;
+        level.connectionStates[0]=0;
         check(!system.blocksInterface(level,camera,dynamic),"Closed door did not isolate enemy");
         system.update(level,camera,walls,vitals,0,true,{}, {},dynamic);
         system.update(level,camera,walls,vitals,1./18,true,{}, {},dynamic);
         check(system.records()[0].behavior==2,"Isolated enemy activated");
-        door.state=doors::State::Opening;
+        level.connectionStates[0]=0x100;
         check(system.blocksInterface(level,camera,dynamic),"Connected enemy behind player did not block map");
         system.update(level,camera,walls,vitals,1./18,true,{}, {},dynamic);
         check(system.records()[0].behavior==3,"Opening connection did not activate behavior 2");

@@ -28,17 +28,18 @@ SDL_Event keyEvent(SDL_EventType type, SDL_Scancode scancode, bool repeat = fals
 void testQueuedEventsToDoorState()
 {
     const collision::World walls;
-    const doors::Door first{7, 0, {{{{100, 100}, {100, -100}, 23},
+    const doors::Door first{7, {{{{100, 100}, {100, -100}, 23},
                                   {{100, -100}, {100, 100}, 33}}}};
     auto second = first;
     second.stateIndex = 8;
     for (auto& face : second.faces) { face.a.x = 180; face.b.x = 180; }
     std::vector<doors::Door> doors{first, second};
-    DoorControl control(walls, doors);
+    game_lab::Level level; level.connectionStates.resize(9);
+    DoorControl control(walls, doors, level);
     const Camera camera{50, 0, 0};
-    control.prepareFrame(&camera, 0, {});
+
     ItemSession items; SurvivalSession player; GameAudio audio;
-    game_lab::Level level; items.load(level);
+    items.load(level);
     auto foreign=keyEvent(SDL_EVENT_KEY_DOWN,SDL_SCANCODE_E);
     check(!items.handleEvent(foreign,32),"Another window can interact");
     for (auto event : {keyEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_E),
@@ -48,12 +49,11 @@ void testQueuedEventsToDoorState()
     SDL_Event event{};
     while (SDL_PollEvent(&event)) items.handleEvent(event,31);
     items.update(&camera,true,walls,player,audio,&control);
-    check(doors[0].state==doors::State::Opening && doors[1].state==doors::State::Closed,
-          "Universal E toggled wrong door or repeated");
+    check(level.connectionStates[7]==0 && level.connectionStates[8]==0,
+          "E must leave ordinary door words unchanged");
     items.update(&camera,true,walls,player,audio,&control);
-    check(doors[0].state==doors::State::Opening,"Consumed E toggled door twice");
-    control.prepareFrame(&camera, 0.25, {});
-    check(doors[0].progress == 0.25, "Activated door did not animate");
+    check(level.connectionStates[7]==0,"Consumed E changed an ordinary door");
+    check(level.connectionStates[7]==0, "E must not activate an ordinary door");
 }
 void testModalMouseOwnership()
 {
@@ -75,8 +75,9 @@ void testMapOwnsQueuedActions()
     ItemSession items; game_lab::Level level; items.load(level);
     SurvivalSession player; GameAudio audio; Camera camera{50,0,0};
     const collision::World walls;
-    std::vector<doors::Door> doors{{7,0,{{{{100,100},{100,-100},23},{{100,-100},{100,100},33}}}}};
-    DoorControl control(walls,doors); control.prepareFrame(&camera,0,{});
+    std::vector<doors::Door> doors{{7,{{{{100,100},{100,-100},23},{{100,-100},{100,100},33}}}}};
+    level.connectionStates.resize(8);
+    DoorControl control(walls,doors,level);
     original_map::Session map; map.beginFrame(0);
     // Synthetic permission fixture: real transfer authorization has separate integration tests.
     for (const auto code:{SDL_SCANCODE_M,SDL_SCANCODE_E,SDL_SCANCODE_I,SDL_SCANCODE_Z,
@@ -87,9 +88,9 @@ void testMapOwnsQueuedActions()
     }
     check(!map.modal() && map.blocksSimulation(),"Same-pump close lost transition guard");
     items.update(&camera,!map.blocksSimulation(),walls,player,audio,&control);
-    check(!items.modal() && doors[0].state==doors::State::Closed,"Queued map keys interacted with world");
+    check(!items.modal() && level.connectionStates[7]==0,"Queued map keys interacted with world");
     map.beginFrame(0); items.update(&camera,true,walls,player,audio,&control);
-    check(!items.modal() && doors[0].state==doors::State::Closed,"Map left pending gameplay actions");
+    check(!items.modal() && level.connectionStates[7]==0,"Map left pending gameplay actions");
     // A pending inventory request must win over a later map-open key in the same pump.
     items.handleEvent(keyEvent(SDL_EVENT_KEY_DOWN,SDL_SCANCODE_I),31);
     map.handleEvent(keyEvent(SDL_EVENT_KEY_UP,SDL_SCANCODE_M),31,&camera,false,true,false,true,player);
@@ -105,7 +106,7 @@ int main()
         check(SDL_Init(SDL_INIT_EVENTS), "SDL event initialization failed");
         testQueuedEventsToDoorState(); testModalMouseOwnership(); testMapOwnsQueuedActions();
         SDL_Quit();
-        std::cout << "Physical E binding, SDL events, repeat rejection and individual transition passed.\n";
+        std::cout << "Modal input ownership and E exclusion from ordinary doors passed.\n";
     } catch (const std::exception& error) {
         SDL_Quit();
         std::cerr << error.what() << '\n';

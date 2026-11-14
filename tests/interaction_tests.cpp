@@ -94,10 +94,11 @@ struct Session {
     ItemSession items;
     Camera camera{50,100,0};
     collision::World obstacles;
-    std::vector<doors::Door> doors{{7,0x400,{}}};
-    DoorControl control{obstacles,doors};
+    std::vector<doors::Door> doors{{7,{}}};
     game_lab::Level level;
+    DoorControl control{obstacles,doors,level};
     Session(std::uint16_t type=0x3205,std::uint16_t contents=0x2064) {
+        level.connectionStates.resize(8); level.connectionStates[7]=0x400;
         game_lab::Sector sector{};
         sector.vertices={{100,200},{100,0}}; sector.walls={{0,1,type,contents}};
         level.sectors.push_back(sector); level.accessCode=90; level.codeTargets={0,1}; items.load(level);
@@ -377,7 +378,7 @@ void missingVariants()
           "N reader accepted wrong identifier");
     n.press(SDL_SCANCODE_ESCAPE); n.press(SDL_SCANCODE_E);
     n.press(SDL_SCANCODE_DOWN); n.press(SDL_SCANCODE_DOWN); n.press(SDL_SCANCODE_E);
-    check(!n.items.modal() && n.player.inventory().cards()[2]==0x2001 && n.doors[0].originalState==0x400,
+    check(!n.items.modal() && n.player.inventory().cards()[2]==0x2001 && n.level.connectionStates[7]==0x400,
           "N reader consumed card or altered a door");
     n.items.load(n.level); n.press(SDL_SCANCODE_E);
     check(!n.items.modal(),"Disabled N security lost state on level return");
@@ -406,7 +407,7 @@ void allPanelsLab(const char* path)
             check(length>0,"Degenerate original panel");
             s.camera={(panel.face.a.x+panel.face.b.x)/2+50*dy/length,
                       (panel.face.a.y+panel.face.b.y)/2-50*dx/length,std::atan2(dx,-dy)};
-            s.control.resetLevel(); s.control.prepareFrame(&s.camera,0,{});
+            s.control.resetLevel();
             s.obstacles=s.control.movementWorld();
             check(world.target(s.camera,s.obstacles)==index,"Original panel occluded or unreachable");
             for(const auto& wall:s.obstacles)
@@ -545,7 +546,7 @@ void unifiedControls()
     Session priority;
     priority.doors[0].faces={{{{150,200},{150,0},23},{{150,0},{150,200},33}}};
     priority.press(SDL_SCANCODE_E);
-    check(priority.items.modal() && priority.doors[0].state==doors::State::Closed,
+    check(priority.items.modal() && priority.level.connectionStates[7]==0x400,
           "One E opened a panel and also activated a door behind it");
     Session obsolete;obsolete.press(SDL_SCANCODE_G);
     check(!obsolete.items.modal(),"G still owns normal interaction");
@@ -564,12 +565,12 @@ void cardCountsAndLiftDirections()
         check(reader.items.interfaceState()->notice=="Incompatible card type","Single E001 was misreported as absent");
         if(count>1) {
             reader.press(SDL_SCANCODE_S);reader.press(SDL_SCANCODE_E);
-            check(reader.doors[0].originalState==0,"C001 did not unlock after contextual rejection");
+            check(reader.level.connectionStates[7]==0,"C001 did not unlock after contextual rejection");
         }
     }
     Session onlyC(0x3308,0x0107);std::uint16_t card=0x4001;onlyC.player.inventory().takeSupply(card);
     onlyC.press(SDL_SCANCODE_E);onlyC.press(SDL_SCANCODE_E);
-    check(onlyC.doors[0].originalState==0 && onlyC.player.inventory().cards()[0]==0x1001,
+    check(onlyC.level.connectionStates[7]==0 && onlyC.player.inventory().cards()[0]==0x1001,
           "Exactly one C001 failed door7 or was consumed");
     Session lift(0x3002,1);card=0x3001;lift.player.inventory().takeSupply(card);
     lift.press(SDL_SCANCODE_E);lift.press(SDL_SCANCODE_E);
@@ -659,7 +660,7 @@ void codeTerminal()
     check(s.items.interfaceState()->screen==interaction::Screen::Cards,"Code reader skipped card selection");
     s.press(SDL_SCANCODE_SPACE);
     check(s.items.interfaceState()->screen==interaction::Screen::Codes &&
-          s.items.interfaceState()->notice=="CODE ZONE C200  IJEKAH" && s.doors[0].originalState==0x400,
+          s.items.interfaceState()->notice=="CODE ZONE C200  IJEKAH" && s.level.connectionStates[7]==0x400,
           "Code terminal opened a door or returned invented zone data");
     s.press(SDL_SCANCODE_SPACE);
     check(s.items.interfaceState()->notice=="CODE ZONE B101  JBHGAD","Original code-target list not browsable");
@@ -711,9 +712,9 @@ void sequenceTiming()
     check(opening.items.interfaceState()->frame==frame,"Unfocused animation caught up on resume");
     Session reader(0x3308,0x0107);std::uint16_t card=0x4001;reader.player.inventory().takeSupply(card);
     reader.press(SDL_SCANCODE_E);raw(reader,SDL_SCANCODE_SPACE);
-    check(reader.doors[0].originalState==0x400,"Card granted access before insertion");
+    check(reader.level.connectionStates[7]==0x400,"Card granted access before insertion");
     for(unsigned i=0;i<200 && reader.items.interfaceState()->phase!=Phase::CardResult;++i) reader.tick();
-    check(reader.doors[0].originalState==0 && reader.player.inventory().cards()[0]==0x1001,
+    check(reader.level.connectionStates[7]==0 && reader.player.inventory().cards()[0]==0x1001,
           "Inserted card did not unlock once or was consumed");
     for(unsigned i=0;i<250 && reader.items.modal();++i) reader.tick();
     check(!reader.items.modal(),"Reader result failed to withdraw and close automatically");

@@ -193,7 +193,8 @@ int main(int argc, char* argv[])
     }
     if (credits==StartupCreditsResult::Continue) {
         FirstPersonRenderer firstPerson(renderer);
-        DoorControl doorControl(collisionWorld, levelDoors);
+        game_lab::Level emptyLevel;
+        DoorControl doorControl(collisionWorld, levelDoors, data ? data->level : emptyLevel);
         PlayerInput playerInput(window, doorControl);
         GameAudio gameAudio;
         if (data) gameAudio.load(std::filesystem::path(argv[1]).parent_path() / "DATA");
@@ -215,6 +216,7 @@ int main(int argc, char* argv[])
             if (!debugMenu.enemiesEnabled()) activeEnemies=nullptr;
             debugPaused=debugMenu.open();
 #endif
+            const bool wasItemModal=items.modal();
             mapSession.beginFrame(data?data->level.zoneIndex:0);
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
@@ -258,10 +260,6 @@ int main(int argc, char* argv[])
                     !event.key.repeat) {
                     showPolygons = !showPolygons;
                     SDL_Log("Polygon contours: %s", showPolygons ? "on" : "off");
-                }
-                if (survival.alive() && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_O &&
-                    !event.key.repeat) {
-                    doors::toggleAll(levelDoors);
                 }
 #endif
                 if (event.type == SDL_EVENT_QUIT ||
@@ -309,6 +307,7 @@ int main(int argc, char* argv[])
                         SDL_Log("Elevator: same-level transfer to sector %u",
                                 travel->arrival.sector);
 
+                        doorControl.resetLevel();
                         previousTicks = SDL_GetTicks();
                         continue;
                     }
@@ -352,10 +351,13 @@ int main(int argc, char* argv[])
                 } catch (const std::exception& error) {
                     SDL_Log("Elevator destination load failed: %s",error.what());
                 }
+                doorControl.resetLevel();
                 previousTicks=SDL_GetTicks();
                 continue; // No simulation with elapsed time or input from the old world.
             }
-            const bool modalBlocked = debugPaused || items.modal() || mapSession.blocksSimulation();
+            const bool itemTransition=wasItemModal!=items.modal();
+            if (itemTransition) playerInput.invalidateContext();
+            const bool modalBlocked = debugPaused || items.modal() || itemTransition || mapSession.blocksSimulation();
             const bool simulationActive = inputActive && !modalBlocked;
             mapSession.update(debugPaused?0:elapsedSeconds,SDL_GetKeyboardFocus()==window);
             texturePreview.update(modalBlocked?0:elapsedSeconds);
@@ -365,7 +367,7 @@ int main(int argc, char* argv[])
             playerInput.setAudioEnabled(gameAudio.enabled());
             playerInput.setObjectConstraint([&](const Camera& before, Camera& candidate) {
                 if (!data) return;
-                const auto location = collision::locate(data->level,{before.x,before.y});
+                const auto location = collision::locate(data->level,{before.x,before.y},before.sector);
                 if (!location) return;
                 const auto corrected = collision::constrainObjets(data->level,location->sector,
                     {before.x,before.y},{candidate.x,candidate.y},spriteScene ? &*spriteScene : nullptr);
@@ -378,20 +380,29 @@ int main(int argc, char* argv[])
                 break;
             }
 
+            const bool doorReady=doorControl.beginFrame(simulationActive && survival.alive() && playerInput.fireReady());
             if (activeEnemies && camera && data)
                 activeEnemies->update(data->level,*camera,doorControl.movementWorld(),survival.vitals(),
                     elapsedSeconds,simulationActive && survival.alive(),
                     [&](double seconds) {
                         playerInput.move(*camera,seconds,activeEnemies->reacting(),
                             [&](const Camera& before, Camera& after) {
-                                activeEnemies->constrainPlayer(data->level,before,after,doorControl.movementWorld());
+                                activeEnemies->constrainPlayer(data->level,before,after,doorControl.staticWorld());
                             });
                     },
                     [&]() {
                         const auto before=*camera;
                         playerInput.recoil(*camera);
-                        activeEnemies->constrainPlayer(data->level,before,*camera,doorControl.movementWorld());
+                        activeEnemies->constrainPlayer(data->level,before,*camera,doorControl.staticWorld());
                     },levelDoors,spriteScene ? &*spriteScene : nullptr);
+            // One connection correction for the aggregate player update, never
+            // inside the enemy/posture substeps. Then the common DOS door delta.
+            if (simulationActive && survival.alive() && playerInput.fireReady() && camera) {
+                if (doorControl.constrainPlayer(beforeMovement,*camera))
+                    survival.postMessage(messages::Id::PortalLocked);
+                if (doorReady) doorControl.updateDoors();
+                else doorControl.rebuildWorld();
+            }
             const double effectiveMovement=camera ? std::hypot(camera->x-beforeMovement.x,camera->y-beforeMovement.y) : 0;
             if (activeEnemies) for (const auto sound:activeEnemies->takeSounds()) gameAudio.enemyEffect(sound);
             if (survival.update(elapsedSeconds,simulationActive,gameAudio,playerInput.running() && effectiveMovement>0))
@@ -410,7 +421,8 @@ int main(int argc, char* argv[])
                     activeEnemies->simulationTicks(),survival.inventory().detectorEnabled());
             }
             hudState.firing=weaponFire.firing(); hudState.barrelPhase=weaponFire.barrelPhase();
-            gameAudio.update(levelDoors, playerInput.footsteps());
+            gameAudio.update(data ? data->level : emptyLevel, levelDoors, playerInput.footsteps(),doorReady);
+            doorControl.resetCounter(); // Separate from the earlier read; rendering belongs to the next interval.
             if (!SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) ||
                 !SDL_RenderClear(renderer) ||
                 (data && !(show3D && camera

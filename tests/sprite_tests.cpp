@@ -217,13 +217,13 @@ void sceneOcclusion()
         scene.objects[0].x = 50;
         check(!red(&doors,{150,100,3.141592653589793}), "Door reverse face leaked sprite");
         scene.objects[0].x = 150;
-        doors[0].progress = 0.5;
+        level.connectionStates[doors[0].stateIndex]=30;
         scene.objects[0].y = 50;
         check(!red(&doors,{50,50,0}), "Partial door surface leaked sprite");
         scene.objects[0].y = 150;
         check(red(&doors,{50,150,0}), "Partial door gap hid sprite");
         scene.objects[0].y = 100;
-        doors[0].progress = 1;
+        level.connectionStates[doors[0].stateIndex]=60;
         check(red(&doors,{50,100,0}), "Open door still occluded sprite");
         level.sectors[0].walls[0].type = 1;
         check(!red(nullptr,{50,100,0}), "Solid wall did not occlude sprite");

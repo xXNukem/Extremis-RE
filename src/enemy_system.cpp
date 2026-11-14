@@ -120,8 +120,8 @@ void System::step(const game_lab::Level& level, const Camera& camera, const coll
                     const std::vector<doors::Door>& dynamicDoors, const sprites::Scene* objets)
 {
     ++ticks_; effects_.step(camera,walls);
-    const auto location=collision::locate(level,{camera.x,camera.y});
-    const auto visible=doors::connectedSectors(level,location ? location->sector : level.sectors.size(),dynamicDoors);
+    const auto location=collision::locate(level,{camera.x,camera.y},camera.sector);
+    const auto visible=doors::connectedSectors(level,camera.sector.value_or(location ? location->sector : level.sectors.size()));
     for (std::size_t i=0;i<records_.size();++i) {
         auto& e=records_[i];
         if (e.health==0xffff) continue;
@@ -320,8 +320,8 @@ void System::constrainPlayer(const game_lab::Level& level, const Camera& before,
 bool System::blocksInterface(const game_lab::Level& level, const Camera& camera,
                              const std::vector<doors::Door>& dynamicDoors) const
 {
-    const auto location=collision::locate(level,{camera.x,camera.y});
-    const auto visible=doors::connectedSectors(level,location ? location->sector : level.sectors.size(),dynamicDoors);
+    const auto location=collision::locate(level,{camera.x,camera.y},camera.sector);
+    const auto visible=doors::connectedSectors(level,camera.sector.value_or(location ? location->sector : level.sectors.size()));
     for (const auto& e:records_) {
         if (e.health==0xffff || e.sector>=level.sectors.size()) continue;
         if (visible[e.sector]) return true;

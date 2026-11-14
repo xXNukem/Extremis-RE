@@ -353,8 +353,7 @@ void ItemSession::update(const Camera* camera, bool active, const collision::Wor
                 open(*target,player);
                 if (interface_->screen!=interaction::Screen::Cards) audio.interfaceMotor();
             }
-        } else if (security && security->interact(*camera)==DoorControl::UseResult::Locked)
-            player.postMessage(messages::Id::PortalLocked);
+        }
         return; // One E selects one context; opening never confirms or also uses a door.
     }
     if (injector) player.inventory().useInjector(player.vitals());

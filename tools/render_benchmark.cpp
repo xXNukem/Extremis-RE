@@ -317,10 +317,11 @@ int main(int argc, char* argv[])
                 surfaceMicrobench(size.x, size.y, camera, data.level, bank);
             }
             for (const bool open : {false, true}) for (const bool textured : {false, true}) {
-                auto doors = doors::closedDoors(data.level);
-                if (open) { doors::toggleAll(doors); doors::updateAll(doors, 1.0); }
+                auto level=data.level;
+                auto doors = doors::closedDoors(level);
+                if (open) for (const auto& door:doors) level.connectionStates[door.stateIndex]|=0x0140;
                 std::uint64_t allocationCount = 0;
-                const auto samples = measure(target, data.level, camera, bank, doors,
+                const auto samples = measure(target, level, camera, bank, doors,
                                               textured ? &planes : nullptr, frames, paced, allocationCount);
                 printSamples(target, textured, open, paced, samples, allocationCount);
             }

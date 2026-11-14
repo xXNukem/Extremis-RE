@@ -69,7 +69,7 @@ bool PlayerInput::update(Camera* camera, bool view3D, double seconds, bool defer
 {
     footsteps_ = 0;
     movementDistance_ = 0; running_=false; fireReady_=false;
-    doors_.prepareFrame(camera, seconds, settings_.collision);
+
     const bool desired = camera && view3D && SDL_GetKeyboardFocus() == window_;
     const auto capture = updateCapture(desired);
     if (capture != CaptureStatus::Ready) { firePressed_=false; return capture != CaptureStatus::Failed; }
@@ -94,7 +94,7 @@ void PlayerInput::move(Camera& camera, double seconds, bool blocked, const playe
     if (!fireReady_) return; // Capture, modal and focus gates still own input.
     input_.blockMovement=blocked;
     const double beforeX=camera.x, beforeY=camera.y;
-    footsteps_ += player::update(camera,input_,seconds,settings_,&doors_.movementWorld(),audioEnabled_,constrain,objectConstraint_);
+    footsteps_ += player::update(camera,input_,seconds,settings_,&doors_.staticWorld(),audioEnabled_,constrain,objectConstraint_);
     input_.mouseX=0; // Relative mouse motion is consumed once, even across ticks.
     running_=!blocked && input_.run && camera.postureHeight>=150 &&
         (input_.forward!=0 || input_.right!=0);
@@ -103,7 +103,7 @@ void PlayerInput::move(Camera& camera, double seconds, bool blocked, const playe
 
 void PlayerInput::recoil(Camera& camera)
 {
-    player::recoil(camera,doors_.movementWorld(),settings_.collision,objectConstraint_);
+    player::recoil(camera,doors_.staticWorld(),settings_.collision,objectConstraint_);
     running_=false;
 }
 

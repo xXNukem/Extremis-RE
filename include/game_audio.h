@@ -8,7 +8,8 @@ public:
     bool enabled() const { return enabled_; }
     enum class DeathSound { Health, Oxygen };
     void load(const std::filesystem::path& directory);
-    void update(const std::vector<doors::Door>& doors, unsigned footsteps = 0);
+    void update(const game_lab::Level& level, const std::vector<doors::Door>& doors,
+                unsigned footsteps = 0, bool active = true);
     void beginDeath(DeathSound cause);
     void endDeath();
     void confirmItemSelection();
@@ -29,6 +30,6 @@ private:
     std::uint64_t reportedCompletions_ = 0;
     bool enabled_ = false;
     std::optional<DeathSound> death_;
-    void updateDoors(const std::vector<doors::Door>& doors);
+    void updateDoors(const game_lab::Level& level, const std::vector<doors::Door>& doors, bool active);
     void updateFootsteps(unsigned footsteps);
 };

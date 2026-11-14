@@ -250,11 +250,11 @@ void formatConversion()
     }
 }
 
-void waitForCompletion(GameAudio& game, const std::vector<doors::Door>& doors, unsigned count)
+void waitForCompletion(GameAudio& game, const game_lab::Level& level, const std::vector<doors::Door>& doors, unsigned count)
 {
     const auto until = SDL_GetTicks() + 1500;
     while (SDL_GetTicks() < until) {
-        game.update(doors);
+        game.update(level,doors);
         const auto stats = game.doorStatistics();
         if (stats && stats->completed >= count) return;
         SDL_Delay(5);
@@ -289,23 +289,32 @@ void doorEvents(const std::filesystem::path& directory)
     GameAudio game;
     game.load(folder);
     check(game.doorStatistics().has_value(), "Cannot open dummy door audio device");
+    game_lab::Level level; level.connectionStates.resize(15);
     std::vector<doors::Door> doors(15);
-    game.update(doors);
+    for (unsigned i=0;i<doors.size();++i) doors[i].stateIndex=i;
+    game.update(level,doors);
     check(game.doorStatistics()->requests == 0, "Idle doors triggered audio");
-    for (auto& door : doors) { door.state = doors::State::Opening; door.progress = 0.5; }
-    waitForCompletion(game,doors,1);
-    for (int i = 0; i < 100; ++i) game.update(doors);
+    for (auto& state : level.connectionStates) state=0x11e;
+    game.update(level,doors,0,false);
+    check(game.doorStatistics()->requests==0,"Paused leaf triggered movement audio");
+    waitForCompletion(game,level,doors,1);
+    for (int i = 0; i < 100; ++i) game.update(level,doors);
     auto stats = *game.doorStatistics();
     check(stats.requests == 1 && stats.started == 1 && stats.sourceFrames == 128 &&
           stats.wraps == 0 && stats.completed == 1, "Movement retriggered a completed door effect");
-    for (auto& door : doors) { door.state = doors::State::Open; door.progress = 1; }
-    game.update(doors);
+    for (auto& state : level.connectionStates) state=90;
+    game.update(level,doors);
     check(game.doorStatistics()->requests == 1 && game.doorStatistics()->stopped == 0,
           "Endpoint retriggered/truncated the effect");
-    doors[0].state = doors::State::Closing; doors[0].progress = 0.5;
-    game.update(doors);
-    doors[0].state = doors::State::Closed; doors[0].progress = 0;
-    waitForCompletion(game,doors,2);
+    for (const auto phase:{60,61,64,89,90}) {
+        for (auto& state:level.connectionStates) state=0x100|phase;
+        game.update(level,doors);
+        check(game.doorStatistics()->requests==1,"Hidden interval triggered leaf audio");
+    }
+    level.connectionStates[0]=30;
+    game.update(level,doors);
+    level.connectionStates[0]=0;
+    waitForCompletion(game,level,doors,2);
     stats = *game.doorStatistics();
     check(stats.requests == 2 && stats.started == 2 && stats.completed == 2 &&
           stats.sourceFrames == 256 && stats.wraps == 0 && stats.stopped == 0,
@@ -319,34 +328,35 @@ void footstepEvents(const std::filesystem::path& directory)
     GameAudio game;
     game.load(folder);
     check(game.effectStatistics(7).has_value(), "Cannot open dummy footstep device");
+    game_lab::Level level; level.connectionStates={0};
     const std::vector<doors::Door> idleDoors;
-    for (int frame = 0; frame < 100; ++frame) game.update(idleDoors,0);
+    for (int frame = 0; frame < 100; ++frame) game.update(level,idleDoors,0);
     check(game.effectStatistics(7)->started == 0, "Idle player triggered footsteps");
-    game.update(idleDoors,1);
+    game.update(level,idleDoors,1);
     check(game.effectStatistics(7)->started == 1, "Effective movement did not start original ID 7");
-    game.update(idleDoors,3);
+    game.update(level,idleDoors,3);
     check(game.effectStatistics(7)->started == 1, "Duplicate cycle events overlapped a step");
     const auto until = SDL_GetTicks() + 1500;
     while (game.effectStatistics(7)->completed < 1 && SDL_GetTicks() < until) {
-        game.update(idleDoors,0);
+        game.update(level,idleDoors,0);
         SDL_Delay(5);
     }
     auto step = *game.effectStatistics(7);
     check(step.completed == 1 && step.sourceFrames == 128 && step.wraps == 0,
           "Footstep failed to finish once after stopping movement");
     std::vector<doors::Door> doors(1);
-    doors[0].state = doors::State::Opening; doors[0].progress = 0.5;
-    game.update(doors,1); // A new full step and the door cue share the existing mixer.
+    level.connectionStates[0]=0x11e;
+    game.update(level,doors,1); // A new full step and the door cue share the existing mixer.
     check(game.effectStatistics(7)->started == 2 && game.doorStatistics()->started == 1,
           "Footstep suppressed or restarted door audio");
-    waitForCompletion(game,doors,1);
+    waitForCompletion(game,level,doors,1);
     const auto end = SDL_GetTicks() + 1500;
     while (game.effectStatistics(7)->completed < 2 && SDL_GetTicks() < end) SDL_Delay(5);
     step = *game.effectStatistics(7);
     check(step.completed == 2 && step.sourceFrames == 256 && step.wraps == 0 &&
           game.doorStatistics()->sourceFrames == 128 && game.doorStatistics()->wraps == 0,
           "Simultaneous footsteps/door did not complete independently");
-    for (int frame = 0; frame < 100; ++frame) game.update(doors,0);
+    for (int frame = 0; frame < 100; ++frame) game.update(level,doors,0);
     check(game.effectStatistics(7)->started == 2 && game.doorStatistics()->started == 1,
           "Finished footsteps or ongoing door movement retriggered audio");
 }

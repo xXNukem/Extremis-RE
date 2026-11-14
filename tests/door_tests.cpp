@@ -30,7 +30,7 @@ void testRecognition()
     auto level = fixture();
     auto doors = doors::closedDoors(level);
     check(doors.size() == 1 && doors[0].stateIndex == 0 &&
-          doors[0].originalState == 0x0400 && doors[0].faces[0].material == 23 &&
+          level.connectionStates[0] == 0x0400 && doors[0].faces[0].material == 23 &&
           doors[0].faces[1].material == 33, "Paired door/state/material recognition failed");
     check(level.sectors[0].walls[0].type == 0x1017, "Map wall was modified");
     level.sectors[0].walls[0].type = level.sectors[1].walls[0].type = 0x1000;
@@ -74,68 +74,32 @@ void testVisibility()
 
 void testAnimationStates()
 {
-    auto list = doors::closedDoors(fixture());
-    auto& door = list[0];
-    check(door.state == doors::State::Closed && door.progress == 0,
-          "Door did not start closed");
-    doors::toggle(door);
-    doors::update(door, 0.4);
-    check(door.state == doors::State::Opening && std::abs(door.progress - 0.4) < 1e-12,
-          "Opening progress incorrect");
-    doors::toggle(door);
-    check(door.state == doors::State::Closing && std::abs(door.progress - 0.4) < 1e-12,
-          "Reversal reset progress");
-    doors::update(door, 0.1);
-    check(std::abs(door.progress - 0.3) < 1e-12, "Closing after reversal incorrect");
-    doors::toggle(door);
-    doors::update(door, 2.0);
-    check(door.state == doors::State::Open && door.progress == 1,
-          "Door did not finish opening");
-    doors::toggle(door);
-    doors::update(door, 2.0);
-    check(door.state == doors::State::Closed && door.progress == 0,
-          "Door did not finish closing");
-}
-
-void testIndependentTimeSteps()
-{
-    auto list = doors::closedDoors(fixture());
-    list.push_back(list.front());
-    doors::toggle(list[0]);
-    doors::updateAll(list, 0.25);
-    check(list[0].progress == 0.25 && list[1].progress == 0 &&
-          list[1].state == doors::State::Closed, "Doors share animation state");
-    doors::toggleAll(list);
-    doors::updateAll(list, 0.1);
-    check(std::abs(list[0].progress - 0.15) < 1e-12 &&
-          std::abs(list[1].progress - 0.1) < 1e-12,
-          "Independent directions or debug toggle failed");
-    auto fine = doors::closedDoors(fixture())[0], coarse = fine;
-    doors::toggle(fine);
-    doors::toggle(coarse);
-    for (int i = 0; i < 60; ++i) doors::update(fine, 1.0 / 60.0);
-    doors::update(coarse, 1.0);
-    check(fine.state == coarse.state && fine.progress == coarse.progress &&
-          fine.state == doors::State::Open, "Opening depends on FPS");
-    doors::toggle(fine);
-    doors::toggle(coarse);
-    for (int i = 0; i < 60; ++i) doors::update(fine, 1.0 / 60.0);
-    doors::update(coarse, 1.0);
-    check(fine.state == coarse.state && fine.progress == coarse.progress &&
-          fine.state == doors::State::Closed, "Closing depends on FPS");
+    auto level=fixture();
+    const auto list=doors::closedDoors(level);
+    level.connectionStates[0]|=doors::dos::opening;
+    check(doors::connectionEnabled(level,0), "Request at phase zero must connect sectors");
+    for (int i=0;i<90;++i) doors::dos::updateTable(level.connectionStates,2);
+    check(level.connectionStates[0]==(0x400|90), "Door did not reverse at 90");
+    for (int i=0;i<90;++i) doors::dos::updateTable(level.connectionStates,2);
+    check(level.connectionStates[0]==0x400 && !doors::connectionEnabled(level,0), "Automatic closure/lock");
+    for (const int phase : {0,59,60,61,64,89,90}) {
+        level.connectionStates[0]=0x400|phase;
+        for (const auto& face:list[0].faces)
+            check(bool(doors::visibleFace(level,list[0],face))==(phase<60), "Face phase threshold");
+    }
 }
 
 void testRetractedGeometry()
 {
-    const auto level = fixture();
+    auto level = fixture();
     auto list = doors::closedDoors(level);
     auto& door = list[0];
     const auto original = door.faces;
-    doors::toggle(door);
+    level.connectionStates[0]=0x500;
     for (int step = 1; step <= 3; ++step) {
-        doors::update(door, 0.25);
-        const auto front = doors::visibleFace(door, door.faces[0]);
-        const auto back = doors::visibleFace(door, door.faces[1]);
+        doors::dos::updateTable(level.connectionStates,30);
+        const auto front = doors::visibleFace(level, door, door.faces[0]);
+        const auto back = doors::visibleFace(level, door, door.faces[1]);
         check(front && back && front->a.x == 100 && front->a.y == 100 - step * 25 &&
               front->b.y == 0 && back->a.y == step * 25 && back->b.y == 100 &&
               front->textureSpan == 1 - step * 0.25 && front->material == 23 &&
@@ -143,22 +107,21 @@ void testRetractedGeometry()
         check(castSceneRay(level, {50, 90, 0}, 1, 0, &list).distance == 150,
               "Retracted opening still blocked by a door face");
     }
-    doors::update(door, 0.25);
-    check(!doors::visibleFace(door, door.faces[0]) &&
-          !doors::visibleFace(door, door.faces[1]) &&
+    doors::dos::updateTable(level.connectionStates,30);
+    check(!doors::visibleFace(level, door, door.faces[0]) &&
+          !doors::visibleFace(level, door, door.faces[1]) &&
           castSceneRay(level, {50, 50, 0}, 1, 0, &list).distance == 150,
           "Fully open door has a visible surface");
-    doors::toggle(door);
-    doors::update(door, 1.0);
-    const auto restored = doors::visibleFace(door, door.faces[0]);
+    level.connectionStates[0]=0x400;
+    const auto restored = doors::visibleFace(level, door, door.faces[0]);
     check(restored && restored->a.y == original[0].a.y &&
           restored->b.y == original[0].b.y && restored->textureSpan == 1 &&
-          restored->material == original[0].material && door.originalState == 0x0400,
+          restored->material == original[0].material && level.connectionStates[0] == 0x0400,
           "Closing did not restore original pose/material/state word");
 }
 
 void testTextureRetraction(FirstPersonRenderer& view, SDL_Renderer* renderer,
-                           SDL_Surface* surface, const game_lab::Level& level)
+                           SDL_Surface* surface, game_lab::Level level)
 {
     auto list = doors::closedDoors(level);
     wall_textures::Bank bank;
@@ -179,12 +142,12 @@ void testTextureRetraction(FirstPersonRenderer& view, SDL_Renderer* renderer,
         return color;
     };
     const auto initial = drawPixel();
-    doors::toggleAll(list);
+    level.connectionStates[0]=0x500;
     const double shade = 0.2 + 0.8 / (1 + 50.0 / 700);
     // The center pixel is at eye height, measured from the texture's top.
     const int row = int(74 * (256.0 - Camera::eyeHeight) / 256.0);
     for (int step = 1; step <= 3; ++step) {
-        doors::updateAll(list, 0.25);
+        doors::dos::updateTable(level.connectionStates,30);
         const auto color = drawPixel();
         // Fixed world ray: the texture slides 15 columns per quarter stroke.
         const int column = 45 - 15 * step;
@@ -192,12 +155,11 @@ void testTextureRetraction(FirstPersonRenderer& view, SDL_Renderer* renderer,
               color.g == Uint8(row * 3 * shade) && color.b == Uint8(17 * shade),
               "Moving door stretched/mirrored texture or changed vertical extent");
     }
-    doors::updateAll(list, 0.25);
+    doors::dos::updateTable(level.connectionStates,30);
     const auto open = drawPixel();
     check(open.r == 0 && open.g > 0 && open.b == 0,
           "Fully open door did not reveal the wall behind it");
-    doors::toggleAll(list);
-    doors::updateAll(list, 1.0);
+    level.connectionStates[0]=0x400;
     const auto restored = drawPixel();
     check(restored.r == initial.r && restored.g == initial.g && restored.b == initial.b,
           "Closing did not restore the original texture sampling");
@@ -205,7 +167,7 @@ void testTextureRetraction(FirstPersonRenderer& view, SDL_Renderer* renderer,
 
 void testDrawing()
 {
-    const auto level = fixture();
+    auto level = fixture();
     const auto doors = doors::closedDoors(level);
     wall_textures::Bank bank;
     bank.textures.resize(34, {1, 1, {{0, 0, 0}}});
@@ -237,7 +199,6 @@ int main()
         testRecognition();
         testVisibility();
         testAnimationStates();
-        testIndependentTimeSteps();
         testRetractedGeometry();
         testDrawing();
         std::cout << "Closed door recognition, faces, occlusion and rendering passed.\n";

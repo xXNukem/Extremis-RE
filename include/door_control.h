@@ -2,41 +2,33 @@
 
 #include "camera.h"
 #include "door.h"
+#include "door_clock.h"
 #include "player_collision.h"
 
-// Coordinates the existing doors with one player's collision world and use action.
-// Borrows both collections; neither rendering nor SDL is involved.
+// Connection movement runs once after the player's proposed movement, not per
+// enemy/posture substep. State words belong exclusively to the borrowed level.
 class DoorControl {
 public:
-    enum class UseResult { None, Activated, Locked };
-    enum class UseReason { NoCandidate, OutOfRange, Occluded, AccessCondition, Accepted };
-    struct UseTrace {
-        UseReason reason = UseReason::NoCandidate;
-        std::optional<std::size_t> doorIndex;
-        std::optional<std::uint16_t> doorId;
-        double distance = 0;
-        double range = 0;
-        std::optional<double> obstacleDistance;
-        doors::State before = doors::State::Closed;
-        doors::State after = doors::State::Closed;
-        double progress = 0;
-    };
-    DoorControl(const collision::World& staticWorld, std::vector<doors::Door>& doors);
-    void resetLevel();
-    void prepareFrame(const Camera* player, double seconds, const collision::Settings& body);
-    UseResult interact(const Camera& player, double range = 200.0, UseTrace* trace = nullptr);
+    using Time = doors::dos::Counter::Time;
+    using Clock = doors::dos::Counter::Clock;
+    DoorControl(const collision::World& staticWorld, const std::vector<doors::Door>& doors,
+                game_lab::Level& level, Time now = Clock::now());
+    void resetLevel(Time now = Clock::now());
+    bool beginFrame(bool active, Time now = Clock::now());
+    // Returns whether the ordinary request encountered an access lock.
+    bool constrainPlayer(const Camera& before, Camera& proposed);
+    void updateDoors(Time now = Clock::now());
+    void resetCounter(Time now = Clock::now());
+    void rebuildWorld();
     enum class CardResult { Unlocked, AlreadyDisabled, Rejected, NoCard, InvalidTarget };
     CardResult useCardReader(std::uint16_t parameter, std::optional<std::uint16_t> card);
-    const collision::World& movementWorld() const;
+    const collision::World& movementWorld() const { return movementWorld_; }
+    const collision::World& staticWorld() const { return staticWorld_; }
 private:
     const collision::World& staticWorld_;
-    std::vector<doors::Door>& doors_;
-    std::vector<std::optional<std::size_t>> approachFaces_;
+    const std::vector<doors::Door>& doors_;
+    game_lab::Level& level_;
     collision::World movementWorld_;
-    struct Target { std::size_t index; double distance; };
-    std::optional<Target> findTarget(const Camera& player) const;
-    UseResult activate(const Target& target, UseTrace& trace);
-    void chooseApproach(std::size_t index, const Camera& player, double clearance);
-    void advanceSafely(std::size_t index, const Camera* player, double seconds, double clearance);
-    void rebuildWorld();
+    doors::dos::Counter counter_;
+    bool active_ = false;
 };

@@ -4,6 +4,29 @@
 #include <cmath>
 
 namespace doors {
+void dos::updateTable(std::vector<std::uint16_t>& states, std::uint16_t counter)
+{
+    const auto delta = increment(counter);
+    for (auto& state : states) state = update(state, delta);
+}
+
+std::uint16_t dos::update(std::uint16_t state, std::uint8_t delta)
+{
+    auto value = phase(state);
+    if (state & opening) {
+        value = static_cast<std::uint8_t>(value + delta); // ADD AL,BL wraps first.
+        // CMP AL,90 / JL: signed byte comparison, without signed narrowing.
+        if (value >= 90 && value < 128) {
+            value = 90;
+            state ^= opening; // Discard excess; no descending step this call.
+        }
+    } else {
+        value = static_cast<std::uint8_t>(value - delta);
+        if (value & 0x80) value = 0; // SUB AL,BL / JNS tests SF, not borrow.
+    }
+    return static_cast<std::uint16_t>((state & 0xff00) | value);
+}
+
 namespace {
 Point vertex(const game_lab::Sector& sector, std::uint16_t index)
 {
@@ -45,20 +68,13 @@ bool reversedPair(const Candidate& a, const Candidate& b)
 }
 } // namespace
 
-bool connectionEnabled(const game_lab::Level& level, std::uint16_t stateIndex,
-                       const std::vector<Door>& dynamicDoors)
+bool connectionEnabled(const game_lab::Level& level, std::uint16_t stateIndex)
 {
-    if (stateIndex >= level.connectionStates.size()) return false;
-    for (const auto& door : dynamicDoors) {
-        if (door.stateIndex != stateIndex) continue;
-        return door.state == State::Opening || door.state == State::Open ||
-               (door.state == State::Closing && door.progress > 0);
-    }
-    return (level.connectionStates[stateIndex] & 0x01ff) != 0;
+    return stateIndex < level.connectionStates.size() &&
+           dos::connected(level.connectionStates[stateIndex]);
 }
 
-std::vector<bool> connectedSectors(const game_lab::Level& level, std::size_t start,
-                                   const std::vector<Door>& dynamicDoors)
+std::vector<bool> connectedSectors(const game_lab::Level& level, std::size_t start)
 {
     std::vector<bool> visible(level.sectors.size(), false);
     if (start >= visible.size()) return visible;
@@ -72,7 +88,7 @@ std::vector<bool> connectedSectors(const game_lab::Level& level, std::size_t sta
         for (std::size_t i = 0; i < sector.neighbors.size() && i < sector.walls.size(); ++i) {
             const auto next = sector.neighbors[i];
             if (next >= visible.size() || visible[next] ||
-                !connectionEnabled(level, sector.walls[i].extra, dynamicDoors)) continue;
+                !connectionEnabled(level, sector.walls[i].extra)) continue;
             visible[next] = true;
             pending.push_back(next);
         }
@@ -80,45 +96,12 @@ std::vector<bool> connectedSectors(const game_lab::Level& level, std::size_t sta
     return visible;
 }
 
-void toggle(Door& door)
+std::optional<Face> visibleFace(const game_lab::Level& level, const Door& door, const Face& closedFace)
 {
-    door.state = door.state == State::Closed || door.state == State::Closing
-        ? State::Opening : State::Closing;
-}
-
-void toggleAll(std::vector<Door>& doors)
-{
-    for (auto& door : doors) toggle(door);
-}
-
-void update(Door& door, double elapsedSeconds)
-{
-    if (!std::isfinite(elapsedSeconds) || elapsedSeconds <= 0) return;
-    constexpr double strokeSeconds = 1.0; // Original speed has not been established.
-    if (door.state != State::Opening && door.state != State::Closing) return;
-    const double direction = door.state == State::Opening ? 1.0 : -1.0;
-    door.progress = std::clamp(door.progress + direction * elapsedSeconds / strokeSeconds,
-                               0.0, 1.0);
-    // Snap only round-off at the endpoints (e.g. sixty updates of 1/60 second).
-    if (door.progress <= 1e-12) {
-        door.progress = 0.0;
-        door.state = State::Closed;
-    }
-    if (door.progress >= 1.0 - 1e-12) {
-        door.progress = 1.0;
-        door.state = State::Open;
-    }
-}
-
-void updateAll(std::vector<Door>& doors, double elapsedSeconds)
-{
-    for (auto& door : doors) update(door, elapsedSeconds);
-}
-
-std::optional<Face> visibleFace(const Door& door, const Face& closedFace)
-{
-    if (door.state == State::Open || door.progress >= 1.0) return std::nullopt;
-    const double span = 1.0 - std::clamp(door.progress, 0.0, 1.0);
+    if (door.stateIndex >= level.connectionStates.size()) return std::nullopt;
+    const auto phase = dos::phase(level.connectionStates[door.stateIndex]);
+    if (phase >= 60) return std::nullopt;
+    const double span = double(60 - phase) / 60;
     return Face{{closedFace.b.x + (closedFace.a.x - closedFace.b.x) * span,
                  closedFace.b.y + (closedFace.a.y - closedFace.b.y) * span},
                 closedFace.b, closedFace.material, span};
@@ -137,7 +120,6 @@ std::vector<Door> closedDoors(const game_lab::Level& level)
         // Ambiguous IDs are deliberately not rendered as guessed doors.
         if (count == 2 && match > i && match < faces.size()) {
             result.push_back({faces[i].stateIndex,
-                level.connectionStates[faces[i].stateIndex],
                 {faces[i].face, faces[match].face}});
         }
     }

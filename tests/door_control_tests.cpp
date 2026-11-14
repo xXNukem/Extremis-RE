@@ -1,267 +1,220 @@
 #include "door_control.h"
-#include "player_control.h"
-
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
 
 namespace {
-constexpr double pi = 3.14159265358979323846;
-const collision::Settings body{10, 0.0001, 8};
-void check(bool value, const char* message)
+using namespace std::chrono_literals;
+constexpr double pi=3.14159265358979323846;
+void check(bool value,const char* message) { if (!value) throw std::runtime_error(message); }
+game_lab::Level fixture()
 {
-    if (!value) throw std::runtime_error(message);
+    game_lab::Level level;
+    game_lab::Sector a{},b{};
+    a.vertices={{500,300},{500,100},{0,100},{0,300}};
+    a.walls={{0,1,0x1017,0}}; a.neighbors={1}; a.polygons={{{0,1,2,3},0,{}}};
+    b.gx=500; b.vertices={{0,100},{0,300},{500,300},{500,100}};
+    b.walls={{0,1,0x1021,0}}; b.neighbors={0}; b.polygons={{{0,1,2,3},0,{}}};
+    level.sectors={a,b}; level.connectionStates={0};
+    return level;
 }
-bool near(double a, double b) { return std::abs(a - b) < 0.001; }
-
-doors::Door doorAt(double x = 100)
+Camera camera(double x,double y,double angle,unsigned sector)
 {
-    return {0, 0, {{{{x, 100}, {x, -100}, 23}, {{x, -100}, {x, 100}, 33}}}};
+    Camera c{x,y,angle}; c.sector=sector; return c;
 }
-
-void testDoorCollision()
+struct World {
+    game_lab::Level level=fixture();
+    std::vector<doors::Door> doors=doors::closedDoors(level);
+    collision::World walls=collision::staticWorld(level);
+    DoorControl control{walls,doors,level,DoorControl::Time{}};
+};
+void requests()
 {
-    const collision::World walls;
-    for (const double side : {-1.0, 1.0}) {
-        Camera camera{100 + side * 50, 0, side < 0 ? 0 : pi};
-        std::vector<doors::Door> doors{doorAt()};
-        DoorControl control(walls, doors);
-        control.prepareFrame(&camera, 0, body);
-        auto result = collision::move(control.movementWorld(), {camera.x, camera.y}, {-side * 100000, 0}, body);
-        check(near(result.x, 100 + side * 10), "Closed door allows passage from one side or at high speed");
-        doors::toggle(doors[0]);
-        control.prepareFrame(&camera, 1, body);
-        result = collision::move(control.movementWorld(), {camera.x, camera.y}, {-side * 100, 0}, body);
-        check(near(result.x, camera.x - side * 100), "Open door blocks passage");
+    for (const bool reverse:{false,true}) {
+        World w;
+        const auto before=camera(reverse?680:320,200,reverse?pi:0,reverse?1:0);
+        auto next=before; next.x+=reverse?-10:10;
+        w.control.constrainPlayer(before,next);
+        check(w.level.connectionStates[0]==0x100,"Both faces must request the same word");
+        check(next.x==before.x && next.sector==before.sector,"Opening must keep normal 180 and sector");
+        check(doors::connectionEnabled(w.level,0),"Request must connect at phase zero");
+        w.level.connectionStates[0]=59;
+        w.control.constrainPlayer(before,next);
+        check(w.level.connectionStates[0]==0x13b,"Descending request must reopen, not toggle");
     }
-}
-
-void testPartialAperture()
-{
-    // Frames at y=-100 and y=100 make the usable gap finite.
-    const collision::World walls{{{0, -100}, {200, -100}}, {{0, 100}, {200, 100}}};
-    for (const double side : {-1.0, 1.0}) {
-        std::vector<doors::Door> doors{doorAt()};
-        DoorControl control(walls, doors);
-        doors[0].state = doors::State::Opening;
-        doors[0].progress = 0.05; // 10-unit gap, less than diameter 20.
-        Camera camera{100 + side * 50, side < 0 ? 95.0 : -95.0, 0};
-        control.prepareFrame(&camera, 0, body);
-        auto result = collision::move(control.movementWorld(), {camera.x, camera.y}, {-side * 100, 0}, body);
-        check(side < 0 ? result.x < 100 : result.x > 100, "Undersized partial opening admits circle");
-        doors[0].progress = 0.3; // 60-unit gap, sufficient for the same body.
-        camera.y = side < 0 ? 70 : -70;
-        control.prepareFrame(&camera, 0, body);
-        result = collision::move(control.movementWorld(), {camera.x, camera.y}, {-side * 100, 0}, body);
-        check(near(result.x, camera.x - side * 100), "Sufficient partial opening blocks circle");
+    for (int heading:{119,120,239,240}) {
+        World w;
+        auto before=camera(320,200,(540+heading)*pi/360,0),next=before;
+        w.control.constrainPlayer(before,next);
+        check(bool(w.level.connectionStates[0]&0x100)==(heading>=120 && heading<240),"Angular boundary");
     }
-}
-
-void testCrossingFaceLatch()
-{
-    const collision::World walls;
-    std::vector<doors::Door> doors{doorAt()};
-    doors[0].state = doors::State::Opening;
-    doors[0].progress = 0.3;
-    DoorControl control(walls, doors);
-    Camera camera{50, 70, 0};
-    control.prepareFrame(&camera, 0, body);
-    camera.x = 105; // Circle has crossed the plane but has not yet cleared it.
-    control.prepareFrame(&camera, 0, body);
-    auto result = collision::move(control.movementWorld(), {camera.x, camera.y}, {20, 0}, body);
-    check(near(result.x, 125), "Changing rendered face traps the crossing player");
-    camera.x = 125;
-    control.prepareFrame(&camera, 0, body);
-    result = collision::move(control.movementWorld(), {camera.x, camera.y}, {-50, 0}, body);
-    check(result.x > 100, "Approach face did not reset after clearing plane");
-}
-
-void testIndividualUse()
-{
-    const collision::World walls;
-    std::vector<doors::Door> doors{doorAt(), doorAt(180)};
-    DoorControl control(walls, doors);
-    Camera camera{50, 0, 0};
-    control.prepareFrame(&camera, 0, body);
-    check(control.interact(camera) == DoorControl::UseResult::Activated &&
-          doors[0].state == doors::State::Opening && doors[1].state == doors::State::Closed,
-          "One use did not select exactly the nearest door");
-    control.prepareFrame(&camera, 0.25, body);
-    const double progress = doors[0].progress;
-    check(control.interact(camera) == DoorControl::UseResult::Activated &&
-          doors[0].state == doors::State::Closing && doors[0].progress == progress,
-          "Individual use resets animation instead of reversing it");
-    check(control.interact({50, 0, pi}) == DoorControl::UseResult::None,
-          "Interaction activated a door behind player");
-    check(control.interact({-200, 0, 0}) == DoorControl::UseResult::None,
-          "Out-of-range interaction activated door");
-    check(control.interact({140, 0, pi}) == DoorControl::UseResult::Activated,
-          "Cannot use door from opposite side");
-}
-
-void testOcclusionAndAccess()
-{
-    const collision::World walls{{{75, -100}, {75, 100}}};
-    std::vector<doors::Door> doors{doorAt()};
-    DoorControl control(walls, doors);
-    Camera camera{50, 0, 0};
-    control.prepareFrame(&camera, 0, body);
-    check(control.interact(camera) == DoorControl::UseResult::None &&
-          doors[0].state == doors::State::Closed, "Use passes through solid wall");
-    const collision::World empty;
-    doors[0].originalState = 0x0400;
-    DoorControl locked(empty, doors);
-    locked.prepareFrame(&camera, 0, body);
-    check(locked.interact(camera) == DoorControl::UseResult::Locked &&
-          doors[0].state == doors::State::Closed, "Normal use bypassed original access gate");
-    doors::toggleAll(doors);
-    locked.prepareFrame(&camera, 1, body);
-    check(doors[0].state == doors::State::Open, "O-style debug toggle no longer bypasses access gate");
-}
-
-void testSafeClosing()
-{
-    const collision::World walls;
-    for (const double side : {-1.0, 1.0}) {
-        std::vector<doors::Door> doors{doorAt()};
-        doors[0].state = doors::State::Open;
-        doors[0].progress = 1;
-        DoorControl control(walls, doors);
-        Camera player{100 + side * 5, 0, 0};
-        control.prepareFrame(&player, 0, body);
-        doors::toggle(doors[0]);
-        control.prepareFrame(&player, 100, body); // Whole closure in one very long frame.
-        check(doors[0].state == doors::State::Opening && doors[0].progress == 1 &&
-              control.movementWorld().empty() && player.x == 100 + side * 5,
-              "Closing door crushed, trapped or moved player");
-        player.x = 50;
-        doors::toggle(doors[0]);
-        control.prepareFrame(&player, 1, body);
-        check(doors[0].state == doors::State::Closed, "Door cannot close once path is clear");
+    for (int normal:{180,181}) {
+        World w; auto before=camera(500-normal,200,0,0),next=before;
+        w.control.constrainPlayer(before,next);
+        check(bool(w.level.connectionStates[0]&0x100)==(normal==180),"Normal proximity boundary");
     }
-    std::vector<doors::Door> doors{doorAt()};
-    doors[0].state = doors::State::Closing;
-    doors[0].progress = 0.8;
-    DoorControl control(walls, doors);
-    Camera player{95, 50, 0};
-    control.prepareFrame(&player, 10, body);
-    check(doors[0].progress == 0.8 && doors[0].state == doors::State::Opening,
-          "Safety reversal moved a partially closing door before checking its swept region");
-    control.prepareFrame(&player, 0.1, body);
-    check(near(doors[0].progress, 0.9), "Safety reversal did not continue opening");
+    for (int tangent:{-1,0,200,201}) {
+        World w; auto before=camera(320,300-tangent,0,0),next=before;
+        w.control.constrainPlayer(before,next);
+        check(bool(w.level.connectionStates[0]&0x100)==(tangent>=0 && tangent<=200),"Tangential proximity boundary");
+    }
+    World w;
+    auto before=camera(310,250,0,0),next=before; next.x=330;
+    w.control.constrainPlayer(before,next);
+    check(w.level.connectionStates[0]==0x100 && next.x==320 && next.y==240,
+          "Swept proximity / one tangential step of 10");
+    // No call for enemy substeps: the aggregate proposal alone owns the correction.
+    World split;
+    auto aggregate=before;
+    for (int i=0;i<4;++i) aggregate.x+=5;
+    split.control.constrainPlayer(before,aggregate);
+    check(aggregate.x==next.x && aggregate.y==next.y,"Substeps multiplied correction");
+    w.level.connectionStates[0]=0;
+    w.level.sectors[0].walls[0].type|=0x0800;
+    next=before; next.x=330;
+    w.control.constrainPlayer(before,next);
+    check(w.level.connectionStates[0]==0,"Special wall accepted ordinary request");
+    check(next.x==318,"Closed connection clearance correction");
 }
-
-void testInteractionTrace()
+void diagonal()
 {
-    const collision::World empty;
-    std::vector<doors::Door> doors{doorAt()};
-    doors[0].stateIndex = 12;
-    DoorControl control(empty, doors);
-    const Camera camera{50, 0, 0};
-    control.prepareFrame(&camera, 0, body);
-    DoorControl::UseTrace trace;
-    control.interact({-200, 0, 0}, 200, &trace);
-    check(trace.reason == DoorControl::UseReason::OutOfRange && trace.doorId == 12 &&
-          trace.distance == 300 && trace.before == trace.after, "Far-door diagnostic incorrect");
-    control.interact({50, 0, pi}, 200, &trace);
-    check(trace.reason == DoorControl::UseReason::NoCandidate && !trace.doorId,
-          "Trace retained stale candidate for a door behind player");
-    doors[0].originalState = 0x0400;
-    control.interact(camera, 200, &trace);
-    check(trace.reason == DoorControl::UseReason::AccessCondition && trace.doorId == 12 &&
-          trace.before == trace.after, "Access diagnostic did not preserve restriction");
-    const collision::World wall{{{75, -100}, {75, 100}}};
-    DoorControl blocked(wall, doors);
-    blocked.prepareFrame(&camera, 0, body);
-    blocked.interact(camera, 200, &trace);
-    check(trace.reason == DoorControl::UseReason::Occluded && trace.obstacleDistance == 25,
-          "Occlusion diagnostic did not identify blocker");
+    World w;
+    w.level.sectors[0].vertices={{500,500},{641,359}};
+    w.level.sectors[1].gx=0;
+    w.level.sectors[1].vertices={{641,359},{500,500}};
+    w.doors=doors::closedDoors(w.level);
+    auto before=camera(443,302,pi/4,0),next=before;
+    next.x=450; next.y=310;
+    w.control.constrainPlayer(before,next);
+    check(w.level.connectionStates[0]==0x100 && next.x==445 && next.y==301,
+          "Diagonal Q14 correction / negative floor rounding");
 }
-
-void testSharedCollisionResolution()
+void crossing()
 {
-    const collision::World empty;
-    std::vector<doors::Door> doors{doorAt()};
-    DoorControl control(empty, doors);
-    const Camera camera{50, 0, 0};
-    for (const double progress : {0.0, 0.25, 0.5}) {
-        doors[0].progress = progress;
-        doors[0].state = progress == 0 ? doors::State::Closed : doors::State::Opening;
-        control.prepareFrame(&camera, 0, body);
-        const auto face = doors::visibleFace(doors[0], doors[0].faces[0]);
-        const collision::World sameStaticSurface{{{face->a.x, face->a.y}, {face->b.x, face->b.y}}};
-        for (const auto motion : {collision::Point{100, -40}, collision::Point{100000, 0},
-                                  collision::Point{0, 40}, collision::Point{100, 100}}) {
-            const auto fixed = collision::move(sameStaticSurface, {camera.x, camera.y}, motion, body);
-            const auto dynamic = collision::move(control.movementWorld(), {camera.x, camera.y}, motion, body);
-            check(near(fixed.x, dynamic.x) && near(fixed.y, dynamic.y),
-                  "Static and dynamic segments use different collision/slide rules");
+    for (const bool reverse:{false,true}) {
+        for (const int phase:{59,60,61,64,89,90}) {
+            World w; w.level.connectionStates[0]=0x100|phase;
+            const auto before=camera(reverse?520:480,200,reverse?pi:0,reverse?1:0);
+            auto next=before; // Remain on the near side first.
+            w.control.constrainPlayer(before,next);
+            check(next.sector==before.sector,"Approach changed sector early");
+            check(w.level.connectionStates[0]==(phase>60 ? 0x140 : (0x100|phase)),"Phase 64 entry threshold");
+            if (phase<=60) { check(next.x==(reverse?680:320),"Invisible phase 60 allowed passage"); continue; }
+            next=before; next.x=reverse?490:510;
+            w.control.constrainPlayer(before,next);
+            check(next.sector==unsigned(reverse?0:1) && next.x==(reverse?490:510),
+                  "Crossing lost authoritative sector or world coordinate");
+            check(w.level.connectionStates[0]==0x140,"Crossing did not write phase 64");
         }
     }
-    check(near(collision::distanceToSegment({{0, 0}, {0, 100}}, {3, 104}), 5) &&
-          near(collision::signedDistanceToLine({{0, 0}, {0, 100}}, {3, 104}), -3),
-          "Shared endpoint distance or signed line distance incorrect");
+    World w; w.level.connectionStates[0]=0x541;
+    auto before=camera(480,250,pi,0),next=before; next.x=510;
+    w.control.constrainPlayer(before,next);
+    check(next.y==218 && next.sector==1 && w.level.connectionStates[0]==0x540,
+          "Crossing clamp/lock preservation must not require a fresh open request");
+    w.level.connectionStates[0]=64; // Descending, facing away: visually hidden but no passage.
+    next=before;
+    w.control.constrainPlayer(before,next);
+    check(next.x==320 && next.sector==0 && w.level.connectionStates[0]==64,"Descending passage gate");
+    // Unknown/unpaired connections must never receive automatic door requests.
+    w.doors.clear(); w.level.connectionStates[0]=0;
+    before=camera(480,200,0,0); next=before; next.x=510;
+    w.control.constrainPlayer(before,next);
+    check(next.sector==1 && w.level.connectionStates[0]==0,"Open portal sector tracking wrote door state");
 }
-void testCardReader()
+void access()
 {
-    const collision::World walls;
-    auto secured = doorAt(); secured.stateIndex = 7; secured.originalState = 0x0400;
-    auto other = doorAt(500); other.stateIndex = 8; other.originalState = 0x0400;
-    std::vector<doors::Door> doors{secured,other};
-    DoorControl control(walls,doors);
-    using Result = DoorControl::CardResult;
-    check(control.useCardReader(0x0107,std::nullopt) == Result::NoCard,"Missing card unlocked door");
-    check(control.useCardReader(0x0107,0x0001) == Result::Rejected,"E card unlocked C reader");
-    check(control.useCardReader(0x0107,0x1002) == Result::Rejected,"Incorrect identifier unlocked door");
-    check(control.useCardReader(0x0109,0x1001) == Result::InvalidTarget,"Unknown door modified another target");
-    check(control.useCardReader(0x0107,0x1001) == Result::Unlocked &&
-          doors[0].originalState == 0 && doors[0].state == doors::State::Closed &&
-          doors[1].originalState == 0x0400,"Card opened door or changed unrelated security");
-    check(control.useCardReader(0x0107,0x1001) == Result::AlreadyDisabled &&
-          doors[0].originalState == 0,"Repeated reader use re-locked door");
-    check(control.interact({50,0,0}) == DoorControl::UseResult::Activated,
-          "Unlocked door still rejects ordinary use");
+    World w; w.level.connectionStates[0]=0x400;
+    auto before=camera(310,200,0,0),next=before; next.x=330;
+    check(w.control.constrainPlayer(before,next),"Locked approach not reported");
+    check(w.level.connectionStates[0]==0x400 && next.x==318,"Locked door opened or passed");
+    using R=DoorControl::CardResult;
+    check(w.control.useCardReader(0x0100,{})==R::NoCard,"No card");
+    check(w.control.useCardReader(0x0100,1)==R::Rejected,"Wrong card family");
+    w.level.connectionStates[0]=0x53b;
+    check(w.control.useCardReader(0x0100,0x1001)==R::Unlocked && w.level.connectionStates[0]==0x13b,
+          "Card must change only lock");
+    check(w.control.useCardReader(0x0100,0x1001)==R::AlreadyDisabled,"Repeated card re-locked");
+    check(w.control.useCardReader(0x0101,0x1001)==R::InvalidTarget,"Missing connection accepted card");
 }
-
-void testOriginalSecurity(const std::filesystem::path& path)
+void timing()
 {
-    const auto level = game_lab::loadLevel1(path).level;
-    auto doors = doors::closedDoors(level);
-    const auto original = doors;
-    const auto walls = collision::staticWorld(level);
-    DoorControl control(walls,doors);
-    unsigned locked = 0;
-    for (const auto& door : doors) if (door.originalState & 0x0400) {
-        ++locked;
-        check(door.stateIndex == 7,"Unexpected original secured door ID");
+    World w; const DoorControl::Time zero{};
+    check(!w.control.beginFrame(true,zero),"Entry interval must be discarded");
+    check(w.control.beginFrame(true,zero+7ms),"Active interval rejected");
+    auto before=camera(320,200,0,0),next=before;
+    w.control.constrainPlayer(before,next);
+    check(w.level.connectionStates[0]==0x100,"Movement must precede ticking");
+    w.control.updateDoors(zero+7ms);
+    check(w.level.connectionStates[0]==0x101,"First tick after request");
+    w.control.resetCounter(zero+7ms);
+    w.control.beginFrame(false,zero+10ms);
+    w.control.updateDoors(zero+10s);
+    check(w.level.connectionStates[0]==0x101,"Paused door advanced");
+    check(!w.control.beginFrame(true,zero+20s),"Resume interval was replayed");
+    w.control.resetCounter(zero+20s);
+    check(w.control.beginFrame(true,zero+20s+7ms),"Resume failed");
+    w.control.updateDoors(zero+20s+7ms);
+    check(w.level.connectionStates[0]==0x102,"Resume lost phase or caught up inactive time");
+    // Full autonomous cycle through the controller; no more movement requests.
+    for (int i=0;i<2000 && w.level.connectionStates[0];++i) {
+        const auto t=zero+20s+7ms+std::chrono::milliseconds(7*(i+1));
+        w.control.resetCounter(t-7ms); w.control.beginFrame(true,t); w.control.updateDoors(t);
     }
-    check(locked == 1 && level.sectors[7].walls[17].type == 0x3308 &&
-          level.sectors[7].walls[17].extra == 0x0107,"Original reader/door association changed");
-    check(control.useCardReader(0x0107,0x1001) == DoorControl::CardResult::Unlocked,
-          "Actual level-1 C001 reader did not unlock its door");
-    for (std::size_t i = 0; i < doors.size(); ++i)
-        check(doors[i].originalState == (original[i].originalState & ~0x0400),
-              "Original security transfer changed other door state bits");
-    std::cout << "Actual level-1 security: reader 7/17 unlocks only door 7.\n";
+    check(w.level.connectionStates[0]==0,"Door failed to close automatically");
+    w.control.resetLevel(zero+60s);
+    check(!w.control.beginFrame(true,zero+61s),"Level travel replayed loading time");
 }
-} // namespace
+void originalSecurity(const std::filesystem::path& path)
+{
+    auto level=game_lab::loadLevel1(path).level;
+    const auto doors=doors::closedDoors(level);
+    const auto words=level.connectionStates;
+    const auto walls=collision::staticWorld(level);
+    DoorControl control(walls,doors,level);
+    check(doors.size()==15,"Original level-1 door recognition changed");
+    unsigned approaches=0;
+    for (const auto& door:doors) for (const auto& face:door.faces) {
+        for (unsigned sectorIndex=0;sectorIndex<level.sectors.size();++sectorIndex) {
+            const auto& sector=level.sectors[sectorIndex];
+            for (unsigned i=0;i<sector.neighbors.size() && i<sector.walls.size();++i) {
+                const auto& wall=sector.walls[i];
+                const auto a=sector.vertices[wall.vertexA],b=sector.vertices[wall.vertexB];
+                if (wall.extra!=door.stateIndex || sector.gx+a.x!=face.a.x || sector.gy+a.y!=face.a.y ||
+                    sector.gx+b.x!=face.b.x || sector.gy+b.y!=face.b.y) continue;
+                const double dx=face.b.x-face.a.x,dy=face.b.y-face.a.y;
+                const double length=std::hypot(dx,dy),nx=dy/length,ny=-dx/length;
+                const double mx=(face.a.x+face.b.x)/2,my=(face.a.y+face.b.y)/2;
+                auto before=camera(mx+nx*180,my+ny*180,std::atan2(-ny,-nx),sectorIndex);
+                auto next=before; next.x-=nx*10; next.y-=ny*10;
+                level.connectionStates=words;
+                control.constrainPlayer(before,next);
+                const bool accepts=!(words[door.stateIndex]&0x400) && !(wall.type&0x0800);
+                check(bool(level.connectionStates[door.stateIndex]&0x100)==accepts,
+                      "Original face approach request/access mismatch");
+                level.connectionStates[door.stateIndex]=0x13d;
+                before.x=mx+nx*20; before.y=my+ny*20;
+                next=before; next.x=mx-nx*10; next.y=my-ny*10;
+                control.constrainPlayer(before,next);
+                check(next.sector==sector.neighbors[i] && level.connectionStates[door.stateIndex]==0x140,
+                      "Original face failed phase-64 sector crossing");
+                ++approaches;
+            }
+        }
+    }
+    check(approaches==30,"Did not exercise both faces of all fifteen doors");
+    level.connectionStates=words;
 
-int main(int argc, char* argv[])
+    check(control.useCardReader(0x0107,0x1001)==DoorControl::CardResult::Unlocked,"Original C001 reader");
+    for (unsigned i=0;i<words.size();++i)
+        check(level.connectionStates[i]==(i==7 ? (words[i]&~0x400) : words[i]),"Card changed another connection");
+}
+}
+int main(int argc,char** argv)
 {
     try {
-        testDoorCollision();
-        testPartialAperture();
-        testCrossingFaceLatch();
-        testIndividualUse();
-        testOcclusionAndAccess();
-        testSafeClosing();
-        testInteractionTrace();
-        testSharedCollisionResolution();
-        testCardReader();
-        if (argc == 2) testOriginalSecurity(argv[1]);
-        std::cout << "Dynamic door collisions, individual use, access gate and safe closing passed.\n";
-    } catch (const std::exception& error) {
-        std::cerr << error.what() << '\n';
-        return 1;
-    }
+        requests(); diagonal(); crossing(); access(); timing();
+        if (argc==2) originalSecurity(argv[1]);
+        std::cout<<"DOS connection movement, sectors, access and timing passed.\n";
+    } catch(const std::exception& e) { std::cerr<<e.what()<<'\n'; return 1; }
 }

@@ -136,7 +136,8 @@ void deadInput()
     {
         std::vector<doors::Door> doors;
         const collision::World world;
-        DoorControl control(world,doors);
+        game_lab::Level level;
+        DoorControl control(world,doors,level);
         PlayerInput input(window,control);
         Camera camera{3500,900,1.0};
         const Camera before = camera;
@@ -281,8 +282,9 @@ void readerSession(GameAudio& audio)
     ItemSession items; items.load(level);
     SurvivalSession player;
     const collision::World obstacles;
-    std::vector<doors::Door> doors{{7,0x0400,{}}};
-    DoorControl control(obstacles,doors);
+    std::vector<doors::Door> doors{{7,{}}};
+    level.connectionStates.resize(8); level.connectionStates[7]=0x400;
+    DoorControl control(obstacles,doors,level);
     Camera camera{50,100,0};
     const auto press = [&] {
         items.handleEvent(key(SDL_SCANCODE_E),17);
@@ -291,36 +293,36 @@ void readerSession(GameAudio& audio)
     };
     std::uint16_t card = 0x3001; player.inventory().takeSupply(card);
     press();
-    check(doors[0].originalState == 0x0400 && items.modal() &&
+    check(level.connectionStates[7] == 0x0400 && items.modal() &&
           items.interfaceState()->cards[0]==1 && items.interfaceState()->notice.empty(),
           "E-only inventory granted security or failed to announce block");
     modalPress(items,SDL_SCANCODE_ESCAPE,camera,player,audio,&control);
     card = 0x4001; player.inventory().takeSupply(card);
     player.vitals().applyDamage(1000); press();
-    check(doors[0].originalState == 0x0400,"Dead player used a security reader");
+    check(level.connectionStates[7] == 0x0400,"Dead player used a security reader");
     player.vitals().reset();
     camera.angle = 3.141592653589793; press();
-    check(doors[0].originalState == 0x0400,"Reader accepted card from behind facing direction");
+    check(level.connectionStates[7] == 0x0400,"Reader accepted card from behind facing direction");
     camera.angle = 0;
     items.handleEvent(key(SDL_SCANCODE_E),17);
     { auto release=key(SDL_SCANCODE_E); release.type=SDL_EVENT_KEY_UP; items.handleEvent(release,17); }
     const collision::World occluder{{{75,0},{75,200}}};
     items.update(&camera,true,occluder,player,audio,&control);
-    check(doors[0].originalState == 0x0400,"Reader used through obstacle");
+    check(level.connectionStates[7] == 0x0400,"Reader used through obstacle");
     press();
-    check(items.modal() && doors[0].originalState==0x0400,"Opening selector auto-used a card");
+    check(items.modal() && level.connectionStates[7]==0x0400,"Opening selector auto-used a card");
     modalPress(items,SDL_SCANCODE_SPACE,camera,player,audio,&control);
-    check(doors[0].originalState==0x0400,"Selector accepted E card as C");
+    check(level.connectionStates[7]==0x0400,"Selector accepted E card as C");
     modalPress(items,SDL_SCANCODE_DOWN,camera,player,audio,&control);
     modalPress(items,SDL_SCANCODE_SPACE,camera,player,audio,&control);
     while (items.modal() && items.interfaceState()->phase!=interaction::Phase::Ready)
         items.update(&camera,true,obstacles,player,audio,&control,1.0);
-    check(doors[0].originalState == 0 && player.inventory().cards()[1] == 0x1001 &&
+    check(level.connectionStates[7] == 0 && player.inventory().cards()[1] == 0x1001 &&
           player.hudState().messages[0] == messages::text(messages::Id::DoorUnlocked),
           "Valid C card not retained or unlock message missing from HUD");
     modalPress(items,SDL_SCANCODE_SPACE,camera,player,audio,&control);
     press();
-    check(doors[0].originalState == 0,"Repeated runtime reader use toggled security back on");
+    check(level.connectionStates[7] == 0,"Repeated runtime reader use toggled security back on");
 }
 } // namespace
 

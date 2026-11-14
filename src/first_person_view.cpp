@@ -313,8 +313,10 @@ Camera initialCamera(const game_lab::Level& level)
         if (start.sector>=level.sectors.size())
             throw std::runtime_error("Invalid original player start sector");
         const auto& sector=level.sectors[start.sector];
-        return {double(sector.gx)+start.x,double(sector.gy)+start.y,
+        Camera camera{double(sector.gx)+start.x,double(sector.gy)+start.y,
                 start.angle*(2*3.14159265358979323846/720)};
+        camera.sector=start.sector;
+        return camera;
     }
     double bestClearance = 1.0;
     Camera best;
@@ -377,7 +379,7 @@ WallHit castSceneRay(const game_lab::Level& level, const Camera& camera,
     if (!doors) return hit;
     for (const auto& door : *doors) {
         for (const auto& closedFace : door.faces) {
-            const auto face = doors::visibleFace(door, closedFace);
+            const auto face = doors::visibleFace(level, door, closedFace);
             if (!face) continue;
             const Point a{face->a.x, face->a.y}, b{face->b.x, face->b.y};
             // Original projected walls retain A-left/B-right faces only.

@@ -52,9 +52,9 @@ void GameAudio::interfaceMotor()
     player_.play(11,false,audio::Playback::Once);
 }
 
-void GameAudio::update(const std::vector<doors::Door>& doors, unsigned footsteps)
+void GameAudio::update(const game_lab::Level& level, const std::vector<doors::Door>& doors, unsigned footsteps, bool active)
 {
-    updateDoors(doors);
+    updateDoors(level,doors,active);
     updateFootsteps(footsteps);
 }
 
@@ -67,11 +67,12 @@ void GameAudio::updateFootsteps(unsigned footsteps)
     }
 }
 
-void GameAudio::updateDoors(const std::vector<doors::Door>& doors)
+void GameAudio::updateDoors(const game_lab::Level& level, const std::vector<doors::Door>& doors, bool active)
 {
-    const bool moving = std::any_of(doors.begin(),doors.end(),[](const auto& door) {
-        return (door.state == doors::State::Opening || door.state == doors::State::Closing) &&
-               door.progress > 0 && door.progress < 1;
+    const bool moving = active && std::any_of(doors.begin(),doors.end(),[&](const auto& door) {
+        if (door.stateIndex>=level.connectionStates.size()) return false;
+        const auto phase=doors::dos::phase(level.connectionStates[door.stateIndex]);
+        return phase>0 && phase<60;
     });
     // One full effect per movement episode. Keep the latch until movement ends,
     // even when the shorter audio has already finished; never force a repeat or
