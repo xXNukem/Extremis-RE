@@ -55,3 +55,8 @@ The exact timing and palette transitions of every modal aren't finished. A promi
 Likewise, the audio heard during map transfer and map open/close needs separate verification. Some late-level interactions and the ending remain under test.
 
 **Original references:** early map panel `0x3606` data, interaction dispatch near `0xa608`, animation routines listed in source comments, connection traversal `0x114ba–0x1185c`. For the sector model, start with [Levels](levels.md).
+
+Player death temporarily owns the full 320×200 canvas and consumes interface
+input. The original GAMEOVER text and menu/new-game path are described in
+[Death sequences](../reference/exe/player-death.md); the optional menu branches
+OPTIONS and password continuation remain unavailable.

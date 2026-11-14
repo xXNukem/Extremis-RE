@@ -93,4 +93,4 @@ A quick way to investigate an apparent bug is therefore: note the **level, secto
 
 ## Still on the workbench
 
-Decorative-object collision must also be applied to enemy movement, including the DOS response that changes the enemy angle by **±80 angular units**. The later work on that system is not part of the repository snapshot documented here. Specific enemy routes and the final sequence need continued playtesting. See [Known differences](../reference/known-differences.md).
+Decorative-object collision is applied in `enemy_system.cpp` through `collision::constrainObjets` in `objet_collision.cpp`, including the **±80 angular-unit** response. `tests/enemy_tests.cpp::objetCollisions` covers normal/MONS5 movement, bounds, solidity and the current animated image extent. Specific enemy routes and the final sequence need continued playtesting. See [Known differences](../reference/known-differences.md).

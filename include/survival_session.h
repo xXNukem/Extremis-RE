@@ -16,7 +16,8 @@ class SurvivalSession {
 public:
     explicit SurvivalSession(bool diagnostics = false);
     void handleEvent(const SDL_Event& event, std::uint32_t windowId);
-    bool update(double seconds, bool simulationActive, GameAudio& audio, bool running = false);
+    bool update(double seconds, bool simulationActive, GameAudio& audio, bool running = false,
+                bool deferDeathSound = false);
     bool alive() const;
     hud::State hudState() const;
     std::string windowTitle(const std::string& base) const;

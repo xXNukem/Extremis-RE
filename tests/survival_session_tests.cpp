@@ -111,7 +111,18 @@ void deathSession(GameAudio& audio)
     check(audio.effectStatistics(25)->completed == 1 && audio.effectStatistics(25)->wraps == 0,
           "Health death effect repeated or failed to finish");
     check(session.windowTitle("Port").find("DEAD") != std::string::npos,
-          "Pending original death presentation not explicit");
+          "Death status missing");
+    const auto requests=audio.effectStatistics(26)->requests;
+    SurvivalSession presented(true);
+    presented.handleEvent(key(SDL_SCANCODE_F8),17);
+    check(presented.update(0,true,audio,false,true),"Presented death transition missing");
+    check(!presented.update(0,true,audio,false,true) && audio.effectStatistics(26)->requests==requests,
+          "Presentation must own delayed sound and death must be announced once");
+    audio.stopEffects();
+    audio.beginDeath(GameAudio::DeathSound::Oxygen);
+    audio.beginDeath(GameAudio::DeathSound::Oxygen);
+    check(audio.effectStatistics(26)->requests==requests+1,"Presented audio duplicated");
+    audio.stopEffects();
 }
 
 void silentResourceLoss(GameAudio& audio)

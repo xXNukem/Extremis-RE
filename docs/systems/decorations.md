@@ -120,7 +120,7 @@ The data came from the original executable tables; it doesn't authorize guessing
 
 ## Reconstruction status and places to check
 
-The published core includes [`sprite_scene.cpp`](../../src/sprite_scene.cpp), [`sprite_bank.cpp`](../../src/sprite_bank.cpp) and [`sprite_renderer.cpp`](../../src/sprite_renderer.cpp). The newest work on step-driven animation and the player's OBJET collision is **still local and awaiting its next code commit**. Enemy-object collision, its angular correction, OBJET6 visibility eligibility and exact animation cadence remain open.
+The published core includes [`sprite_scene.cpp`](../../src/sprite_scene.cpp), [`sprite_bank.cpp`](../../src/sprite_bank.cpp) and [`sprite_renderer.cpp`](../../src/sprite_renderer.cpp). Player and enemy OBJET collision are implemented in `objet_collision.cpp`; `enemy_system.cpp` applies it to normal and MONS5 movement, with angular correction covered by `enemy_tests::objetCollisions`. OBJET6 visibility eligibility and exact animation cadence remain open.
 
 **Original references:** OBJET bank dispatch `0x7d00–0x7db4`, height table reads near `0x11f83`, vertical projection `0x11ff2–0x12007`, patch/column routines around `0x14d1f–0x1517e`, collision `0x10db7–0x11028`, individual OBJET6 update `0x11e79–0x11ea5`.
 

@@ -48,7 +48,7 @@ void SurvivalSession::handleEvent(const SDL_Event& event, std::uint32_t windowId
 #endif
 }
 
-bool SurvivalSession::update(double seconds, bool simulationActive, GameAudio& audio, bool running)
+bool SurvivalSession::update(double seconds, bool simulationActive, GameAudio& audio, bool running, bool deferDeathSound)
 {
     messages_.update(seconds,simulationActive && wasActive_ && alive());
     // Discard entry/resume frames, whose elapsed interval may include inactive time.
@@ -60,9 +60,9 @@ bool SurvivalSession::update(double seconds, bool simulationActive, GameAudio& a
     announcedDeath_ = death;
     if (death == player::DeathCause::None) audio.endDeath();
     else {
-        audio.beginDeath(death == player::DeathCause::Oxygen
+        if (!deferDeathSound) audio.beginDeath(death == player::DeathCause::Oxygen
                              ? GameAudio::DeathSound::Oxygen : GameAudio::DeathSound::Health);
-        SDL_Log("Player death: %s. Original visual transition pending; movement/use disabled.",
+        SDL_Log("Player death: %s; movement/use disabled.",
                 death == player::DeathCause::Oxygen ? "oxygen" : "health");
     }
     return true;
@@ -99,6 +99,6 @@ std::string SurvivalSession::windowTitle(const std::string& base) const
 #ifdef EXTREMIS_DEBUG_MENU
     if (diagnostics_) result += " | VITALS DEBUG";
 #endif
-    if (!alive()) result += " | DEAD - original visual transition pending";
+    if (!alive()) result += " | DEAD";
     return result;
 }

@@ -80,3 +80,16 @@ A diagnostic F5/F7 path exists for tests in Debug builds. It is **not** a player
 The posture limits, original health/oxygen scales, special impact direction and headbob lookup come from recovered DOS routines. The port's rendering-independent fixed steps, several movement speeds and collision geometry are adaptations. The DOS also uses a special impact-height table distinct from normal headbob; that table isn't yet restored.
 
 **Original reference points:** movement/posture `0x1656a–0x16a7d`, impact reaction `0x165db–0x166bb`, normal bob lookup `0x16a8e–0x16aab`, new-game template at file `0x1d8a0`.
+
+## Death presentation
+
+Health death uses the original red transition and `MORT0.VGA`/six `MORT0.SPR`
+images; oxygen death uses a white transition and the 32-frame `MORT1.ANM`.
+Both lead to `GAMEOVER.VGA`, typed original text and a key/timeout fade back
+to the original menu artwork. RUN → Make new party reloads the first level,
+including enemies, doors, inventory and vitals. OPTIONS and password continuation
+are not implemented. The green enemy `GOUTTE.SPR` overlay is a separate effect.
+
+See [exact evidence and limitations](../reference/exe/player-death.md): the host
+presentation cadence is **Adapted**, not an exact DOS duration. `F10` with
+`--vitals-debug` remains a vitals-only diagnostic reset, not a new game.

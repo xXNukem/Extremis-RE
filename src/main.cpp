@@ -17,6 +17,7 @@
 #include "map_session.h"
 #include "enemy_system.h"
 #include "startup_credits.h"
+#include "player_death.h"
 
 #include <exception>
 #include <cmath>
@@ -198,6 +199,11 @@ int main(int argc, char* argv[])
         PlayerInput playerInput(window, doorControl);
         GameAudio gameAudio;
         if (data) gameAudio.load(std::filesystem::path(argv[1]).parent_path() / "DATA");
+        std::optional<player::DeathPresentation> deathPresentation;
+        if(data && originalHud) {
+            try { deathPresentation.emplace(player::loadDeathResources(std::filesystem::path(argv[1]).parent_path()/"DATA")); }
+            catch(const std::exception& error) { SDL_Log("Original death presentation unavailable: %s",error.what()); }
+        }
 #ifdef EXTREMIS_DEBUG_MENU
         DebugMenu debugMenu;
         if (data) {
@@ -210,6 +216,7 @@ int main(int argc, char* argv[])
         bool show3D = camera.has_value();
         Uint64 previousTicks = SDL_GetTicks();
         while (running) {
+            bool restartRequested=false;
             auto* activeEnemies=enemySystem?&*enemySystem:nullptr;
             bool debugPaused=false;
 #ifdef EXTREMIS_DEBUG_MENU
@@ -219,7 +226,30 @@ int main(int argc, char* argv[])
             const bool wasItemModal=items.modal();
             mapSession.beginFrame(data?data->level.zoneIndex:0);
             SDL_Event event;
+            bool deathKey=false;
             while (SDL_PollEvent(&event)) {
+                if(deathPresentation && deathPresentation->active()) {
+                    if(event.type==SDL_EVENT_QUIT || event.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED) running=false;
+                    if(event.type==SDL_EVENT_KEY_DOWN && event.key.windowID==SDL_GetWindowID(window) && !event.key.repeat) {
+                        deathKey=true;
+                        const int direction=event.key.scancode==SDL_SCANCODE_UP?-1:event.key.scancode==SDL_SCANCODE_DOWN?1:0;
+                        const bool confirm=event.key.scancode==SDL_SCANCODE_RETURN;
+                        if(deathPresentation->stage()==player::DeathPresentation::Stage::Menu && (direction || confirm)) {
+                            gameAudio.confirmItemSelection();
+                            const auto request=deathPresentation->menuInput(direction,confirm);
+                            if(request==player::DeathPresentation::Request::Restart) restartRequested=true;
+                            if(request==player::DeathPresentation::Request::Exit) running=false;
+                            if(request==player::DeathPresentation::Request::Unsupported)
+                                SDL_Log("Native OPTIONS/password continuation is not implemented; RUN / Make new party starts a fresh game.");
+                        }
+                    }
+                    // Existing explicit F10 diagnostic reset remains available;
+                    // ordinary UI/use/movement must not consume death-screen keys.
+                    if(event.type==SDL_EVENT_KEY_DOWN && event.key.scancode==SDL_SCANCODE_F10)
+                        survival.handleEvent(event,SDL_GetWindowID(window));
+                    playerInput.handleEvent(event,false);
+                    continue;
+                }
 #ifdef EXTREMIS_DEBUG_MENU
                 if (data && event.type!=SDL_EVENT_QUIT && event.type!=SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                     !((event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_KEY_UP) && event.key.windowID!=SDL_GetWindowID(window)) &&
@@ -276,6 +306,32 @@ int main(int argc, char* argv[])
             const Uint64 ticks = SDL_GetTicks();
             const double elapsedSeconds = double(ticks - previousTicks) / 1000.0;
             previousTicks = ticks;
+            if(deathPresentation && deathPresentation->active() && !restartRequested) {
+                if(survival.alive()) {
+                    deathPresentation->reset(); gameAudio.stopEffects();
+                    survival.update(0,false,gameAudio);
+                    playerInput.invalidateContext(); doorControl.resetLevel();
+                    SDL_SetWindowTitle(window,survival.windowTitle(texturePreview.windowTitle()).c_str());
+                } else {
+                    const auto* keys=SDL_GetKeyboardState(nullptr);
+                    bool held=false; for(int i=0;i<SDL_SCANCODE_COUNT;++i) held|=keys[i];
+                    if(SDL_GetKeyboardFocus()==window)
+                        deathPresentation->advance(elapsedSeconds,deathKey,held);
+                    if(deathPresentation->takeSoundStart()) gameAudio.beginDeath(
+                        survival.vitals().deathCause()==player::DeathCause::Oxygen ? GameAudio::DeathSound::Oxygen : GameAudio::DeathSound::Health);
+                    if(deathPresentation->takeSoundStop()) gameAudio.stopEffects();
+                    if(!SDL_SetRenderDrawColor(renderer,0,0,0,255) || !SDL_RenderClear(renderer) ||
+                       !firstPerson.drawFrame(deathPresentation->pixels()) || !SDL_RenderPresent(renderer)) {
+                        SDL_Log("Death presentation failed: %s",SDL_GetError()); exitCode=1; break;
+                    }
+                    // DOS body scroll has no explicit wait. The port uses 32 ms
+                    // per step for visibility; original timing remains unverified.
+                    const auto stage=deathPresentation->stage();
+                    if(stage==player::DeathPresentation::Stage::Body) SDL_Delay(32);
+                    else if(stage!=player::DeathPresentation::Stage::Menu) SDL_Delay(16);
+                    continue; // No world, HUD, modal, weapon or door simulation.
+                }
+            }
 #ifdef EXTREMIS_DEBUG_MENU
             debugPaused=debugMenu.open();
             activeEnemies=debugMenu.enemiesEnabled() && enemySystem?&*enemySystem:nullptr;
@@ -285,6 +341,7 @@ int main(int argc, char* argv[])
             items.update(camera ? &*camera : nullptr,inputActive && !mapSession.blocksSimulation(),
                          doorControl.movementWorld(),survival,gameAudio,&doorControl,elapsedSeconds);
                 auto travel=items.takeTravel();
+                if(restartRequested) travel=ItemSession::Travel{0,{0,300,320,180}};
 #ifdef EXTREMIS_DEBUG_MENU
                 if (auto requested=debugMenu.takeTravel()) {
                     travel=requested;
@@ -297,7 +354,7 @@ int main(int argc, char* argv[])
                 if (travel) {
 
                     // An elevator travelling within the same level must not reload the world.
-                    if (data && travel->zone == data->level.zoneIndex) {
+                    if (!restartRequested && data && travel->zone == data->level.zoneIndex) {
                         auto arrivalLevel = data->level;
                         arrivalLevel.playerStart = travel->arrival;
 
@@ -330,7 +387,13 @@ int main(int argc, char* argv[])
                         throw std::runtime_error("Missing destination wall textures");
                     auto nextWorld=collision::staticWorld(next.level);
                     auto nextDoors=doors::closedDoors(next.level);
-                    items.load(next.level); // Keeps transferred plans; clears level-local terminals.
+                    if(restartRequested) {
+                        survival=SurvivalSession(vitalsDebug);
+                        items=ItemSession{};
+                        items.setAvailable(interactionRenderer.has_value());
+                        gameAudio.stopEffects(); deathPresentation->reset();
+                    }
+                    items.load(next.level); // New game resets plans; elevator travel keeps them.
                     data=std::move(next); camera=nextCamera;
                     collisionWorld=std::move(nextWorld); levelDoors=std::move(nextDoors);
                     doorControl.resetLevel();
@@ -405,8 +468,20 @@ int main(int argc, char* argv[])
             }
             const double effectiveMovement=camera ? std::hypot(camera->x-beforeMovement.x,camera->y-beforeMovement.y) : 0;
             if (activeEnemies) for (const auto sound:activeEnemies->takeSounds()) gameAudio.enemyEffect(sound);
-            if (survival.update(elapsedSeconds,simulationActive,gameAudio,playerInput.running() && effectiveMovement>0))
+            if (survival.update(elapsedSeconds,simulationActive,gameAudio,playerInput.running() && effectiveMovement>0,
+                                deathPresentation.has_value()))
                 SDL_SetWindowTitle(window,survival.windowTitle(texturePreview.windowTitle()).c_str());
+            if(!survival.alive() && deathPresentation && !deathPresentation->active() && firstPerson.frame().size()==64000) {
+                gameAudio.stopEffects();
+                deathPresentation->begin(survival.vitals().deathCause(),firstPerson.frame());
+                items.clearInput(); playerInput.invalidateContext();
+                doorControl.beginFrame(false);
+                if(!SDL_SetRenderDrawColor(renderer,0,0,0,255) || !SDL_RenderClear(renderer) ||
+                   !firstPerson.drawFrame(deathPresentation->pixels()) || !SDL_RenderPresent(renderer)) {
+                    SDL_Log("Death presentation failed: %s",SDL_GetError()); exitCode=1; break;
+                }
+                continue;
+            }
             const auto fired=weaponFire.update(camera?*camera:Camera{},doorControl.movementWorld(),
                 survival.inventory(),playerInput.takeFireTrigger(),
                 simulationActive && survival.alive() && playerInput.fireReady() && originalHud && weaponGraphicsReady,

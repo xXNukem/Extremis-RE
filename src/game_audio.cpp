@@ -26,6 +26,12 @@ void GameAudio::beginDeath(DeathSound cause)
     // Native DSS loop semantics are retained; no forced repeat or invented timer.
     player_.play(cause == DeathSound::Oxygen ? 26 : 25);
 }
+void GameAudio::stopEffects()
+{
+    // 0x13090 stops all four native voices at entry and before GAMEOVER.
+    for(std::size_t i=0;i<player_.effectCount();++i) player_.stop(i);
+    death_.reset(); doorRequested_=false;
+}
 
 void GameAudio::endDeath()
 {

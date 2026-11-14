@@ -1,5 +1,17 @@
 # DOS doors: original state word, phase, requests, and automatic closing
 
+## Current port status (2026-11-14; supersedes historical implementation notes below)
+
+**Implemented and user-tested in Debug:** the runtime uses `Level::connectionStates` as the authoritative per-connection word; `doors::dos` handles the original 0→90→0 phase cycle; `doors::dos::Counter` supplies nominal PIT-derived increments; the main loop orders movement/request, door update, then counter reset. `DoorControl::constrainPlayer` handles the door-relative Q14 movement correction and player sector transition. Rendering, connectivity, interactions, collision and audio use the live table. Entry/reset behavior is handled by `DoorControl::beginFrame`/`resetCounter`.
+
+**Validation evidence:** on 2026-11-14 the user rebuilt Debug and reported **26/26 CTest passing**, after correcting a diagonal Q14 regression test's expected position from `(443,302)` to `(445,301)` using the recovered lookup table; no engine-code change was made for that correction. The user manually confirmed doors open and close during gameplay. This is **Port-tested**, not proof of complete timing equivalence to the DOS executable.
+
+**Activation audit (2026-11-14):** the near-door stop follows the recovered request and movement rules; no activation discrepancy was found in the ordinary approach path. The static comparison is detailed below. Its perceived duration has **not** been measured against running DOS. Keep the default distance unchanged; manually compare both sides, card access, suspension/resume and special connections.
+
+**Timing fidelity limitation:** the PIT divisor, accumulator update and DOS phase arithmetic are recovered, but modern main-loop scheduling differs and the complete original suspension/interaction call paths remain unverified. Never claim exact real-time duration from automated tests alone.
+
+**Source of truth:** `src/door.cpp`, `src/door_clock.cpp`, `src/door_control.cpp`, `src/main.cpp`, tests `dos_door_tests`, `door_clock_tests`, `door_interaction_collision`. Historical paragraphs below preserve how the implementation was reached; references to an unintegrated or provisional port describe **earlier snapshots**, not current `main`.
+
 **Source:** read-only Codex disassembly of `EXTREMIS.EXE`, reported on 2026-11-14. The analyst used the repository's LLVM disassembler; the locked Ghidra project was not opened. This file faithfully preserves the **reported findings**, not an independent second disassembly or a completed gameplay implementation.
 
 - Original `EXTREMIS.EXE` SHA-256: `7b2883d5fccdd75d75e4832cf55a82a46358ffb25d7c037b2fa12551ba32f397` (reported match).
@@ -85,11 +97,7 @@ are not DOS-observed timing measurements:
   `[0x142c]` at `0x6c6c` / `0x6c84` and `0x7226` / `0x7234`.
   Exhaustive attribution of these regions to simulation modes remains unknown.
 
-The port currently calls `DoorControl::prepareFrame` from `PlayerInput::update`
-before movement and capture/focus checks. Its float door update is not the DOS
-schedule. Enemy simulation uses an adapted 18 Hz step, caps incoming time at
-0.25 seconds and discards resume intervals. Neither that step nor the oxygen
-accumulator is a substitute for the door counter's read/reset lifecycle.
+**Historical pre-integration observation:** the port previously called `DoorControl::prepareFrame` from `PlayerInput::update` before movement and capture/focus checks and used a floating-point one-second door update. This has been replaced in the current port. Enemy simulation's adapted 18 Hz step and oxygen timing remain distinct from the door counter's read/reset lifecycle.
 
 ## Visibility, sector connectivity, and movement permission differ
 
@@ -144,7 +152,7 @@ This branch requires `(state & 0x01ff) > 0x013c` plus movement/geometry filters.
 - Special consumers of entries 44 and 45 exist at `0xa953`, `0xb4ce`; do not generalize them to every door.
 - No second generic 'code-locked door state machine' was established by this investigation.
 
-## Concrete differences to the existing port (at investigation time)
+## Historical differences to the pre-integration port (superseded)
 
 | Port location | Incompatibility to resolve |
 | --- | --- |
@@ -163,7 +171,7 @@ Tests that currently enshrine port adaptations (must be revised deliberately whe
 
 **Recommended fidelity regression phases:** `0, 59, 60, 61, 64, 89, 90`; ascending and descending; repeated open requests; lock preservation; connectivity at request time; odd/zero/large deltas and overflow; cases involving passage and orientation.
 
-## What still requires new work
+## Historical implementation milestones (the isolated APIs were subsequently integrated)
 
 ### Isolated state updater implemented (2026-11-14)
 
@@ -183,13 +191,7 @@ counter truncation. In particular, opening byte results 128–255 stay ascending
 under signed `JL`; downward results with bit 7 set become zero under `JNS`,
 regardless of borrow. These are consequences of the already reported instructions.
 
-This API is deliberately **not connected to gameplay**. Existing float animation,
-controls, proximity behavior and collisions remain provisional and unchanged.
-Integration still needs wiring the counter lifecycle/reset and suspension gate,
-the whole-table adapter, movement-triggered requests and the
-conditional phase-64 write, plus migrating rendering/connectivity consumers to
-the shared state word. The movement geometry and other writers described above
-must be respected; the passage predicate alone does not implement them.
+**Historical milestone:** this API initially had no gameplay caller. The counter lifecycle, movement-triggered requests, conditional phase-64 writes and live connection-table consumers were subsequently integrated as summarized in **Current port status** above. Remaining fidelity questions must still be checked against the original.
 
 ### Isolated clock and whole-table adapter (2026-11-14)
 
@@ -211,8 +213,7 @@ Equal/backward injected samples do not advance or rebase the clock.
 from a supplied snapshot and calls the existing state updater once per table
 entry. It does not read/reset the clock, split large increments, filter locked
 entries, or decide the `[0x5427]` skip gate. The caller owns whether to call it.
-Neither API has gameplay callers; `DoorControl`, movement, collision, live
-connection storage and the existing float animation remain unchanged.
+**Historical milestone:** neither API had gameplay callers at this stage. They were integrated later; see **Current port status** above.
 
 **Port-tested:** `tests/door_clock_tests.cpp` (`dos_door_clock`) covers fractional
 boundaries and chunking, zero increments, 16-bit wrap including multiple wraps,
@@ -230,7 +231,7 @@ The report does **not** establish complete accuracy for: special code/terminal p
 
 **Original report is summarized here; if a new finding contradicts this page, inspect the original instructions and amend this record with the evidence instead of silently replacing it.**
 
-### Integration dependency: movement correction and sector ownership
+### Historical integration dependency: movement correction and sector ownership (resolved in current port)
 
 The attempted runtime integration reviewed existing local disassembly artifacts
 (`build/audio-debug/executable-disassembly.txt` and
@@ -257,8 +258,7 @@ re-verification or DOS-observed behavior. They extend the geometric summary:
   shifts for the coordinate rotation; replacing this with normalized floating
   point dot products would introduce different boundary rounding.
 
-**Current integration gap (source-inspected):** `Camera` stores global doubles
-without authoritative sector ownership. `player::update` in
+**Historical gap, resolved by the later integration:** `Camera` previously stored global doubles without authoritative sector ownership. `player::update` in
 `src/player_control.cpp` applies `beforeWalls`, then the circular
 `collision::move`, then `constrain`; enemy stepping can split these calls.
 The door correction's position, sector transition and invocation cadence need
@@ -267,9 +267,62 @@ rebuilding a segment world from the phase predicate cannot reproduce these
 writes. Applying native corrections before/after the current circular solver
 without validating their ordering would be an unverified adaptation.
 
-No runtime migration was made in this attempt. The next required slice is the
-player-mode connection movement path, including sector ownership, integer
-coordinate boundaries and its ordering with existing wall/object constraints.
-This is separate from the already implemented PIT counter; neither a phase
-threshold nor the timer resolves it. The original pending questions about the
-full loop cadence and suspension flags remain open.
+No runtime migration was made **in this earlier investigation**. That movement path was subsequently integrated. The questions about full DOS loop cadence and suspension flags remain open.
+
+### Activation/stall audit (2026-11-14)
+
+**Evidence:** reused the existing `build/audio-debug/executable-disassembly.txt`
+and `build/panel-debug/step203-collision.txt` excerpts for the reference EXE
+SHA-256 `7b2883d5fccdd75d75e4832cf55a82a46358ffb25d7c037b2fa12551ba32f397`.
+This is a comparison against inherited **EXE-confirmed** instructions, not a
+new binary/hash verification or **DOS-observed** measurement. No new disassembly.
+
+- `0x10759–0x1078c` builds bounds from the proposed position; endpoint filters
+  at `0x107db–0x10823` require both endpoints inside [x−300,x+300] and
+  [y−300,y+300]. These bounds are a preliminary filter, not an opening radius.
+- The Q14 transforms and interval tests at `0x108ba–0x10982` use previous
+  **and** proposed positions: normal interval overlaps [−180,180], tangent
+  interval overlaps [0,200], including endpoints. The player heading relative
+  to the directed wall must be [120,240) in 720 units (`0x10a03–0x10a2d`);
+  strafing/backing in does not substitute movement direction for heading.
+- The accepted request (`0x10a3c–0x10a40`) and normal correction to 180
+  (`0x10a4a`, `0x10b2c–0x10b80`) occur on the same call. The latter moves the
+  tangent toward 100 by 10 per call. Passage requires masked state >0x013c,
+  not merely invisible phase 60 (`0x10a53–0x10a64`). Thus stopping while a
+  closed door opens follows the original rules; there is no advance trigger
+  outside the stopping line. Passage clamps and phase-64 writes remain as above.
+- Caller `0x16851–0x168fd` passes previous and object-corrected proposed
+  coordinates, heading and player-mode zero to `0x1074b` at `0x168e8`.
+  The previously recovered main-loop order is movement, door update, reset.
+
+**Current port comparison:** `DoorControl::constrainPlayer` implements these
+ordinary-door tests and corrections. `PlayerInput::move` uses `staticWorld()`,
+which excludes 0x1000 faces, before the single aggregate connection correction
+in `main.cpp`; `movementWorld()`'s closed-door segments do not stop the player
+before requesting. Object, static circular and enemy collision can alter the
+proposal, but no extra delay was demonstrated for unobstructed approaches.
+Door update follows the request in the same active frame (entry/resume skips
+one update by existing port policy). No gameplay code changed.
+
+**Port-tested:** `movementApproach` in `tests/door_control_tests.cpp` exercises
+actual `player::update` plus static collision then connection correction, both
+faces, walking/running and 1/60 and 1/18 second samples. It checks activation
+at the quantized 180 boundary and stopping through phase 60, with advance at
+61. Existing tests cover angular/tangential boundaries, diagonal Q14 rounding,
+locks, special flags, sector changes and request-before-update ordering.
+Debug configure/build succeeded and the full CTest suite passed **26/26** in
+this audit, including the extended door test. These results do not establish
+original wall-clock timing or obstacle equivalence.
+
+**Unknown/Adapted:** global double movement, rounding at the DOS boundary,
+provisional speeds, circular static collision, enemy/posture substeps and
+modern frame scheduling remain port adaptations. The 18 Hz substeps do not
+multiply door requests/corrections; those run once per aggregate frame.
+No exact waiting time or complete DOS movement fidelity is claimed.
+
+**Future QoL, not implemented:** an opt-in earlier request could set only the
+opening bit outside the native trigger while retaining access/orientation
+filters, native passage corrections and phase updater. It would change when
+the cycle starts (and therefore when closing can occur), even without changing
+animation speed or closing rules; repeated distant requests could also extend
+opening. Define that policy explicitly and keep the faithful default unchanged.

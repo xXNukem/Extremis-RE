@@ -1,4 +1,5 @@
 #include "door_control.h"
+#include "player_control.h"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -88,6 +89,35 @@ void diagonal()
     w.control.constrainPlayer(before,next);
     check(w.level.connectionStates[0]==0x100 && next.x==445 && next.y==301,
           "Diagonal Q14 correction / negative floor rounding");
+}
+void movementApproach()
+{
+    // Exercise player/static walls then one connection correction, before the
+    // phase update. The request boundary is also the stopping line.
+    for (bool reverse:{false,true}) for (bool run:{false,true})
+        for (double dt:{1.0/60,1.0/18}) {
+            World w;
+            auto c=camera(reverse?720:280,200,reverse?pi:0,reverse?1:0);
+            player::Input input; input.forward=1; input.run=run;
+            bool requested=false;
+            for (int frame=0;frame<30 && !requested;++frame) {
+                const auto before=c;
+                player::update(c,input,dt,{},&w.control.staticWorld());
+                const int normal=int(std::lround(reverse?c.x-500:500-c.x));
+                w.control.constrainPlayer(before,c);
+                requested=bool(w.level.connectionStates[0]&0x100);
+                check(requested==(normal<=180),"Movement/static collision delayed request boundary");
+            }
+            check(requested && c.x==(reverse?680:320),"Approach did not stop at request line");
+            for (int phase:{0,59,60,61}) {
+                w.level.connectionStates[0]=0x100|phase;
+                c=camera(reverse?680:320,200,reverse?pi:0,reverse?1:0);
+                const auto before=c;
+                player::update(c,input,dt,{},&w.control.staticWorld());
+                w.control.constrainPlayer(before,c);
+                check((c.x!=before.x)==(phase>60),"Movement must wait through phase 60");
+            }
+        }
 }
 void crossing()
 {
@@ -213,7 +243,7 @@ void originalSecurity(const std::filesystem::path& path)
 int main(int argc,char** argv)
 {
     try {
-        requests(); diagonal(); crossing(); access(); timing();
+        requests(); diagonal(); movementApproach(); crossing(); access(); timing();
         if (argc==2) originalSecurity(argv[1]);
         std::cout<<"DOS connection movement, sectors, access and timing passed.\n";
     } catch(const std::exception& e) { std::cerr<<e.what()<<'\n'; return 1; }

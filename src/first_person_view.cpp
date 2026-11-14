@@ -455,6 +455,14 @@ bool FirstPersonRenderer::presentFrame(bool withHud, int outputWidth, int output
     const SDL_FRect destination{fit.x,fit.y,fit.width,fit.height};
     return SDL_RenderTexture(renderer_, uploadTexture_.get(), nullptr, &destination);
 }
+bool FirstPersonRenderer::drawFrame(const std::vector<std::uint32_t>& pixels)
+{
+    if(pixels.size()!=64000) return SDL_SetError("Invalid presentation framebuffer");
+    if(!resizeFrame(320,150,true)) return false;
+    composed_=pixels;
+    int width,height;
+    return SDL_GetRenderOutputSize(renderer_,&width,&height) && presentFrame(true,width,height);
+}
 
 bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camera,
                                const wall_textures::Texture* provisionalTexture,

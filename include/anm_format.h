@@ -12,4 +12,7 @@ struct Animation {
 // ANM1: VGA palette, full LZSS frame, then 200 skip/count delta spans.
 Animation decode(const std::vector<std::uint8_t>& bytes);
 Animation load(const std::filesystem::path& path);
+// VGA1 still: same palette/LZSS coding, without ANM count or delta table.
+Animation decodeVga(const std::vector<std::uint8_t>& bytes);
+Animation loadVga(const std::filesystem::path& path);
 }

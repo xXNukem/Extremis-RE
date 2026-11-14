@@ -88,4 +88,20 @@ Animation load(const std::filesystem::path& path)
     if(!file) throw std::runtime_error("Cannot open ANM: "+path.string());
     return decode({std::istreambuf_iterator<char>(file),std::istreambuf_iterator<char>()});
 }
+Animation decodeVga(const std::vector<std::uint8_t>& bytes)
+{
+    if (bytes.size()<772 || bytes[0]!='V' || bytes[1]!='G' || bytes[2]!='A' || bytes[3]!='1')
+        throw std::runtime_error("Invalid VGA1 header");
+    // 0x146f9 enters 0x14b5e with the length-prefixed stream at +772.
+    std::vector<std::uint8_t> frame{'A','N','M','1',1,0};
+    frame.insert(frame.end(),bytes.begin()+4,bytes.begin()+772);
+    frame.insert(frame.end(),bytes.begin()+772,bytes.end());
+    return decode(frame);
+}
+Animation loadVga(const std::filesystem::path& path)
+{
+    std::ifstream file(path,std::ios::binary);
+    if (!file) throw std::runtime_error("Cannot open VGA: "+path.string());
+    return decodeVga({std::istreambuf_iterator<char>(file),std::istreambuf_iterator<char>()});
+}
 }

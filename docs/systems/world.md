@@ -52,7 +52,7 @@ Think of it as the **reachable set of sectors through currently enabled links**,
 
 A moving door does not simply fade out. The renderer crops/retracts its visible horizontal span while retaining the original material. Two reversed source faces must remain geometrically consistent or textures can appear mirrored or stretched.
 
-The current port uses a **provisional one-second stroke** for the motion. The original DOS has its own progress range and timer, including a later **60–90** phase, which has not been reproduced exactly. A known `closed_doors` regression test concerning moving textures is still failing and is tracked separately.
+The current port derives door visibility from the original 16-bit connection state: the phase rises to **90**, reverses and descends to **0**, with the leaf fully hidden at **60**. The motion uses a nominal PIT-derived counter instead of the former provisional one-second stroke; this reproduces the traced state arithmetic, **not necessarily the precise DOS wall-clock cadence**. The user verified automatic opening and closing in Debug with a 26/26 passing suite on 2026-11-14. The activation audit found that the native 180-unit trigger is also the stopping line, with passage only after phase 60; the near-door wait follows those rules. Its perceived duration still needs a controlled comparison against running DOS. See [the instruction-level evidence and live implementation status](../reference/exe/doors.md).
 
 ## The elevators are part of the level network
 

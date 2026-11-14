@@ -5,6 +5,7 @@
 
 class GameAudio {
 public:
+    void stopEffects();
     bool enabled() const { return enabled_; }
     enum class DeathSound { Health, Oxygen };
     void load(const std::filesystem::path& directory);

@@ -25,7 +25,7 @@ target_compile_features(texture_bank PUBLIC cxx_std_17)
 set_target_properties(texture_bank PROPERTIES CXX_EXTENSIONS NO)
 
 add_library(original_hud STATIC src/original_hud.cpp)
-target_sources(original_hud PRIVATE src/original_interactions.cpp src/interaction_animation.cpp src/anm_format.cpp src/interface_font.cpp src/original_map.cpp)
+target_sources(original_hud PRIVATE src/original_interactions.cpp src/interaction_animation.cpp src/anm_format.cpp src/interface_font.cpp src/original_map.cpp src/player_death.cpp)
 target_link_libraries(original_hud PUBLIC texture_bank)
 target_compile_features(original_hud PUBLIC cxx_std_17)
 set_target_properties(original_hud PROPERTIES CXX_EXTENSIONS NO)
@@ -119,6 +119,9 @@ target_link_libraries(render_benchmark PRIVATE horizontal_planes wall_material d
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(player_death_tests tests/player_death_tests.cpp)
+    target_link_libraries(player_death_tests PRIVATE original_hud SDL3::SDL3)
+    add_test(NAME player_death_presentation COMMAND player_death_tests)
     add_executable(door_clock_tests tests/door_clock_tests.cpp)
     target_link_libraries(door_clock_tests PRIVATE doors)
     add_test(NAME dos_door_clock COMMAND door_clock_tests)

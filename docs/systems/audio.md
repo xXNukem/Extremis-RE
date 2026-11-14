@@ -13,7 +13,7 @@ The interesting code lives in [`audio_data.cpp`](../../src/audio_data.cpp), [`au
 | Footsteps | `BANK[7]` | Part of the original movement/camera cadence |
 | Door movement | `BANK[27]` | Audio lifecycle matters; don't leave a loop stuck |
 | Player death (health) | `BANK[25]` | Should finish rather than repeat forever |
-| Player death (oxygen) | `BANK[26]` | Separate death cause/effect |
+| Player death (oxygen) | `BANK[26]` | Native loop stops before GAMEOVER |
 | Interface machinery | Several bank entries | May start/stop across modal animation phases |
 
 Sound numbers are references to recovered bank entries, **not** generic audio file names. A name that sounds like a breathing effect doesn't prove it is used whenever oxygen drops.
@@ -47,3 +47,7 @@ Likewise, **ambient machinery**, map-transfer sounds and other per-level cues st
 For the user-facing display that triggers many of these effects, see [Interfaces](interfaces.md). For player health/oxygen timing, see [Player](player.md).
 
 **Current limitations:** a few audio tests deliberately exclude some unconfirmed ambient behaviours; exact voice overlap and some modal sounds remain open. The port does not bundle the original samples.
+
+Death presentation now requests sound after its initial palette transition and
+stops all voices before GAMEOVER, matching the traced branch boundaries. See
+[Death sequences and timing limits](../reference/exe/player-death.md).

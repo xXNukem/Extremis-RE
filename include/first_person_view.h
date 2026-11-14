@@ -47,6 +47,8 @@ class FirstPersonRenderer {
 public:
     explicit FirstPersonRenderer(SDL_Renderer* renderer);
     ~FirstPersonRenderer();
+    const std::vector<std::uint32_t>& frame() const { return composed_; }
+    bool drawFrame(const std::vector<std::uint32_t>& pixels);
     bool draw(const game_lab::Level& level, const Camera& camera,
               const wall_textures::Texture* provisionalTexture = nullptr,
               const wall_textures::Bank* materials = nullptr,

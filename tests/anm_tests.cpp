@@ -31,6 +31,15 @@ int main(int argc,char** argv)
         const auto bytes=fixture(); const auto film=anm_format::decode(bytes);
         check(film.frames.size()==2 && std::all_of(film.frames[0].begin(),film.frames[0].end(),[](auto p){return p==32;}),"Initial ANM LZSS frame wrong");
         check(film.frames[1][9]==32 && film.frames[1][10]==42 && film.frames[1][11]==43 && film.frames[1][12]==32,"Delta did not preserve previous frame");
+        std::vector<std::uint8_t> vga{'V','G','A','1'};
+        vga.insert(vga.end(),bytes.begin()+6,bytes.begin()+774);
+        const auto fullEnd=776+unsigned(bytes[774])+(unsigned(bytes[775])<<8);
+        vga.insert(vga.end(),bytes.begin()+774,bytes.begin()+fullEnd);
+        check(anm_format::decodeVga(vga).frames[0]==film.frames[0],"VGA1 length-prefixed full frame differs");
+        vga.pop_back();
+        bool truncated=false;
+        try { anm_format::decodeVga(vga); } catch(const std::runtime_error&) { truncated=true; }
+        check(truncated,"Truncated VGA accepted");
         for(std::size_t size:{0u,773u,775u,800u,static_cast<unsigned>(bytes.size()-1)}) rejects({bytes.begin(),bytes.begin()+size});
         auto bad=bytes;bad[3]='2';rejects(bad);bad=bytes;bad[6]=64;rejects(bad);
         bad=bytes;bad.push_back(0);rejects(bad);
