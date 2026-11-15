@@ -30,6 +30,11 @@ target_link_libraries(original_hud PUBLIC texture_bank)
 target_compile_features(original_hud PUBLIC cxx_std_17)
 set_target_properties(original_hud PROPERTIES CXX_EXTENSIONS NO)
 
+add_library(original_intro STATIC src/original_intro.cpp src/original_presentation.cpp)
+target_link_libraries(original_intro PUBLIC original_hud)
+target_compile_features(original_intro PUBLIC cxx_std_17)
+set_target_properties(original_intro PROPERTIES CXX_EXTENSIONS NO)
+
 add_library(player_vitals STATIC src/player_vitals.cpp)
 target_include_directories(player_vitals PUBLIC include)
 target_compile_features(player_vitals PUBLIC cxx_std_17)
@@ -95,7 +100,7 @@ set_target_properties(door_control PROPERTIES CXX_EXTENSIONS NO)
 
 add_executable(InExtremisPort src/main.cpp src/map_view.cpp src/first_person_view.cpp
     src/texture_preview.cpp src/player_input.cpp src/plane_appearance.cpp src/startup_credits.cpp
-    src/original_font.cpp)
+    src/original_font.cpp src/original_intro_player.cpp)
 target_sources(InExtremisPort PRIVATE $<$<CONFIG:Debug>:src/debug_menu.cpp>)
 target_compile_definitions(InExtremisPort PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
 set_target_properties(InExtremisPort PROPERTIES
@@ -103,7 +108,7 @@ set_target_properties(InExtremisPort PROPERTIES
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
 )
-target_link_libraries(InExtremisPort PRIVATE player_control wall_animation horizontal_planes wall_material sprites survival_session weapon_fire SDL3::SDL3)
+target_link_libraries(InExtremisPort PRIVATE player_control wall_animation horizontal_planes wall_material sprites survival_session weapon_fire original_intro SDL3::SDL3)
 
 add_executable(inspect_wall_materials EXCLUDE_FROM_ALL tools/inspect_wall_materials.cpp)
 target_link_libraries(inspect_wall_materials PRIVATE game_lab)
@@ -119,6 +124,12 @@ target_link_libraries(render_benchmark PRIVATE horizontal_planes wall_material d
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(original_presentation_tests tests/original_presentation_tests.cpp)
+    target_link_libraries(original_presentation_tests PRIVATE original_intro)
+    add_test(NAME original_startup_presentation COMMAND original_presentation_tests)
+    add_executable(original_intro_tests tests/original_intro_tests.cpp)
+    target_link_libraries(original_intro_tests PRIVATE original_intro)
+    add_test(NAME original_introduction COMMAND original_intro_tests)
     add_executable(player_death_tests tests/player_death_tests.cpp)
     target_link_libraries(player_death_tests PRIVATE original_hud SDL3::SDL3)
     add_test(NAME player_death_presentation COMMAND player_death_tests)

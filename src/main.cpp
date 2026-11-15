@@ -17,6 +17,7 @@
 #include "map_session.h"
 #include "enemy_system.h"
 #include "startup_credits.h"
+#include "original_intro_player.h"
 #include "player_death.h"
 
 #include <exception>
@@ -185,12 +186,20 @@ int main(int argc, char* argv[])
     }
 
     int exitCode = 0;
-    const auto credits=showStartupCredits(window,renderer,
+    auto credits=showStartupCredits(window,renderer,
         argc>=2 ? std::filesystem::path(argv[1]).parent_path() / "DATA"
                 : std::filesystem::path{});
     if (credits==StartupCreditsResult::Error) {
         SDL_Log("Startup credits failed: %s",SDL_GetError());
         exitCode=1;
+    }
+    if (credits==StartupCreditsResult::Continue && data) {
+        credits=showOriginalPresentation(window,renderer,std::filesystem::path(argv[1]).parent_path()/"DATA");
+        if(credits==StartupCreditsResult::Error) exitCode=1;
+    }
+    if (credits==StartupCreditsResult::Continue && data) {
+        credits=showOriginalIntro(window,renderer,std::filesystem::path(argv[1]).parent_path()/"DATA");
+        if(credits==StartupCreditsResult::Error) exitCode=1;
     }
     if (credits==StartupCreditsResult::Continue) {
         FirstPersonRenderer firstPerson(renderer);

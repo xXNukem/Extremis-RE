@@ -20,6 +20,7 @@ For address conventions and evidence labels, consult [Reverse-engineering notes]
 | Wall textures, floors, ceilings, sprites | — | [Rendering](../systems/rendering.md) | `0x15795–0x15925` DALLE addressing; `0x12ac4` onward planes; sprite projection `0x11f83–0x1207f` |
 | Inventory, cards and level transfer | — | [Items](../systems/items.md), [Interfaces](../systems/interfaces.md) | `GAME.LAB` zone access offset `+0x0e`; door/card routines `0x937c–0x95d7`; wider interactions incompletely verified |
 | Audio and timebases | — | [Audio](../systems/audio.md), [Player](../systems/player.md) | PIT divisor 7457 (~160 Hz); main loop/frequency estimator are distinct; fixed 18 Hz in port is an adaptation |
+| Original introduction / startup presentation | [Introduction sequence](exe/introduction.md) | [File formats](file-formats.md) | `0x63d2–0x6742` prelude + `0x68a5 → 0x1f4ba–0x20cd6` PSEQ integrated after custom credits; Blue Sphere/title/WHO fades, repeats and key tests pass (Debug 29/29); PSEQ unchanged, unsafe PSEQ12 draw suppressed; host timing/RNG adapted; DOS comparison pending |
 | HUD, map and terminals | — | [Interfaces](../systems/interfaces.md) | `0xa608` dispatch, `0x114ba–0x1185c` connected-sector traversal |
 
 ## Current verification priorities (2026-11-14)
