@@ -91,6 +91,7 @@ player::Vitals& SurvivalSession::vitals() { return vitals_; }
 player::Inventory& SurvivalSession::inventory() { return inventory_; }
 const player::Inventory& SurvivalSession::inventory() const { return inventory_; }
 void SurvivalSession::postMessage(messages::Id id) { messages_.post(id); }
+void SurvivalSession::postDestruction(std::int32_t remaining) { messages_.postDestruction(remaining); }
 void SurvivalSession::clearMessages() { messages_.clear(); }
 
 std::string SurvivalSession::windowTitle(const std::string& base) const

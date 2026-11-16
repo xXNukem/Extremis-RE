@@ -10,6 +10,7 @@
 #include <map>
 #include <iostream>
 #include <stdexcept>
+#include <tuple>
 
 namespace {
 void check(bool condition,const char* message) { if (!condition) throw std::runtime_error(message); }
@@ -101,7 +102,14 @@ struct Session {
         level.connectionStates.resize(8); level.connectionStates[7]=0x400;
         game_lab::Sector sector{};
         sector.vertices={{100,200},{100,0}}; sector.walls={{0,1,type,contents}};
-        level.sectors.push_back(sector); level.accessCode=90; level.codeTargets={0,1}; items.load(level);
+        level.sectors.push_back(sector);
+        if(type==0x3002 && contents<interaction::original::lifts.size()) {
+            const auto& routes=interaction::original::lifts[contents].routes;
+            const auto source=std::find_if(routes.begin(),routes.end(),[](const auto& r){return r.exists;});
+            level.zoneIndex=source->zone;level.sectors.clear();level.sectors.resize(source->sector+1);
+            level.sectors[source->sector]=sector;camera.sector=source->sector;
+        }
+        level.accessCode=90; level.codeTargets={0,1}; items.load(level);
     }
     void tick(bool active=true) {items.update(&camera,active,obstacles,player,audio,&control);}
     void settle() {
@@ -277,8 +285,9 @@ void inventoryAndElevator()
     const auto travel=lift.items.takeTravel();
     check(travel && travel->zone==1 && travel->arrival.sector==0 &&
           travel->arrival.x==300 && travel->arrival.y==280 && travel->arrival.angle==540 &&
-          lift.player.inventory().cards()[0]==1,
-          "Pending level transition consumed E001");
+          lift.player.inventory().cards()[0]==1 && travel->elevator &&
+          travel->elevator->sourceFloor==2 && travel->elevator->destinationFloor==1,
+          "Pending level transition consumed E001 or lost floor direction");
     check(!lift.items.modal() && !lift.items.takeTravel(),"Elevator request was not consumed");
 }
 void originalTravel()
@@ -291,18 +300,47 @@ void originalTravel()
     check(admitted(*route(2,0),9,1,14),"E009 did not bypass destination filter");
     check(!admitted(*route(2,0),0,1,14) && !admitted(*route(2,0),10,1,14),
           "Invalid E-card identifier accepted");
-    for (unsigned index=0;index<lifts.size();++index) for (unsigned row=0;row<4;++row) {
+    const ItemSession::Travel restart{0,{0,300,320,180}};
+    check(!restart.elevator,"Restart unexpectedly requests a cinematic");
+    for (unsigned index=0;index<lifts.size();++index) for(const auto& source:lifts[index].routes)
+    for (unsigned row=0;row<4;++row) {
         const auto& r=*route(index,row);
-        if (!r.exists) continue;
+        if (!r.exists || !source.exists) continue;
         Session s(0x3002,std::uint16_t(index));
+        const auto panel=s.level.sectors[*s.camera.sector];
+        s.level.sectors.clear();s.level.sectors.resize(source.sector+1);
+        s.level.sectors[source.sector]=panel;s.level.zoneIndex=source.zone;s.camera.sector=source.sector;
+        s.items.load(s.level);
+        s.player.vitals().applyDamage(123);s.player.vitals().update(12,true);
+        std::uint16_t supply=0x2064;s.player.inventory().takeSupply(supply);
+        supply=0x1064;s.player.inventory().takeSupply(supply);
         std::uint16_t card=0x3009; s.player.inventory().takeSupply(card);
+        const auto state=[&]() {
+            const auto& i=s.player.inventory();
+            return std::make_tuple(s.player.vitals().health(),s.player.vitals().oxygen(),i.cards(),
+                i.injectors(),i.oxygenReserve(),i.weapon(),i.ammunition(),i.batteryCharge(),i.mine());
+        };
+        const auto before=state();const auto beforeCamera=s.camera;
         s.press(SDL_SCANCODE_E); s.press(SDL_SCANCODE_SPACE);
         for(unsigned i=0;i<row;++i) s.press(SDL_SCANCODE_UP);
         s.press(SDL_SCANCODE_SPACE);
         const auto travel=s.items.takeTravel();
-        check(travel && travel->zone==r.zone && travel->arrival.sector==r.sector &&
+        check(state()==before && s.camera.x==beforeCamera.x && s.camera.y==beforeCamera.y &&
+              s.camera.sector==beforeCamera.sector,"Request mutated state before presentation/commit");
+        if(r.zone==s.level.zoneIndex && r.sector==s.camera.sector) {
+            check(!travel && !s.items.modal(),"Current destination must dismiss without transfer");
+            continue;
+        }
+        check(travel && travel->elevator && travel->elevator->lift==index &&
+              travel->elevator->destinationFloor==r.floor &&
+              travel->elevator->sourceFloor==std::find_if(lifts[index].routes.begin(),lifts[index].routes.end(),
+                  [&](const auto& from){return from.exists && from.zone==s.level.zoneIndex && from.sector==s.camera.sector;})->floor &&
+              travel->zone==r.zone && travel->arrival.sector==r.sector &&
               travel->arrival.x==lifts[index].x && travel->arrival.y==lifts[index].y &&
               travel->arrival.angle==lifts[index].angle,"Table route not reachable from interface");
+        auto destination=s.level;destination.zoneIndex=travel->zone;destination.playerStart=travel->arrival;
+        s.items.load(destination);
+        check(state()==before,"Destination item load reset vitals or inventory");
     }
     interaction::Renderer renderer(fixture());
     interaction::State menu; menu.screen=interaction::Screen::Elevator;
@@ -384,6 +422,62 @@ void missingVariants()
     check(!n.items.modal(),"Disabled N security lost state on level return");
     n.items.resetPlans(); n.press(SDL_SCANCODE_E);
     check(n.items.modal(),"New game retained disabled N security");
+}
+void destructionReaders()
+{
+    Session s(0x3422,0x0101);s.level.zoneIndex=21;s.items.load(s.level);
+    check(!s.items.securitiesComplete() && s.items.selfDestruction().remaining()==48000,"Initial destruction state");
+    // Visiting every zone, including Debug-equivalent loads, cannot arm the event.
+    for(unsigned zone=0;zone<30;++zone) {
+        s.level.zoneIndex=zone;s.items.load(s.level);
+        check(!s.items.updateSelfDestruction(65535,true) && s.items.selfDestruction().remaining()==48000,
+              "Level load activated self-destruction");
+    }
+    s.level.zoneIndex=21;
+    for(unsigned id=1;id<=16;++id) {
+        const unsigned required=(id-1)/4+1;
+        s.level.sectors[0].walls[0].extra=std::uint16_t((required<<8)|id);
+        s.items.load(s.level);s.player=SurvivalSession{};
+        std::uint16_t wrong=0x5005;s.player.inventory().takeSupply(wrong);
+        s.press(SDL_SCANCODE_E);s.press(SDL_SCANCODE_E);
+        check(!s.items.securitiesComplete(),"Wrong card completed security set");
+        s.press(SDL_SCANCODE_ESCAPE);
+        std::uint16_t card=std::uint16_t(0x5000|required);s.player.inventory().replaceCard(card,0);
+        s.press(SDL_SCANCODE_E);s.press(SDL_SCANCODE_E);
+        check(!s.items.modal() && s.player.inventory().cards()[0]==int(0x2000|required),"Security acceptance/retained card");
+        // Repeating the same reader must not complete missing distinct conditions.
+        s.press(SDL_SCANCODE_E);check(!s.items.modal(),"Repeated disabled reader reopened");
+        check(s.items.securitiesComplete()==(id==16) && s.items.selfDestruction().active()==(id==16),
+              "Activation before all sixteen unique securities");
+        if(id<16) s.items.updateSelfDestruction(65535,true);
+        check(s.items.selfDestruction().remaining()==48000,"Premature timer decrement");
+    }
+    check(!s.items.updateSelfDestruction(100,true) && s.items.selfDestruction().remaining()==47900,"Timer progress");
+    s.press(SDL_SCANCODE_I);
+    s.items.updateSelfDestruction(65535,true);
+    check(s.items.selfDestruction().remaining()==47900,"Inventory failed to suspend countdown");
+    s.press(SDL_SCANCODE_I);
+    s.items.updateSelfDestruction(65535,false);
+    check(s.items.selfDestruction().remaining()==47900,"Simulation pause failed");
+    s.level.zoneIndex=20;s.items.load(s.level);s.items.updateSelfDestruction(65535,true);
+    check(s.items.securitiesComplete() && s.items.selfDestruction().expired(),"Active countdown did not persist outside level22");
+    // Reset, then re-arm through the same readers for the exact-zero boundary.
+    s.items.resetPlans();s.level.zoneIndex=21;
+    for(unsigned id=1;id<=16;++id) {
+        const unsigned required=(id-1)/4+1;
+        s.level.sectors[0].walls[0].extra=std::uint16_t((required<<8)|id);s.items.load(s.level);
+        std::uint16_t card=std::uint16_t(0x5000|required);s.player.inventory().replaceCard(card,0);
+        s.press(SDL_SCANCODE_E);s.press(SDL_SCANCODE_E);
+    }
+    s.items.updateSelfDestruction(100,true);
+    s.level.zoneIndex=21;s.items.load(s.level);
+    check(!s.items.updateSelfDestruction(47900,true) && !s.items.selfDestruction().expired(),"Exact zero latched death early");
+    check(!s.items.updateSelfDestruction(0,true),"Zero ticks caused expiry");
+    check(s.items.updateSelfDestruction(1,true) && s.items.selfDestruction().expired(),"Negative subtraction failed to expire");
+    check(!s.items.updateSelfDestruction(65535,true) && s.items.selfDestruction().remaining()==0,"Expiry repeated or underflowed");
+    s.items.resetPlans();
+    check(!s.items.securitiesComplete() && !s.items.selfDestruction().expired() &&
+          s.items.selfDestruction().remaining()==48000,"New game failed to reset event");
 }
 void allPanelsLab(const char* path)
 {
@@ -802,7 +896,7 @@ void originals(const std::filesystem::path& directory)
 }
 int main(int argc,char* argv[])
 {
-    try { graphics(); checksum(); flows(); selectionRegressions(); detectorInventory(); inventoryAndElevator(); originalTravel(); unifiedControls(); cardCountsAndLiftDirections(); capacityAndPlan(); pauseAndFailures(); codeTerminal(); sequenceTiming(); missingVariants(); if(argc==2) originals(argv[1]); if(argc==3 && std::string_view(argv[1])=="--lab") { originalTravelLab(argv[2]); allPanelsLab(argv[2]); }
+    try { graphics(); checksum(); flows(); selectionRegressions(); detectorInventory(); inventoryAndElevator(); originalTravel(); unifiedControls(); cardCountsAndLiftDirections(); capacityAndPlan(); pauseAndFailures(); codeTerminal(); sequenceTiming(); missingVariants(); destructionReaders(); if(argc==2) originals(argv[1]); if(argc==3 && std::string_view(argv[1])=="--lab") { originalTravelLab(argv[2]); allPanelsLab(argv[2]); }
         std::cout<<"Original interaction coordinates, bounds, resources and code format passed.\n";
     } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
 }

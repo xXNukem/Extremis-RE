@@ -1,5 +1,6 @@
 #pragma once
 #include "level_items.h"
+#include "self_destruction.h"
 #include "original_interactions.h"
 #include <cstdint>
 #include <array>
@@ -12,7 +13,13 @@ class DoorControl;
 
 class ItemSession {
 public:
-    struct Travel { unsigned zone; game_lab::PlayerStart arrival; };
+    struct ElevatorTravel { unsigned lift,sourceFloor,destinationFloor; };
+    struct Travel {
+        unsigned zone;
+        game_lab::PlayerStart arrival;
+        // Absent for Debug/restart; captured only after route permission succeeds.
+        std::optional<ElevatorTravel> elevator;
+    };
     std::optional<Travel> takeTravel();
     void load(const game_lab::Level& level);
     // Returns true when the modal interface owns this event.
@@ -20,6 +27,15 @@ public:
     void update(const Camera* camera, bool active, const collision::World& obstacles,
                 SurvivalSession& player, GameAudio& audio, DoorControl* security = nullptr, double seconds = 1.0/70.0);
     bool modal() const;
+    bool securitiesComplete() const;
+    unsigned completedSecurities() const { return completedSecurities_; }
+    void finishEvacuation() { completedSecurities_=0; selfDestruction_.deactivate(); }
+    const SelfDestruction& selfDestruction() const { return selfDestruction_; }
+    bool updateSelfDestruction(std::uint16_t ticks,bool simulationActive);
+#ifdef EXTREMIS_DEBUG_MENU
+    void debugCompleteSecurities(); // Explicit diagnostic, never called by travel.
+    void debugShortenDestruction();
+#endif
     bool planTransferred() const;
     bool planTransferred(unsigned zone) const;
     void resetPlans(); // New game, not level switching.
@@ -37,6 +53,8 @@ private:
     bool authorized_ = false, available_ = true;
     std::array<bool,30> plans_{};
     std::array<bool,16> securities_{};
+    SelfDestruction selfDestruction_;
+    unsigned completedSecurities_=0;
     unsigned zone_ = 0;
     std::optional<Travel> travel_;
     bool take_ = false, injector_ = false, oxygen_ = false;

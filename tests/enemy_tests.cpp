@@ -255,7 +255,12 @@ void allBanks(const std::filesystem::path& directory, bool synthetic)
         check(system.records()[0].health==3 && system.records()[0].state==4,"Bank did not receive hit");
         for(unsigned i=0;i<4;++i) system.update(level,view,walls,vitals,1./18,true);
         system.hit(0,4,0);
-        for(unsigned i=0;i<8;++i) system.update(level,view,walls,vitals,1./18,true);
+        check(!system.terminalDefeated(),"Lethal hit triggered premature victory");
+        for(unsigned i=0;i<7;++i) {
+            system.update(level,view,walls,vitals,1./18,true);
+            check(!system.terminalDefeated(),"Incomplete death triggered victory");
+        }
+        system.update(level,view,walls,vitals,1./18,true);
         check(system.records()[0].health==0xffff && system.scene().objects.empty(),"Bank did not retire");
         check(system.terminalDefeated()==(bank==9),"Boss ending flag differs");
         const auto sounds=system.takeSounds();

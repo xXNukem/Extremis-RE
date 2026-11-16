@@ -19,6 +19,12 @@
 #include "startup_credits.h"
 #include "original_intro_player.h"
 #include "player_death.h"
+#include "original_ending_player.h"
+#include "original_elevator_player.h"
+#include "victory_session.h"
+#include "shuttle_session.h"
+#include "level22_communication.h"
+#include "original_shuttle_player.h"
 
 #include <exception>
 #include <cmath>
@@ -30,14 +36,20 @@
 int main(int argc, char* argv[])
 {
 #ifdef EXTREMIS_DEBUG_MENU
+    const bool communicationDebug = argc == 3 && std::string_view(argv[2]) == "--communication-debug";
+    const bool shuttleDebug = argc == 3 && std::string_view(argv[2]) == "--shuttle-debug";
     const bool vitalsDebug = argc == 3 && std::string_view(argv[2]) == "--vitals-debug";
+    const bool destructionDebug = argc == 3 && std::string_view(argv[2]) == "--self-destruction-debug";
 #else
+    const bool communicationDebug = false;
+    const bool shuttleDebug = false;
     const bool vitalsDebug = false;
+    const bool destructionDebug = false;
 #endif
-    if (argc > 3 || (argc == 3 && !vitalsDebug)) {
+    if (argc > 3 || (argc == 3 && !vitalsDebug && !destructionDebug && !shuttleDebug && !communicationDebug)) {
         std::cerr << "Usage: " << argv[0] << " [path/to/GAME.LAB"
 #ifdef EXTREMIS_DEBUG_MENU
-                  << " [--vitals-debug]"
+                  << " [--vitals-debug|--self-destruction-debug|--shuttle-debug|--communication-debug]"
 #endif
                   << "]\n";
         return 1;
@@ -62,9 +74,24 @@ int main(int argc, char* argv[])
     collision::World collisionWorld;
     if (argc >= 2) {
         try {
-            data = game_lab::loadLevel1(argv[1]);
+            data = game_lab::loadLevel(argv[1],(destructionDebug || shuttleDebug || communicationDebug)?21:0);
+            if(destructionDebug) data->level.playerStart=game_lab::PlayerStart{0,280,300,360};
+            if(communicationDebug) {
+                data->level.playerStart=communication::returnPosition;
+                data->level.playerStart->angle=540; // Face connection44; DOS return still uses 180.
+            }
+            if(shuttleDebug) {
+                data->level.playerStart=shuttle::refusal;
+                data->level.playerStart->angle=180; // Debug spawn faces the actual door.
+            }
             const auto& level = data->level;
             items.load(level);
+#ifdef EXTREMIS_DEBUG_MENU
+            if(destructionDebug) {
+                items.debugCompleteSecurities();
+                SDL_Log("SELF-DESTRUCTION DEBUG: level22, real security flags completed, 48000 units. F12 shortens remaining budget to 1600; I/map/Debug/focus pause it.");
+            }
+#endif
             try {
                 interactionRenderer.emplace(interaction::load(std::filesystem::path(argv[1]).parent_path()/"DATA"));
             } catch (const std::exception& error) {
@@ -186,7 +213,7 @@ int main(int argc, char* argv[])
     }
 
     int exitCode = 0;
-    auto credits=showStartupCredits(window,renderer,
+    auto credits=communicationDebug?StartupCreditsResult::SkipAll:showStartupCredits(window,renderer,
         argc>=2 ? std::filesystem::path(argv[1]).parent_path() / "DATA"
                 : std::filesystem::path{});
     if (credits==StartupCreditsResult::Error) {
@@ -201,7 +228,7 @@ int main(int argc, char* argv[])
         credits=showOriginalIntro(window,renderer,std::filesystem::path(argv[1]).parent_path()/"DATA");
         if(credits==StartupCreditsResult::Error) exitCode=1;
     }
-    if (credits==StartupCreditsResult::Continue) {
+    if (credits==StartupCreditsResult::Continue || credits==StartupCreditsResult::SkipAll) {
         FirstPersonRenderer firstPerson(renderer);
         game_lab::Level emptyLevel;
         DoorControl doorControl(collisionWorld, levelDoors, data ? data->level : emptyLevel);
@@ -220,6 +247,8 @@ int main(int argc, char* argv[])
             catch (const std::exception& error) { SDL_Log("Debug catalog: %s",error.what()); }
         }
 #endif
+        VictorySession victory;
+        std::optional<ItemSession::Travel> shuttleTravel;
         bool running = true;
         bool showPolygons = false;
         bool show3D = camera.has_value();
@@ -236,7 +265,7 @@ int main(int argc, char* argv[])
             mapSession.beginFrame(data?data->level.zoneIndex:0);
             SDL_Event event;
             bool deathKey=false;
-            while (SDL_PollEvent(&event)) {
+            while (!shuttleTravel && SDL_PollEvent(&event)) {
                 if(deathPresentation && deathPresentation->active()) {
                     if(event.type==SDL_EVENT_QUIT || event.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED) running=false;
                     if(event.type==SDL_EVENT_KEY_DOWN && event.key.windowID==SDL_GetWindowID(window) && !event.key.repeat) {
@@ -254,17 +283,47 @@ int main(int argc, char* argv[])
                     }
                     // Existing explicit F10 diagnostic reset remains available;
                     // ordinary UI/use/movement must not consume death-screen keys.
-                    if(event.type==SDL_EVENT_KEY_DOWN && event.key.scancode==SDL_SCANCODE_F10)
+                    if(event.type==SDL_EVENT_KEY_DOWN && event.key.scancode==SDL_SCANCODE_F10 && !victory.processed())
                         survival.handleEvent(event,SDL_GetWindowID(window));
                     playerInput.handleEvent(event,false);
                     continue;
                 }
 #ifdef EXTREMIS_DEBUG_MENU
+                if(shuttleDebug && data && data->level.zoneIndex==21 &&
+                   event.type==SDL_EVENT_KEY_DOWN && event.key.windowID==SDL_GetWindowID(window) &&
+                   event.key.scancode==SDL_SCANCODE_L &&
+                   (event.key.mod & SDL_KMOD_CTRL) && (event.key.mod & SDL_KMOD_SHIFT) && !event.key.repeat) {
+                    std::uint16_t card=0x5005;
+                    if(survival.inventory().takeSupply(card)==player::Transfer::Capacity)
+                        survival.inventory().replaceCard(card,0);
+                    items.debugCompleteSecurities();
+                    SDL_Log("SHUTTLE DEBUG: card 0x2005 acquired and 16 securities disabled; approach the door again.");
+                    continue;
+                }
+                if(destructionDebug && data && data->level.zoneIndex==21 &&
+                   event.type==SDL_EVENT_KEY_DOWN && event.key.windowID==SDL_GetWindowID(window) &&
+                   event.key.scancode==SDL_SCANCODE_F12 && !event.key.repeat) {
+                    items.debugShortenDestruction();
+                    SDL_Log("SELF-DESTRUCTION DEBUG: remaining %d units",items.selfDestruction().remaining());
+                    continue;
+                }
                 if (data && event.type!=SDL_EVENT_QUIT && event.type!=SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                     !((event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_KEY_UP) && event.key.windowID!=SDL_GetWindowID(window)) &&
                     debugMenu.event(event,survival.inventory(),data->level.zoneIndex)) {
                     items.clearInput(); playerInput.handleEvent(event,false); playerInput.invalidateContext();
                     activeEnemies=debugMenu.enemiesEnabled() && enemySystem?&*enemySystem:nullptr;
+                    continue;
+                }
+#endif
+#ifdef EXTREMIS_DEBUG_MENU
+                if(event.type==SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+                   event.key.windowID==SDL_GetWindowID(window) && event.key.scancode==SDL_SCANCODE_F9 &&
+                   data && data->level.zoneIndex==29 && activeEnemies && !debugMenu.open()) {
+                    for(std::size_t i=0;i<activeEnemies->records().size();++i)
+                        while(activeEnemies->records()[i].health!=0xffff && activeEnemies->records()[i].state!=5)
+                            activeEnemies->hit(i,4,0);
+                    activeEnemies->takeSounds();
+                    SDL_Log("Debug: lethal MONS9 hit; waiting for normal death completion");
                     continue;
                 }
 #endif
@@ -316,7 +375,7 @@ int main(int argc, char* argv[])
             const double elapsedSeconds = double(ticks - previousTicks) / 1000.0;
             previousTicks = ticks;
             if(deathPresentation && deathPresentation->active() && !restartRequested) {
-                if(survival.alive()) {
+                if(survival.alive() && !victory.processed() && !items.selfDestruction().expired()) {
                     deathPresentation->reset(); gameAudio.stopEffects();
                     survival.update(0,false,gameAudio);
                     playerInput.invalidateContext(); doorControl.resetLevel();
@@ -327,7 +386,8 @@ int main(int argc, char* argv[])
                     if(SDL_GetKeyboardFocus()==window)
                         deathPresentation->advance(elapsedSeconds,deathKey,held);
                     if(deathPresentation->takeSoundStart()) gameAudio.beginDeath(
-                        survival.vitals().deathCause()==player::DeathCause::Oxygen ? GameAudio::DeathSound::Oxygen : GameAudio::DeathSound::Health);
+                        deathPresentation->cause()==player::DeathCause::Oxygen ? GameAudio::DeathSound::Oxygen :
+                        deathPresentation->cause()==player::DeathCause::SelfDestruction ? GameAudio::DeathSound::SelfDestruction : GameAudio::DeathSound::Health);
                     if(deathPresentation->takeSoundStop()) gameAudio.stopEffects();
                     if(!SDL_SetRenderDrawColor(renderer,0,0,0,255) || !SDL_RenderClear(renderer) ||
                        !firstPerson.drawFrame(deathPresentation->pixels()) || !SDL_RenderPresent(renderer)) {
@@ -347,9 +407,11 @@ int main(int argc, char* argv[])
 #endif
             const bool inputActive = camera && show3D && !debugPaused && SDL_GetKeyboardFocus() == window;
             // Resolve context changes before polling continuous WASD/Shift state.
-            items.update(camera ? &*camera : nullptr,inputActive && !mapSession.blocksSimulation(),
+            items.update(camera ? &*camera : nullptr,!shuttleTravel && inputActive && !mapSession.blocksSimulation(),
                          doorControl.movementWorld(),survival,gameAudio,&doorControl,elapsedSeconds);
+                const bool arrivingByShuttle=shuttleTravel.has_value();
                 auto travel=items.takeTravel();
+                if(shuttleTravel) { travel=shuttleTravel;shuttleTravel.reset(); }
                 if(restartRequested) travel=ItemSession::Travel{0,{0,300,320,180}};
 #ifdef EXTREMIS_DEBUG_MENU
                 if (auto requested=debugMenu.takeTravel()) {
@@ -362,12 +424,26 @@ int main(int argc, char* argv[])
 #endif
                 if (travel) {
 
+                    const auto presentElevator=[&]() {
+                        if(!travel->elevator) return true;
+                        const auto& e=*travel->elevator;
+                        const auto result=showOriginalElevator(window,renderer,
+                            std::filesystem::path(argv[1]).parent_path()/"DATA",
+                            int(e.destinationFloor)-int(e.sourceFloor),gameAudio);
+                        playerInput.invalidateContext();items.clearInput();
+                        if(result==StartupCreditsResult::Quit) running=false;
+                        return result==StartupCreditsResult::Continue;
+                    };
                     // An elevator travelling within the same level must not reload the world.
                     if (!restartRequested && data && travel->zone == data->level.zoneIndex) {
                         auto arrivalLevel = data->level;
                         arrivalLevel.playerStart = travel->arrival;
 
-                        camera = initialCamera(arrivalLevel);
+                        const auto nextCamera=initialCamera(arrivalLevel);
+                        if(!presentElevator()) {
+                            doorControl.resetLevel();previousTicks=SDL_GetTicks();continue;
+                        }
+                        camera = nextCamera;
                         playerInput.invalidateContext();
 
                         SDL_Log("Elevator: same-level transfer to sector %u",
@@ -396,13 +472,25 @@ int main(int argc, char* argv[])
                         throw std::runtime_error("Missing destination wall textures");
                     auto nextWorld=collision::staticWorld(next.level);
                     auto nextDoors=doors::closedDoors(next.level);
+                    if(!presentElevator()) {
+                        doorControl.resetLevel();previousTicks=SDL_GetTicks();continue;
+                    }
                     if(restartRequested) {
                         survival=SurvivalSession(vitalsDebug);
                         items=ItemSession{};
                         items.setAvailable(interactionRenderer.has_value());
-                        gameAudio.stopEffects(); deathPresentation->reset();
+                        gameAudio.stopEffects(); deathPresentation->reset(); victory.reset();
+#ifdef EXTREMIS_DEBUG_MENU
+                        debugMenu=DebugMenu{}; debugMenu.load(argv[1]);
+#endif
                     }
                     items.load(next.level); // New game resets plans; elevator travel keeps them.
+                    if(arrivingByShuttle) {
+                        SDL_ResetKeyboard();
+                        SDL_FlushEvents(SDL_EVENT_KEY_DOWN,SDL_EVENT_KEY_UP);
+                        SDL_FlushEvents(SDL_EVENT_MOUSE_MOTION,SDL_EVENT_MOUSE_WHEEL);
+                        items.clearInput();
+                    }
                     data=std::move(next); camera=nextCamera;
                     collisionWorld=std::move(nextWorld); levelDoors=std::move(nextDoors);
                     doorControl.resetLevel();
@@ -453,6 +541,7 @@ int main(int argc, char* argv[])
             }
 
             const bool doorReady=doorControl.beginFrame(simulationActive && survival.alive() && playerInput.fireReady());
+            const auto gameplayTicks=doorReady?doorControl.gameplayTicks():std::uint16_t(0);
             if (activeEnemies && camera && data)
                 activeEnemies->update(data->level,*camera,doorControl.movementWorld(),survival.vitals(),
                     elapsedSeconds,simulationActive && survival.alive(),
@@ -467,6 +556,29 @@ int main(int argc, char* argv[])
                         playerInput.recoil(*camera);
                         activeEnemies->constrainPlayer(data->level,before,*camera,doorControl.staticWorld());
                     },levelDoors,spriteScene ? &*spriteScene : nullptr);
+            if(activeEnemies && activeEnemies->terminalDefeated()) {
+                const auto result= victory.update(true,[&]() {
+                    gameAudio.stopEffects(); activeEnemies->takeSounds();
+                    items.clearInput(); playerInput.invalidateContext();
+                    doorControl.beginFrame(false);
+                    mapSession=original_map::Session{};
+                    if(!deathPresentation) {
+                        SDL_Log("Victory requires the original menu resources");
+                        return StartupCreditsResult::Error;
+                    }
+                    original_ending::EntryImage entry;
+                    entry.rgba=firstPerson.frame();
+                    return showOriginalEnding(window,renderer,
+                        std::filesystem::path(argv[1]).parent_path()/"DATA",std::move(entry));
+                },[&]() { deathPresentation->beginMenu(); });
+                previousTicks=SDL_GetTicks();
+                SDL_ResetKeyboard(); items.clearInput(); playerInput.invalidateContext();
+                if(result!=StartupCreditsResult::Continue) {
+                    if(result==StartupCreditsResult::Error) exitCode=1;
+                    break;
+                }
+                continue; // No remaining simulation, audio dispatch or gameplay rendering.
+            }
             // One connection correction for the aggregate player update, never
             // inside the enemy/posture substeps. Then the common DOS door delta.
             if (simulationActive && survival.alive() && playerInput.fireReady() && camera) {
@@ -480,9 +592,77 @@ int main(int argc, char* argv[])
             if (survival.update(elapsedSeconds,simulationActive,gameAudio,playerInput.running() && effectiveMovement>0,
                                 deathPresentation.has_value()))
                 SDL_SetWindowTitle(window,survival.windowTitle(texturePreview.windowTitle()).c_str());
-            if(!survival.alive() && deathPresentation && !deathPresentation->active() && firstPerson.frame().size()==64000) {
+            const bool destructionRunning=doorReady && simulationActive && survival.alive() &&
+                !items.busy() && items.selfDestruction().active();
+            items.updateSelfDestruction(gameplayTicks,destructionRunning);
+            gameAudio.destructionAlarm(destructionRunning && !items.selfDestruction().expired());
+            if(destructionRunning) survival.postDestruction(items.selfDestruction().remaining());
+            if(simulationActive && survival.alive() && !items.busy() && data && camera &&
+               communication::trigger(data->level,camera->sector.value_or(~0u))) {
+                gameAudio.stopEffects();items.clearInput();playerInput.invalidateContext();
+                doorControl.beginFrame(false);doorControl.rebuildWorld();
+                const auto result=communication::show(window,std::filesystem::path(argv[1]).parent_path()/"DATA",
+                    [&](const std::vector<std::uint32_t>& pixels) {
+                        return SDL_SetRenderDrawColor(renderer,0,0,0,255) && SDL_RenderClear(renderer) &&
+                               firstPerson.drawFrame(pixels) && SDL_RenderPresent(renderer);
+                    });
+                auto returned=data->level;returned.playerStart=communication::returnPosition;
+                const auto position=initialCamera(returned);
+                camera->x=position.x;camera->y=position.y;camera->angle=position.angle;
+                camera->sector=position.sector;
+                survival.clearMessages();
+                if(enemySystem) enemySystem->clearPlayerImpact();
+                SDL_ResetKeyboard();items.clearInput();playerInput.invalidateContext();
+                doorControl.resetLevel();previousTicks=SDL_GetTicks();
+                if(result!=StartupCreditsResult::Continue) {
+                    if(result==StartupCreditsResult::Error) exitCode=1;
+                    break;
+                }
+                continue; // Discard modal elapsed time; no campaign simulation inside show().
+            }
+            if(simulationActive && survival.alive() && !items.busy() && data && camera &&
+               shuttle::trigger(data->level,camera->sector.value_or(~0u))) {
+                gameAudio.stopEffects();items.clearInput();playerInput.invalidateContext();
+                doorControl.beginFrame(false);doorControl.rebuildWorld();
+                shuttle::Session boarding;
+                auto result=shuttle::prompt(window,renderer,std::filesystem::path(argv[1]).parent_path()/"DATA",
+                                            boarding,survival.inventory(),items);
+                if(result==StartupCreditsResult::Continue && boarding.step()==shuttle::Step::Flight) {
+                    result=showOriginalShuttle(window,renderer,std::filesystem::path(argv[1]).parent_path()/"DATA");
+                    if(result==StartupCreditsResult::Continue) {
+                        shuttleTravel=boarding.complete(result,items);
+                        survival.clearMessages();
+                        SDL_Log("Shuttle complete: destination level 23, sector 1, local (320,300), angle 0, floor %u",shuttle::arrivalFloor);
+                    }
+                }
+                if(!shuttleTravel) {
+                    auto returned=data->level;returned.playerStart=shuttle::refusal;
+                    camera=initialCamera(returned);
+                }
+                if(enemySystem) enemySystem->clearPlayerImpact();
+                SDL_ResetKeyboard();items.clearInput();playerInput.invalidateContext();
+                doorControl.resetLevel();previousTicks=SDL_GetTicks();
+                if(result!=StartupCreditsResult::Continue) {
+                    if(result==StartupCreditsResult::Error) exitCode=1;
+                    break;
+                }
+                continue;
+            }
+            const bool shipExpired=items.selfDestruction().expired();
+            const auto deathCause=!survival.alive()?survival.vitals().deathCause():
+                shipExpired?player::DeathCause::SelfDestruction:player::DeathCause::None;
+            if(shipExpired && !deathPresentation) {
+                SDL_Log("Ship expiry requires original death resources");exitCode=1;break;
+            }
+            if(deathCause!=player::DeathCause::None && deathPresentation && !deathPresentation->active() && firstPerson.frame().size()==64000) {
                 gameAudio.stopEffects();
-                deathPresentation->begin(survival.vitals().deathCause(),firstPerson.frame());
+                if(deathCause==player::DeathCause::SelfDestruction) {
+                    try { deathPresentation->loadExplosion(std::filesystem::path(argv[1]).parent_path()/"DATA"); }
+                    catch(const std::exception& error) {
+                        SDL_Log("Ship explosion unavailable: %s",error.what());exitCode=1;break;
+                    }
+                }
+                deathPresentation->begin(deathCause,firstPerson.frame());
                 items.clearInput(); playerInput.invalidateContext();
                 doorControl.beginFrame(false);
                 if(!SDL_SetRenderDrawColor(renderer,0,0,0,255) || !SDL_RenderClear(renderer) ||
@@ -507,6 +687,16 @@ int main(int argc, char* argv[])
             hudState.firing=weaponFire.firing(); hudState.barrelPhase=weaponFire.barrelPhase();
             gameAudio.update(data ? data->level : emptyLevel, levelDoors, playerInput.footsteps(),doorReady);
             doorControl.resetCounter(); // Separate from the earlier read; rendering belongs to the next interval.
+            const auto shuttleDoorFade=[&]() {
+                const auto amount=data && camera && show3D && !modalBlocked ?
+                    (shuttle::doorFade(data->level,camera->sector.value_or(~0u)) +
+                     communication::doorFade(data->level,camera->sector.value_or(~0u))):0;
+                if(!amount) return true;
+                auto faded=firstPerson.frame();
+                for(auto& c:faded) c=(((c>>24)*(100-amount)/100)<<24)|
+                    ((((c>>16)&255)*(100-amount)/100)<<16)|((((c>>8)&255)*(100-amount)/100)<<8)|255;
+                return firstPerson.drawFrame(faded);
+            };
             if (!SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) ||
                 !SDL_RenderClear(renderer) ||
                 (data && !(show3D && camera
@@ -520,6 +710,7 @@ int main(int argc, char* argv[])
                                        activeEnemies?&activeEnemies->effects().objects():nullptr,
                                        originalMap?&*originalMap:nullptr,mapSession.state())
                     : drawMap(renderer, data->level, showPolygons, camera ? &*camera : nullptr))) ||
+                !shuttleDoorFade() ||
 #ifdef EXTREMIS_DEBUG_MENU
                 !debugMenu.draw(renderer,data?data->level.zoneIndex:0) ||
 #endif

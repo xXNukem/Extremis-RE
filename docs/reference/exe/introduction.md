@@ -523,3 +523,34 @@ handoffs in a real window, perceived logo zoom and title cadence, retrace
 holds and card readability, key behavior during fades, focus pause/resume,
 and comparison of timing/black intervals with running DOS. Automated tests
 and decoded-frame inspection are not DOS-observed equivalence.
+
+
+## Whole-startup skip adaptation (2026-11-16)
+
+**Adapted / Port-tested; no new EXE investigation.** Space or E (one non-repeat
+key-down for the player window) now returns `StartupCreditsResult::SkipAll`
+from customized credits, any original prelude phase, or any PSEQ phase,
+including its entry event drain and final audio wait. `src/main.cpp` bypasses
+remaining startup players and enters gameplay on this result. This supersedes
+only the port's previous Space/E policy described above; inherited DOS key
+semantics and evidence are unchanged. Escape and no-input playback retain
+existing behavior. FSEQ, shuttle, elevators and other screens do not use the
+new startup-only event helper (`include/startup_skip.h`).
+
+The skip resets SDL keyboard state and flushes queued keyboard events before
+handoff. Existing destructors stop/destroy startup audio streams, release
+resources and restore renderer state; customized credits still execute their
+explicit restoration path. No new controller timing or resource-loading
+behavior is introduced.
+
+Validation: Debug configure/build succeeded; complete CTest **35/35 passed**.
+`tests/startup_skip_tests.cpp` uses a test-only accelerated host clock and event
+injection with actual SDL dummy rendering/audio. It checks both keys at several
+custom-credit times, non-repeat/window/key-up filtering, queued-repeat cleanup,
+custom audio teardown, Escape, normal custom playback and PSEQ entry skip.
+The same executable run with local original DATA additionally passed skips
+at four event positions in each original player, renderer/audio/input cleanup,
+and full no-input prelude/PSEQ playback. Existing controller tests still cover
+complete normal scene/frame/fade/cue order and Escape semantics. No original
+assets are bundled. Interactive window/held-key verification remains manual;
+these tests are not DOS observations.

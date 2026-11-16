@@ -104,7 +104,7 @@ void System::update(const game_lab::Level& level, const Camera& camera, const co
     }
     if (!wasActive_) { wasActive_=true; return; } // Discard modal/focus resume interval.
     double remaining=std::min(seconds,0.25);
-    while (remaining>1e-12 && vitals.alive()) {
+    while (remaining>1e-12 && vitals.alive() && !terminalDefeated_) {
         const double interval=std::min(remaining,stepSeconds-accumulator_);
         // Movement observes reaction_ until the exact tick that expires it.
         if (movePlayer) movePlayer(interval);

@@ -1,4 +1,5 @@
 #include "startup_credits.h"
+#include "startup_skip.h"
 #include "spr_format.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -926,6 +927,8 @@ StartupCreditsResult showStartupCredits(SDL_Window* window, SDL_Renderer* render
                 result=StartupCreditsResult::Quit;
                 done=true;
             } else if (event.type==SDL_EVENT_KEY_DOWN && event.key.windowID==windowId && !event.key.repeat) {
+                if (result==StartupCreditsResult::Continue && startupSkipRequested(event,windowId))
+                    result=StartupCreditsResult::SkipAll;
                 done=true;
             } else if (event.type==SDL_EVENT_WINDOW_FOCUS_LOST && event.window.windowID==windowId) {
                 focused=false;
@@ -947,7 +950,8 @@ StartupCreditsResult showStartupCredits(SDL_Window* window, SDL_Renderer* render
         SDL_Delay(16);
     }
 
-    SDL_ResetKeyboard();
+    if (result==StartupCreditsResult::SkipAll) clearStartupSkipInput();
+    else SDL_ResetKeyboard();
     const bool scaleOK=SDL_SetRenderScale(renderer,oldScaleX,oldScaleY);
     const bool blendOK=SDL_SetRenderDrawBlendMode(renderer,oldBlend);
     const bool colorOK=SDL_SetRenderDrawColor(renderer,oldR,oldG,oldB,oldA);

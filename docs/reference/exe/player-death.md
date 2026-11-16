@@ -158,3 +158,15 @@ adaptation, NOT a recovered DOS timing constant.
 Both death sequences were manually tested. Debug CTest: 27/27 passed
 after correcting the synthetic palette expectation in the death test.
 Temporal comparison with the original DOS game remains pending.
+
+
+## Shared victory menu entry (2026-11-15)
+
+`DeathPresentation::beginMenu()` now opens the existing menu reveal directly
+for successful FSEQ completion. The main loop retains that menu for a living
+victor using `VictorySession`, rather than applying the diagnostic death-reset
+path. Death presentation, MORT timing and GAME OVER flow are unchanged.
+RUN/new party and EXIT are shared; OPTIONS/password limitations remain.
+Debug CTest 30/30 passed, including direct victory menu/restart and Quit/Error
+checks. See [Ending integration](ending.md#campaign-integration-2026-11-15).
+No new original-game evidence was gathered.

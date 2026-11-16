@@ -19,6 +19,8 @@ public:
     bool constrainPlayer(const Camera& before, Camera& proposed);
     void updateDoors(Time now = Clock::now());
     void resetCounter(Time now = Clock::now());
+    // Share the gameplay PIT word without changing its reset/suspension lifecycle.
+    std::uint16_t gameplayTicks(Time now = Clock::now()) { counter_.advance(now); return counter_.value(); }
     void rebuildWorld();
     enum class CardResult { Unlocked, AlreadyDisabled, Rejected, NoCard, InvalidTarget };
     CardResult useCardReader(std::uint16_t parameter, std::optional<std::uint16_t> card);

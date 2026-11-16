@@ -4,7 +4,7 @@
 
 void GameAudio::load(const std::filesystem::path& directory)
 {
-    doorRequested_ = false;
+    doorRequested_ = destructionAlarmRequested_ = false;
     reportedCompletions_ = 0;
     enabled_ = false;
     death_.reset();
@@ -18,25 +18,33 @@ void GameAudio::load(const std::filesystem::path& directory)
                  "4 voices. Door movement: BANK[27]; footsteps: BANK[7].\n";
 }
 
+void GameAudio::destructionAlarm(bool requested)
+{
+    // Repeated DOS requests sustain one native BANK[14] loop, not four copies.
+    if(!requested) { if(destructionAlarmRequested_) player_.stop(14); }
+    else if(!player_.playing(14)) player_.play(14);
+    destructionAlarmRequested_=requested;
+}
+
 void GameAudio::beginDeath(DeathSound cause)
 {
     if (death_) return;
     death_ = cause;
     // Original direct death branches: AX=0 -> BANK[25], AX=1 -> BANK[26].
     // Native DSS loop semantics are retained; no forced repeat or invented timer.
-    player_.play(cause == DeathSound::Oxygen ? 26 : 25);
+    player_.play(cause == DeathSound::Oxygen ? 26 : cause == DeathSound::SelfDestruction ? 29 : 25);
 }
 void GameAudio::stopEffects()
 {
     // 0x13090 stops all four native voices at entry and before GAMEOVER.
     for(std::size_t i=0;i<player_.effectCount();++i) player_.stop(i);
-    death_.reset(); doorRequested_=false;
+    death_.reset(); doorRequested_=destructionAlarmRequested_=false;
 }
 
 void GameAudio::endDeath()
 {
     if (!death_) return;
-    player_.stop(*death_ == DeathSound::Oxygen ? 26 : 25);
+    player_.stop(*death_ == DeathSound::Oxygen ? 26 : *death_ == DeathSound::SelfDestruction ? 29 : 25);
     death_.reset();
 }
 
@@ -50,6 +58,7 @@ void GameAudio::insertCard() { player_.play(18,false,audio::Playback::Once); }
 void GameAudio::interfaceShutters() { player_.play(27,false,audio::Playback::Once); }
 void GameAudio::interfaceKey() { player_.play(28); }
 void GameAudio::acceptCard() { player_.play(19); }
+void GameAudio::elevatorMotor() { player_.play(11,false,audio::Playback::Native); }
 void GameAudio::interfaceMotor()
 {
     // Inventory zoom: 0x1baa7 / 0x1c038; elevator panel: 0xcfcb / 0xd539.

@@ -1,7 +1,7 @@
 #pragma once
 
 namespace player {
-enum class DeathCause { None, Health, Oxygen };
+enum class DeathCause { None, Health, Oxygen, SelfDestruction };
 
 class Vitals {
 public:

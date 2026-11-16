@@ -6,7 +6,7 @@
 
 namespace player {
 struct DeathResources {
-    anm_format::Animation health, oxygen, gameOver, menu;
+    anm_format::Animation health, oxygen, gameOver, menu, explosion;
     std::vector<spr_format::Image> body, font, menuFont, menuArt;
     std::vector<std::string> lines;
     std::vector<std::string> menuLines;
@@ -22,6 +22,9 @@ public:
     explicit DeathPresentation(DeathResources resources);
     void begin(DeathCause cause, const std::vector<std::uint32_t>& background);
     void reset();
+    void loadExplosion(const std::filesystem::path& directory);
+    DeathCause cause() const { return cause_; }
+    void beginMenu();
     void advance(double seconds, bool keyPressed=false, bool keyHeld=false);
     Request menuInput(int direction, bool confirm);
     Stage stage() const { return stage_; }

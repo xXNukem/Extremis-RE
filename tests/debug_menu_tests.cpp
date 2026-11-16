@@ -17,7 +17,7 @@ struct DebugMenuChecks {
         key(SDL_SCANCODE_TAB); require(menu.open());
         for(unsigned i=0;i<menu.entries_[0].size();++i) {
             menu.row_=i; key(SDL_SCANCODE_RETURN);
-            auto travel=menu.takeTravel(); require(travel.has_value());
+            auto travel=menu.takeTravel(); require(travel.has_value() && !travel->elevator);
             const auto& expected=*menu.entries_[0][i].travel;
             require(travel->zone==expected.zone && travel->arrival.sector==expected.arrival.sector);
         }

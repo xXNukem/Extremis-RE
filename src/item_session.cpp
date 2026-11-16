@@ -24,7 +24,22 @@ void ItemSession::load(const game_lab::Level& level)
 bool ItemSession::modal() const { return interface_.has_value(); }
 bool ItemSession::planTransferred() const { return planTransferred(zone_); }
 bool ItemSession::planTransferred(unsigned zone) const { return zone<plans_.size() && plans_[zone]; }
-void ItemSession::resetPlans() { plans_.fill(false); securities_.fill(false); }
+void ItemSession::resetPlans() { plans_.fill(false); securities_.fill(false); selfDestruction_=SelfDestruction{}; completedSecurities_=0; }
+bool ItemSession::securitiesComplete() const {
+    return std::all_of(securities_.begin(),securities_.end(),[](bool disabled){return disabled;});
+}
+bool ItemSession::updateSelfDestruction(std::uint16_t ticks,bool simulationActive) {
+    // Once armed in level22, the original event persists across level loads.
+    return selfDestruction_.update(ticks,simulationActive && !busy());
+}
+#ifdef EXTREMIS_DEBUG_MENU
+void ItemSession::debugCompleteSecurities() {
+    if(zone_==21) { securities_.fill(true);completedSecurities_=16;selfDestruction_.activate(); }
+}
+void ItemSession::debugShortenDestruction() {
+    if(securitiesComplete()) selfDestruction_.debugShorten();
+}
+#endif
 void ItemSession::clearInput()
 {
     action_=Action::None; inventoryRequested_=take_=injector_=oxygen_=false;
@@ -225,7 +240,9 @@ void ItemSession::usePendingCard(SurvivalSession& player, GameAudio& audio, Door
         s.cardAccepted=id>=1 && id<=securities_.size() &&
             (*pendingCard_&0xff)==(s.contents>>8);
         if (s.cardAccepted) {
+            if(!securities_[id-1]) ++completedSecurities_;
             securities_[id-1]=true; audio.acceptCard();
+            if(zone_==21 && completedSecurities_==16) selfDestruction_.activate();
             s.notice="SECURITY "+std::to_string(id)+" DEACTIVATED..";
         } else s.notice="IMPOSSIBLE TO DEACTIVATE THE SECURITY";
         return;
@@ -260,7 +277,14 @@ void ItemSession::confirm(SurvivalSession& player, GameAudio& audio, DoorControl
         if (!route || !interaction::original::admitted(*route,s.useSelection,
                                                      s.elevatorZone,s.elevatorSector)) return;
         const auto& lift=interaction::original::lifts[s.elevatorIndex];
-        travel_=Travel{route->zone,{route->sector,lift.x,lift.y,lift.angle}};
+        if(route->zone!=s.elevatorZone || route->sector!=s.elevatorSector) {
+            const auto source=std::find_if(lift.routes.begin(),lift.routes.end(),[&](const auto& r) {
+                return r.exists && r.zone==s.elevatorZone && r.sector==s.elevatorSector;
+            });
+            if(source==lift.routes.end()) return; // Invalid source: never invent a floor.
+            travel_=Travel{route->zone,{route->sector,lift.x,lift.y,lift.angle},
+                           ElevatorTravel{s.elevatorIndex,source->floor,route->floor}};
+        }
         audio.interfaceKey(); interface_.reset(); clearInput();
         return;
     }

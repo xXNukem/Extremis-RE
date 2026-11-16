@@ -7,7 +7,8 @@ class GameAudio {
 public:
     void stopEffects();
     bool enabled() const { return enabled_; }
-    enum class DeathSound { Health, Oxygen };
+    enum class DeathSound { Health, Oxygen, SelfDestruction };
+    void destructionAlarm(bool requested);
     void load(const std::filesystem::path& directory);
     void update(const game_lab::Level& level, const std::vector<doors::Door>& doors,
                 unsigned footsteps = 0, bool active = true);
@@ -17,6 +18,7 @@ public:
     void interfaceKey();
     void acceptCard();
     void interfaceMotor();
+    void elevatorMotor(); // BANK[11], native loop until stopEffects().
     void pickupTransfer();
     void insertCard();
     void interfaceShutters();
@@ -27,7 +29,7 @@ public:
     std::optional<audio::PlaybackStats> effectStatistics(std::size_t id);
 private:
     audio::Player player_;
-    bool doorRequested_ = false;
+    bool doorRequested_ = false, destructionAlarmRequested_ = false;
     std::uint64_t reportedCompletions_ = 0;
     bool enabled_ = false;
     std::optional<DeathSound> death_;

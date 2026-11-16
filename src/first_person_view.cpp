@@ -3,9 +3,7 @@
 #include "plane_renderer.h"
 #include "sprite_renderer.h"
 #include "player_collision.h"
-
 #include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <cmath>
 #include <limits>

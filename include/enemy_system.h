@@ -30,6 +30,7 @@ public:
                          const std::vector<doors::Door>& dynamicDoors = {}) const;
     // MONS9 death requests the DOS ending; presentation remains with the caller.
     bool terminalDefeated() const { return terminalDefeated_; }
+    void clearPlayerImpact() { reaction_=0; } // Shuttle common cleanup, EXE 0xc7bc.
     bool reacting() const { return reaction_ != 0; }
     unsigned simulationTicks() const { return ticks_; }
     const DeathEffects& effects() const { return effects_; }

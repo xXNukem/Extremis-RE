@@ -1,4 +1,5 @@
 #include "original_intro_player.h"
+#include "startup_skip.h"
 #include "original_intro.h"
 #include "original_presentation.h"
 #include "audio_mixer.h"
@@ -98,6 +99,10 @@ StartupCreditsResult showOriginalIntro(SDL_Window* window,SDL_Renderer* renderer
         while(SDL_PollEvent(&initialEvent)) {
             if(initialEvent.type==SDL_EVENT_QUIT || (initialEvent.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED && initialEvent.window.windowID==SDL_GetWindowID(window)))
                 return StartupCreditsResult::Quit;
+            if(startupSkipRequested(initialEvent,SDL_GetWindowID(window))) {
+                clearStartupSkipInput();
+                return StartupCreditsResult::SkipAll;
+            }
             if(initialEvent.type==SDL_EVENT_KEY_DOWN && initialEvent.window.windowID==SDL_GetWindowID(window) && !initialEvent.key.repeat && initialEvent.key.scancode==SDL_SCANCODE_ESCAPE)
                 skipAtEntry=true;
         }
@@ -123,6 +128,10 @@ StartupCreditsResult showOriginalIntro(SDL_Window* window,SDL_Renderer* renderer
             while(SDL_PollEvent(&event)) {
                 if(event.type==SDL_EVENT_QUIT || (event.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID==id))
                     return StartupCreditsResult::Quit;
+                if(startupSkipRequested(event,id)) {
+                    clearStartupSkipInput();
+                    return StartupCreditsResult::SkipAll;
+                }
                 if(event.type==SDL_EVENT_KEY_DOWN && event.key.windowID==id && !event.key.repeat && event.key.scancode==SDL_SCANCODE_ESCAPE)
                     escape=true;
                 if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST && event.window.windowID==id) {focused=false;audio.pause(true);}
@@ -172,6 +181,10 @@ StartupCreditsResult showOriginalPresentation(SDL_Window* window,SDL_Renderer* r
             while(SDL_PollEvent(&event)) {
                 if(event.type==SDL_EVENT_QUIT || (event.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID==id))
                     return StartupCreditsResult::Quit;
+                if(startupSkipRequested(event,id)) {
+                    clearStartupSkipInput();
+                    return StartupCreditsResult::SkipAll;
+                }
                 if(event.type==SDL_EVENT_KEY_DOWN && event.key.windowID==id && !event.key.repeat)
                     key=true; // Escape also advances a still card, never the whole block.
                 if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST && event.window.windowID==id) focused=false;

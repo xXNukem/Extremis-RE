@@ -99,17 +99,32 @@ DeathPresentation::DeathPresentation(DeathResources resources):resources_(std::m
         if(s.width<=0 || s.height<=0 || s.width>320 || s.height>200 ||
            s.indices.size()!=std::size_t(s.width)*s.height) throw std::runtime_error("Invalid death sprite");
 }
+void DeathPresentation::loadExplosion(const std::filesystem::path& directory)
+{
+    if(!resources_.explosion.frames.empty()) return;
+    auto movie=anm_format::load(directory/"VAIS_EXP.ANM");
+    if(movie.frames.size()!=60 || std::any_of(movie.frames.begin(),movie.frames.end(),
+        [](const auto& f){return f.size()!=64000;})) throw std::runtime_error("Invalid ship explosion movie");
+    resources_.explosion=std::move(movie);
+}
 void DeathPresentation::reset()
 {
     stage_=Stage::Inactive; cause_=DeathCause::None; step_=frame_=characters_=0;
     ticks_=0; soundStart_=soundStop_=released_=false; pixels_.clear(); background_.clear();
     selection_=0; runMenu_=false;
 }
+void DeathPresentation::beginMenu()
+{
+    reset(); enter(Stage::MenuReveal); compose();
+}
 void DeathPresentation::enter(Stage stage) { stage_=stage; step_=0; ticks_=0; }
 void DeathPresentation::begin(DeathCause cause,const std::vector<std::uint32_t>& background)
 {
     if(active() || cause==DeathCause::None) return;
     if(background.size()!=64000) throw std::runtime_error("Death needs the original 320x200 canvas");
+    if(cause==DeathCause::SelfDestruction && (resources_.explosion.frames.empty() ||
+       std::any_of(resources_.explosion.frames.begin(),resources_.explosion.frames.end(),
+           [](const auto& f){return f.size()!=64000;}))) throw std::runtime_error("Missing ship explosion movie");
     reset(); cause_=cause; background_=background; enter(Stage::Tint); compose();
 }
 bool DeathPresentation::takeSoundStart() { const bool b=soundStart_; soundStart_=false; return b; }
@@ -130,16 +145,23 @@ void DeathPresentation::advance(double seconds,bool keyPressed,bool keyHeld)
         if(++step_==26) { stage_=Stage::Movie; step_=0; frame_=0; }
         break;
     case Stage::Movie:
-        // Native comparison is strictly >25, then resets the counter; no catch-up.
-        if(ticks_>=26) {
+        // Native comparisons: oxygen >25, ship >11; reset counter, no catch-up.
+        if(ticks_>=(cause_==DeathCause::SelfDestruction?12:26)) {
             ticks_=0;
-            if(++frame_==resources_.oxygen.frames.size()) { --frame_; enter(Stage::Hold); }
+            const auto& movie=cause_==DeathCause::SelfDestruction?resources_.explosion:resources_.oxygen;
+            if(++frame_==movie.frames.size()) { --frame_; enter(Stage::Hold); }
         }
         break;
-    case Stage::Hold: if(ticks_>=161) enter(Stage::Fade); break;
+    case Stage::Hold:
+        if(ticks_>=161) {
+            if(cause_==DeathCause::SelfDestruction) soundStop_=true;
+            enter(Stage::Fade);
+        }
+        break;
     case Stage::Fade:
         if(++step_==(cause_==DeathCause::Health?21u:51u)) {
-            soundStop_=true; enter(Stage::GameOverReveal);
+            if(cause_!=DeathCause::SelfDestruction) soundStop_=true;
+            enter(Stage::GameOverReveal);
         }
         break;
     case Stage::GameOverReveal:
@@ -212,9 +234,9 @@ void DeathPresentation::compose()
     }
     if(stage_==Stage::Tint) {
         pixels_=background_;
-        const unsigned amount=cause_==DeathCause::Health?step_*4:75+step_;
+        const unsigned amount=cause_==DeathCause::Oxygen?75+step_:step_*4;
         for(auto& p:pixels_) {
-            if(cause_==DeathCause::Oxygen) p=color(p,amount,63);
+            if(cause_!=DeathCause::Health) p=color(p,amount,63);
             else {
                 const auto r=color(p,amount,63), gb=color(p,amount,0);
                 p=(r&0xff000000)|(gb&0x00ffffff);
@@ -223,7 +245,8 @@ void DeathPresentation::compose()
         return;
     }
     const bool end=stage_>=Stage::GameOverReveal;
-    const auto& resource=end?resources_.gameOver:cause_==DeathCause::Health?resources_.health:resources_.oxygen;
+    const auto& resource=end?resources_.gameOver:cause_==DeathCause::Health?resources_.health:
+        cause_==DeathCause::SelfDestruction?resources_.explosion:resources_.oxygen;
     auto indices=resource.frames[end || cause_==DeathCause::Health?0:frame_];
     if(stage_==Stage::Body) {
         constexpr int x[]{55,75,95,95,90,55};

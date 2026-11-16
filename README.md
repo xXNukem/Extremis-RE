@@ -34,11 +34,11 @@ The project uses the original DOS executable and game data as references for gam
 
 ## Development progress
 
-**Estimated completion: ~45%** (manual estimate, not a measured percentage of code or completed levels).
+**Estimated completion: ~60%** (manual estimate, not a measured percentage of code or completed levels).
 
-**🟩🟩🟩🟩🟩🟩🟩🟩🟩⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛ &nbsp; 45%**
+**🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩⬛⬛⬛⬛⬛⬛⬛⬛ &nbsp; 60%**
 
-The engine and much of the gameplay are functional. Completion still requires save/load, the ending, more original cinematics and testing throughout the 30-level campaign.
+The core engine, major original cinematics and the level 22 events are implemented. Save/load, remaining menu functions, campaign-wide verification and release testing are still outstanding.
 
 ### Feature status
 
@@ -52,16 +52,20 @@ The engine and much of the gameplay are functional. Completion still requires sa
 | Decorative objects | Functional | Sprite animations and collision implemented; some timing and bank-specific behaviour remain |
 | HUD, inventory and map | Functional | Original 320×200 layout and interfaces; remaining interaction details need checking |
 | Sound effects | Functional | Original audio resources and gameplay cues; ambient audio and some timing need verification |
-| Original startup presentation | Implemented | Blue Sphere, Présente, title, four credits and all 12 PSEQ stages; some timing and presentation differences remain |
-| Player death and GAME OVER | Implemented | Original health/oxygen sequences, GAME OVER and return to the original menu; timing is partly adapted |
-| Original main menu | Partial | Available after GAME OVER; startup integration, OPTIONS and password continuation are unfinished |
-| Final cinematic | Not implemented | Original FSEQ ending sequence still needs reconstruction |
-| Inter-level elevator cinematics | Not implemented | Original transition animations still need investigation and integration |
+| Original startup presentation | Implemented | Blue Sphere, Présente, title, four credits and all 12 PSEQ stages; timing differences remain |
+| Player death and GAME OVER | Implemented | Health, oxygen and self-destruction death sequences, GAME OVER and menu return; some timing is adapted |
+| Original main menu | Partial | Returns after GAME OVER and victory; startup integration, OPTIONS and password continuation are unfinished |
+| Final cinematic | Implemented | Original FSEQ sequence, connected to MONS9 defeat; visually validated, full-campaign trigger still to be verified |
+| Inter-level elevator cinematics | Implemented | Four original movement variants integrated and visually validated; DOS timing comparison pending |
+| Level 22 self-destruction | Implemented | 16 security conditions, countdown, alarms and explosion death; persistence across levels verified |
+| Level 22 shuttle evacuation | Implemented | Boarding, access checks, full travel sequence and level 23 arrival; visually validated |
+| Level 22 communication | Implemented | Door-triggered YES/NO prompt and seven narrative pages; visually validated |
+| Original in-game text | Needs review | Translate remaining French to English and proofread existing English messages |
 | Save/load | Not implemented | Full game-state persistence and restoration are pending |
 | Full campaign | Not verified | All 30 levels require end-to-end testing, including events, transitions and the ending |
 | Platform support and releases | In progress | Development and manual testing primarily on macOS; Windows and release packaging need validation |
 
-**Latest reported Debug test result (15 November 2026): 29/29 CTest tests passed.** This does not mean all levels or DOS behaviour have been verified.
+**Latest reported Debug test result (16 November 2026): 36/36 CTest tests passed.** This does not mean all levels or DOS behaviour have been verified.
 
 ### Implemented so far
 
@@ -72,17 +76,19 @@ The engine and much of the gameplay are functional. Completion still requires sa
 - Decorative sprite animation and collision handling.
 - Custom Extremis RE startup presentation.
 - Original Blue Sphere presentation, In Extremis title, credits and PSEQ introduction.
-- Original health/oxygen death presentations and GAME OVER sequence.
+- Original health/oxygen death presentations, GAME OVER and final FSEQ cinematic.
+- Original four-variant elevator transitions and level 22 shuttle evacuation to level 23.
+- Level 22 autodestruction countdown, explosion death and seven-page communication event.
 - Automated tests and technical notes based on the original executable.
 
 ### Main work remaining
 
-- Final cinematic and inter-level elevator cinematics.
 - Save/load and full game-state restoration.
-- Original menu integration and remaining menu functions.
+- Original menu startup integration, OPTIONS and password continuation.
+- Translate remaining French dialogue and correct spelling and grammar in English text.
 - Fidelity checks for animation timing, audio and specific original effects.
 - Remaining gameplay, collision and rendering edge cases.
-- Full playthrough and validation of all 30 levels.
+- Full playthrough and validation of all 30 levels, including the final encounter.
 - Windows testing, performance work and release packaging.
 
 ## Build and run

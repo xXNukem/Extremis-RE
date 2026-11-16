@@ -25,6 +25,7 @@ public:
     player::Inventory& inventory();
     const player::Inventory& inventory() const;
     void postMessage(messages::Id id);
+    void postDestruction(std::int32_t remaining);
     void clearMessages();
 private:
     player::Vitals vitals_;
