@@ -11,6 +11,7 @@ public:
                      bool gameplay, bool transferred, bool blocked, bool resourcesAvailable,
                      SurvivalSession& player);
     void update(double seconds, bool focused);
+    void clearInput() { keys_.fill(false); }
     bool modal() const { return state_.has_value(); }
     bool blocksSimulation() const { return modal() || transitioned_; }
     const State* state() const { return state_?&*state_:nullptr; }

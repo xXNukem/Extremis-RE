@@ -17,6 +17,7 @@
 #include "map_session.h"
 #include "enemy_system.h"
 #include "startup_credits.h"
+#include "port_menu.h"
 #include "original_intro_player.h"
 #include "player_death.h"
 #include "original_ending_player.h"
@@ -168,7 +169,7 @@ int main(int argc, char* argv[])
                       << "M / physical semicolon: toggle original map after plan transfer; Space: close map.\n"
                       << "Left/Right: rotate in 3D.\n"
                       << "WASD: move/navigate; Shift: run; mouse: look; left button: fire equipped weapon.\n"
-                      << "E: interact/confirm; I: toggle inventory; Z: heal; X: oxygen; Escape: close interface.\n"
+                      << "E: interact/confirm; I: toggle inventory; Z: heal; X: oxygen; Escape: port menu; Backspace: close interface.\n"
                       << "F: toggle floor and ceiling textures together.\n"
                       << "Entity sectors use zero-based indices.\n";
             for (std::size_t i = 0; i < level.sectors.size(); ++i) {
@@ -213,19 +214,32 @@ int main(int argc, char* argv[])
     }
 
     int exitCode = 0;
-    auto credits=communicationDebug?StartupCreditsResult::SkipAll:showStartupCredits(window,renderer,
-        argc>=2 ? std::filesystem::path(argv[1]).parent_path() / "DATA"
-                : std::filesystem::path{});
+    const auto dataDirectory=argc>=2 ? std::filesystem::path(argv[1]).parent_path()/"DATA"
+                                       : std::filesystem::path{};
+    auto credits=communicationDebug?StartupCreditsResult::SkipAll:
+                 showStartupCredits(window,renderer,dataDirectory);
     if (credits==StartupCreditsResult::Error) {
         SDL_Log("Startup credits failed: %s",SDL_GetError());
         exitCode=1;
     }
+    // Diagnostic launchers keep their previous direct-to-game / intro behaviour.
+    const bool diagnosticStartup=communicationDebug || shuttleDebug || vitalsDebug || destructionDebug;
+    if ((credits==StartupCreditsResult::Continue || credits==StartupCreditsResult::SkipAll) &&
+        data && !diagnosticStartup) {
+        const auto choice=showPortMenu(window,renderer,dataDirectory,false);
+        if (choice==PortMenuChoice::NewGame) credits=StartupCreditsResult::Continue;
+        else {
+            if (choice==PortMenuChoice::Error) exitCode=1;
+            credits=choice==PortMenuChoice::Error ? StartupCreditsResult::Error : StartupCreditsResult::Quit;
+        }
+    }
+    // The DOS opening plays only after NEW GAME (unless running a diagnostic).
     if (credits==StartupCreditsResult::Continue && data) {
-        credits=showOriginalPresentation(window,renderer,std::filesystem::path(argv[1]).parent_path()/"DATA");
+        credits=showOriginalPresentation(window,renderer,dataDirectory);
         if(credits==StartupCreditsResult::Error) exitCode=1;
     }
     if (credits==StartupCreditsResult::Continue && data) {
-        credits=showOriginalIntro(window,renderer,std::filesystem::path(argv[1]).parent_path()/"DATA");
+        credits=showOriginalIntro(window,renderer,dataDirectory);
         if(credits==StartupCreditsResult::Error) exitCode=1;
     }
     if (credits==StartupCreditsResult::Continue || credits==StartupCreditsResult::SkipAll) {
@@ -266,6 +280,37 @@ int main(int argc, char* argv[])
             SDL_Event event;
             bool deathKey=false;
             while (!shuttleTravel && SDL_PollEvent(&event)) {
+                // Escape always opens the port menu, including when a terminal or
+                // inventory screen is open. It no longer cancels those screens.
+                if (event.type==SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+                    event.key.windowID==SDL_GetWindowID(window) &&
+                    event.key.scancode==SDL_SCANCODE_ESCAPE) {
+                    gameAudio.pause(true);
+                    SDL_SetWindowRelativeMouseMode(window,false);
+                    const auto choice=showPortMenu(window,renderer,dataDirectory,true);
+                    gameAudio.pause(false);
+                    items.clearInput();mapSession.clearInput();playerInput.invalidateContext();
+                    SDL_ResetKeyboard();
+                    SDL_FlushEvents(SDL_EVENT_KEY_DOWN,SDL_EVENT_KEY_UP);
+                    previousTicks=SDL_GetTicks(); // Never simulate time spent in the menu.
+                    if (choice==PortMenuChoice::Exit || choice==PortMenuChoice::Error) {
+                        if (choice==PortMenuChoice::Error) exitCode=1;
+                        running=false;
+                    } else if (choice==PortMenuChoice::NewGame && data) {
+                        gameAudio.stopEffects();
+                        auto intro=showOriginalPresentation(window,renderer,dataDirectory);
+                        if (intro==StartupCreditsResult::Continue)
+                            intro=showOriginalIntro(window,renderer,dataDirectory);
+                        if (intro==StartupCreditsResult::Quit || intro==StartupCreditsResult::Error) {
+                            if (intro==StartupCreditsResult::Error) exitCode=1;
+                            running=false;
+                        } else restartRequested=true;
+                        previousTicks=SDL_GetTicks();
+                        SDL_ResetKeyboard();
+                        SDL_FlushEvents(SDL_EVENT_KEY_DOWN,SDL_EVENT_KEY_UP);
+                    }
+                    break; // The old game never consumes menu keys in this frame.
+                }
                 if(deathPresentation && deathPresentation->active()) {
                     if(event.type==SDL_EVENT_QUIT || event.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED) running=false;
                     if(event.type==SDL_EVENT_KEY_DOWN && event.key.windowID==SDL_GetWindowID(window) && !event.key.repeat) {
@@ -361,8 +406,7 @@ int main(int argc, char* argv[])
                 }
 #endif
                 if (event.type == SDL_EVENT_QUIT ||
-                    event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED ||
-                    (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE && !event.key.repeat)) {
+                    event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
                     running = false;
                 }
             }
@@ -479,7 +523,9 @@ int main(int argc, char* argv[])
                         survival=SurvivalSession(vitalsDebug);
                         items=ItemSession{};
                         items.setAvailable(interactionRenderer.has_value());
-                        gameAudio.stopEffects(); deathPresentation->reset(); victory.reset();
+                        gameAudio.stopEffects();
+                        if (deathPresentation) deathPresentation->reset();
+                        victory.reset();
 #ifdef EXTREMIS_DEBUG_MENU
                         debugMenu=DebugMenu{}; debugMenu.load(argv[1]);
 #endif

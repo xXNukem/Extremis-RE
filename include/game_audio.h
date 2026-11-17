@@ -6,6 +6,7 @@
 class GameAudio {
 public:
     void stopEffects();
+    void pause(bool paused);
     bool enabled() const { return enabled_; }
     enum class DeathSound { Health, Oxygen, SelfDestruction };
     void destructionAlarm(bool requested);

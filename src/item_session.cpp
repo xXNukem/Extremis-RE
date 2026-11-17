@@ -19,7 +19,7 @@ void ItemSession::load(const game_lab::Level& level)
     codeTargets_=level.codeTargets;
     interface_.reset(); panel_.reset(); take_=injector_=oxygen_=false; action_=Action::None;
     inventoryRequested_=false; keysDown_.fill(false);
-    SDL_Log("I: toggle inventory; E: interact/confirm; WASD/arrows: navigate; Z: heal; X: oxygen; Escape: close.");
+    SDL_Log("I: toggle inventory; E: interact/confirm; WASD/arrows: navigate; Z: heal; X: oxygen; Escape: port menu; Backspace: close interface.");
 }
 bool ItemSession::modal() const { return interface_.has_value(); }
 bool ItemSession::planTransferred() const { return planTransferred(zone_); }
@@ -86,7 +86,7 @@ bool ItemSession::handleEvent(const SDL_Event& event, std::uint32_t windowId)
     if (!modal() && take_ && key==SDL_SCANCODE_ESCAPE) { take_=false; return true; }
     if (modal()) {
         // Closing takes precedence over other keys queued in the same event pump.
-        if (key==SDL_SCANCODE_ESCAPE ||
+        if (key==SDL_SCANCODE_ESCAPE || key==SDL_SCANCODE_BACKSPACE ||
             (key==SDL_SCANCODE_I && interface_->screen==interaction::Screen::Inventory))
             action_=Action::Cancel;
         else if (action_!=Action::Cancel) switch(key) {

@@ -34,6 +34,7 @@ void GameAudio::beginDeath(DeathSound cause)
     // Native DSS loop semantics are retained; no forced repeat or invented timer.
     player_.play(cause == DeathSound::Oxygen ? 26 : cause == DeathSound::SelfDestruction ? 29 : 25);
 }
+void GameAudio::pause(bool paused) { player_.pause(paused); }
 void GameAudio::stopEffects()
 {
     // 0x13090 stops all four native voices at entry and before GAMEOVER.

@@ -81,6 +81,13 @@ void Player::setVolume(float volume)
     mixer_.setVolume(volume);
     SDL_UnlockAudioStream(stream_);
 }
+void Player::pause(bool paused)
+{
+    if (stream_) {
+        if (paused) SDL_PauseAudioStreamDevice(stream_);
+        else SDL_ResumeAudioStreamDevice(stream_);
+    }
+}
 std::size_t Player::effectCount() const { return bank_.size(); }
 std::size_t Player::activeVoices()
 {

@@ -15,6 +15,7 @@ public:
     bool play(std::size_t id, bool repeat = false, Playback playback = Playback::Native);
     void stop(std::size_t id);
     void setVolume(float volume);
+    void pause(bool paused);
     std::size_t effectCount() const;
     std::size_t activeVoices();
     bool playing(std::size_t id);

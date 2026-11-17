@@ -118,7 +118,7 @@ set_target_properties(door_control PROPERTIES CXX_EXTENSIONS NO)
 
 add_executable(InExtremisPort src/main.cpp src/map_view.cpp src/first_person_view.cpp
     src/texture_preview.cpp src/player_input.cpp src/plane_appearance.cpp src/startup_credits.cpp
-    src/original_font.cpp src/original_intro_player.cpp)
+    src/original_font.cpp src/original_intro_player.cpp src/port_menu.cpp)
 target_sources(InExtremisPort PRIVATE $<$<CONFIG:Debug>:src/debug_menu.cpp>)
 target_compile_definitions(InExtremisPort PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
 set_target_properties(InExtremisPort PROPERTIES
@@ -142,6 +142,9 @@ target_link_libraries(render_benchmark PRIVATE horizontal_planes wall_material d
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(port_menu_tests tests/port_menu_tests.cpp src/port_menu.cpp src/original_font.cpp)
+    target_link_libraries(port_menu_tests PRIVATE texture_bank audio_data SDL3::SDL3)
+    add_test(NAME port_menu COMMAND port_menu_tests)
     add_executable(startup_skip_tests tests/startup_skip_tests.cpp src/startup_credits.cpp
         src/original_font.cpp src/original_intro_player.cpp)
     target_link_libraries(startup_skip_tests PRIVATE original_intro audio_data SDL3::SDL3)

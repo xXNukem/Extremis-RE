@@ -34,11 +34,11 @@ The project uses the original DOS executable and game data as references for gam
 
 ## Development progress
 
-**Estimated completion: ~60%** (manual estimate, not a measured percentage of code or completed levels).
+**Estimated completion: ~65%** (manual estimate, not a measured percentage of code or completed levels).
 
-**🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩⬛⬛⬛⬛⬛⬛⬛⬛ &nbsp; 60%**
+**🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩⬛⬛⬛⬛⬛⬛⬛ &nbsp; 65%**
 
-The core engine, major original cinematics and the level 22 events are implemented. Save/load, remaining menu functions, campaign-wide verification and release testing are still outstanding.
+The core engine, major original cinematics, level 22 events and a navigable port menu prototype are implemented. Save/load, functional menu settings, campaign-wide verification and release testing are still outstanding.
 
 ### Feature status
 
@@ -54,7 +54,8 @@ The core engine, major original cinematics and the level 22 events are implement
 | Sound effects | Functional | Original audio resources and gameplay cues; ambient audio and some timing need verification |
 | Original startup presentation | Implemented | Blue Sphere, Présente, title, four credits and all 12 PSEQ stages; timing differences remain |
 | Player death and GAME OVER | Implemented | Health, oxygen and self-destruction death sequences, GAME OVER and menu return; some timing is adapted |
-| Original main menu | Partial | Returns after GAME OVER and victory; startup integration, OPTIONS and password continuation are unfinished |
+| Original main menu | Partial | Returns after GAME OVER and victory; original startup integration and password continuation are unfinished |
+| Port main menu and OPTIONS | Prototype | Startup and in-game menu with navigable VIDEO, AUDIO, CONTROLS and LANGUAGE screens; settings are previews and LOAD GAME is pending |
 | Final cinematic | Implemented | Original FSEQ sequence, connected to MONS9 defeat; visually validated, full-campaign trigger still to be verified |
 | Inter-level elevator cinematics | Implemented | Four original movement variants integrated and visually validated; DOS timing comparison pending |
 | Level 22 self-destruction | Implemented | 16 security conditions, countdown, alarms and explosion death; persistence across levels verified |
@@ -75,6 +76,7 @@ The core engine, major original cinematics and the level 22 events are implement
 - Doors, readers, terminals, elevators, inventory, HUD and map.
 - Decorative sprite animation and collision handling.
 - Custom Extremis RE startup presentation.
+- Navigable port menu and OPTIONS prototype, with original DOS sound effects for entering, leaving and changing preview values.
 - Original Blue Sphere presentation, In Extremis title, credits and PSEQ introduction.
 - Original health/oxygen death presentations, GAME OVER and final FSEQ cinematic.
 - Original four-variant elevator transitions and level 22 shuttle evacuation to level 23.
@@ -84,7 +86,7 @@ The core engine, major original cinematics and the level 22 events are implement
 ### Main work remaining
 
 - Save/load and full game-state restoration.
-- Original menu startup integration, OPTIONS and password continuation.
+- Implement LOAD GAME, make port OPTIONS settings functional, and finish original menu/password integration.
 - Translate remaining French dialogue and correct spelling and grammar in English text.
 - Fidelity checks for animation timing, audio and specific original effects.
 - Remaining gameplay, collision and rendering edge cases.
