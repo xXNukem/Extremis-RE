@@ -14,7 +14,7 @@
 
 namespace {
 constexpr float width=640.f, height=400.f;
-constexpr double duration=27.4, firstEnd=7.5, secondEnd=16.8, titleStart=21.0, crtOffStart=26.05;
+constexpr double duration=29.4, firstEnd=7.5, secondEnd=16.8, titleStart=23.0, crtOffStart=28.05;
 constexpr double pi=3.14159265358979323846;
 
 struct Sweep { double at, travel; float damage; unsigned seed; };
@@ -252,9 +252,9 @@ bool unstableText(SDL_Renderer* r, std::string_view text, float x, float y, floa
     };
 
     if (fault.active) {
-        ok = renderLayer(fault.dx-9.f, fault.dy+4.f, 44,255,122, alpha*.28f*fault.intensity, .6f) && ok;
-        ok = renderLayer(-fault.dx*1.4f, -fault.dy*1.2f, 198,255,214, alpha*.18f*fault.intensity, .2f) && ok;
-        ok = renderLayer(fault.skew*1.2f, fault.dy-3.f, 96,255,152, alpha*.20f*fault.intensity, .35f) && ok;
+        ok = renderLayer(fault.dx-9.f, fault.dy+4.f, 148,255,65, alpha*.28f*fault.intensity, .6f) && ok;
+        ok = renderLayer(-fault.dx*1.4f, -fault.dy*1.2f, 214,255,170, alpha*.18f*fault.intensity, .2f) && ok;
+        ok = renderLayer(fault.skew*1.2f, fault.dy-3.f, 169,255,88, alpha*.20f*fault.intensity, .35f) && ok;
     }
     ok = renderLayer(fault.dx, fault.dy, red, green, blue, alpha*fault.intensity, .2f) && ok;
     if (!ok) return false;
@@ -267,13 +267,13 @@ bool unstableText(SDL_Renderer* r, std::string_view text, float x, float y, floa
             const float len=span*(.08f+.09f*float(i%3));
             // Screen tearing is HORIZONTAL; two-dimensional glitches come
             // from the displaced text layers, not diagonal scratch lines.
-            if (!color(r,54,255,126,alpha*(fault.blackout?.20f:.30f)) ||
+            if (!color(r,183,255,90,alpha*(fault.blackout?.20f:.30f)) ||
                 !SDL_RenderLine(r,fx,fy,fx+len,fy)) return false;
         }
         for (unsigned i=0;i<3;++i) {
             const float bx=x+float((fault.phase*47u+i*19u)%unsigned(std::max(2.f,span*.45f)));
             const float by=y+float(int((fault.phase*31u+i*7u)%29u)-14);
-            if (!color(r,220,255,228,alpha*.10f) ||
+            if (!color(r,234,255,197,alpha*.10f) ||
                 !SDL_RenderLine(r,bx,by,bx+11.f+7.f*i,by)) return false;
         }
     }
@@ -294,7 +294,7 @@ bool accentOnPerez(SDL_Renderer* r, float y, float scale, float alpha)
     const auto e=name.find("Perez")+1;
     const float x=(width-textExtent(name)*scale)*.5f+
                   textExtent(name.substr(0,e))*scale+4.f*scale;
-    return color(r,195,255,209,alpha) && SDL_RenderLine(r,x-2,y-3,x+1,y-7);
+    return color(r,220,255,167,alpha) && SDL_RenderLine(r,x-2,y-3,x+1,y-7);
 }
 
 float triangle(float x, float center, float halfWidth)
@@ -462,7 +462,7 @@ bool drawCrtOff(SDL_Renderer* r, double time)
 
     const SDL_FRect flash{0.f,0.f,width,height};
     if (!color(r,255,255,255,.05f*glow) || !SDL_RenderFillRect(r,&flash)) return false;
-    if (!color(r,255,242,206,.85f*glow) ||
+    if (!color(r,201,255,133,.85f*glow) ||
         !SDL_RenderLine(r,0.f,centerY-half,width,centerY-half) ||
         !SDL_RenderLine(r,0.f,centerY+half,width,centerY+half)) return false;
     if (!color(r,255,255,255,.95f*glow)) return false;
@@ -544,9 +544,9 @@ bool drawTitleRupture(SDL_Renderer* r, float left, float y, float scale,
         const float direction=(band==0?1.f:-1.f);
         const float displacement=direction*(7.f+13.f*strength)+float(offsets[rupture.phase]);
         const bool ok=textAt(r,"EXTREMIS",wordX+displacement,wordY+direction*2.f*strength,
-                             scale,255,72,89,alpha*.86f*strength) &&
+                             scale,207,255,100,alpha*.86f*strength) &&
                       textAt(r,"RE",reX+displacement,reY-direction*2.f*strength,
-                             scale,255,72,89,alpha*.86f*strength);
+                             scale,207,255,100,alpha*.86f*strength);
         const bool restored=SDL_SetRenderClipRect(r,nullptr);
         if (!ok || !restored) return false;
     }
@@ -559,7 +559,7 @@ bool drawTitleRupture(SDL_Renderer* r, float left, float y, float scale,
         const float dx=float(int((seed>>19)&31u)-15)*(.55f+.95f*strength);
         const float dy=float(int((seed>>25)&15u)-7)*(.35f+.65f*strength);
         const float length=12.f+float((seed>>7)%74u)*(.25f+.75f*strength);
-        if (!color(r,238,42,63,alpha*strength*(i%2==0?.34f:.18f)) ||
+        if (!color(r,154,243,55,alpha*strength*(i%2==0?.34f:.18f)) ||
             !SDL_RenderLine(r,x,row,std::min(width-16.f,x+length+dx),row+dy)) return false;
     }
     return true;
@@ -605,16 +605,16 @@ bool corruptedWord(SDL_Renderer* r, std::string_view word, float x, float y, flo
         const auto warp=glyphWarp(local,channel,i);
         if (warp.active) {
             ok = ok && textAt(r,glyph.c_str(),gx+warp.dx*1.55f,y+warp.dy*1.35f,scale,
-                              255,92,104,alpha*warp.alpha*.36f);
+                              210,255,129,alpha*warp.alpha*.36f);
             ok = ok && textAt(r,glyph.c_str(),gx-warp.dx*.82f,y-warp.dy*.68f,scale,
-                              120,8,18,alpha*warp.alpha*.24f);
+                              70,127,19,alpha*warp.alpha*.24f);
             for (unsigned j=0;j<4;++j) {
                 const std::uint32_t lineSeed=mixBits((channel+1u)*97u ^ (i+1u)*313u ^ (j+1u)*911u ^ unsigned(std::floor(local*53.0))*17u);
                 const float lx=gx+float(int((lineSeed>>3)&31u)-15);
                 const float ly=y+float(int((lineSeed>>11)&31u)-15);
                 const float ex=lx+float(int((lineSeed>>19)&31u)-15)*warp.smear;
                 const float ey=ly+float(int((lineSeed>>25)&31u)-15)*warp.smear;
-                ok = ok && color(r,255,60,74,alpha*.15f*warp.alpha) && SDL_RenderLine(r,lx,ly,ex,ey);
+                ok = ok && color(r,192,255,92,alpha*.15f*warp.alpha) && SDL_RenderLine(r,lx,ly,ex,ey);
             }
             for (unsigned j=0;j<3;++j) {
                 const std::uint32_t cutSeed=mixBits((channel+1u)*701u ^ (i+1u)*1499u ^ (j+1u)*3203u ^ unsigned(std::floor(local*41.0))*19u);
@@ -637,45 +637,115 @@ bool corruptedWord(SDL_Renderer* r, std::string_view word, float x, float y, flo
     return ok;
 }
 
+// Vortex Engine emblem: the clean inverted V transforms into its final mark.
+// Only SDL primitives: no new assets, audio or third-party dependencies.
+bool drawVortexEngine(SDL_Renderer* r, double local)
+{
+    constexpr float cx=320.f, cy=176.f;
+    constexpr float ringRadius=55.f, rayLength=56.f;
+    constexpr int rays=16, circlePieces=96, rayPieces=11;
+    constexpr double hold=.56, turn=1.18;
+    const float born=fade(local,.22);
+    const float exit=1.f-fade(local-5.91,.29);
+    const float visibility=born*exit;
+    if (visibility<=.001f) return true;
+
+    // The emblem holds slightly longer before the turn, then remains readable
+    // in its final state until the main title arrives.
+    const float progress=fade(local-hold,turn);
+    const float angle=-float(pi)*progress; // clockwise rotation
+    const float sine=std::sin(angle), cosine=std::cos(angle);
+    const auto rotated=[&](float x, float y) -> SDL_FPoint {
+        return {cx+x*cosine-y*sine,cy+x*sine+y*cosine};
+    };
+    const auto pointOnRay=[&](int ray, float distance, float amount) -> SDL_FPoint {
+        const float base=2.f*float(pi)*float(ray)/float(rays);
+        const float twist=-progress*(.58f*amount + .26f*amount*amount);
+        const float a=base+twist;
+        return {cx+std::cos(a)*distance, cy+std::sin(a)*distance};
+    };
+
+    for (int pass=0; pass<3; ++pass) {
+        const float shift=pass==0?2.0f:pass==1?-.8f:0.f;
+        const float alpha=visibility*(pass==0?.14f:pass==1?.34f:.96f);
+        const Uint8 red=pass==0?102:pass==1?165:213;
+        const Uint8 green=255, blue=pass==0?48:pass==1?73:135;
+        if (!color(r,red,green,blue,alpha)) return false;
+
+        std::array<SDL_FPoint,circlePieces+1> ring{};
+        for (int i=0;i<=circlePieces;++i) {
+            const float a=2.f*float(pi)*float(i)/circlePieces;
+            ring[std::size_t(i)]={cx+(ringRadius+shift)*std::cos(a),
+                                  cy+(ringRadius+shift)*std::sin(a)};
+        }
+        if (!SDL_RenderLines(r,ring.data(),int(ring.size()))) return false;
+
+        for (int ray=0;ray<rays;++ray) {
+            std::array<SDL_FPoint,rayPieces+1> stroke{};
+            for (int i=0;i<=rayPieces;++i) {
+                const float u=float(i)/rayPieces;
+                stroke[std::size_t(i)]=pointOnRay(ray,ringRadius+shift+rayLength*u,u);
+            }
+            if (!SDL_RenderLines(r,stroke.data(),int(stroke.size()))) return false;
+        }
+
+        const auto apex=rotated(0.f,-52.f);
+        const auto left=rotated(-44.f,27.f);
+        const auto right=rotated(44.f,27.f);
+        const float dx=pass==0?2.f:pass==1?-1.f:0.f;
+        // Give the inner V more body without changing the overall silhouette.
+        for (const float ox : {-1.4f,0.f,1.4f}) {
+            for (const float oy : {-0.5f,0.f,0.5f}) {
+                if (!SDL_RenderLine(r,left.x+dx+ox,left.y+oy,apex.x+dx+ox,apex.y+oy) ||
+                    !SDL_RenderLine(r,apex.x+dx+ox,apex.y+oy,right.x+dx+ox,right.y+oy)) return false;
+            }
+        }
+    }
+
+    const float letters=visibility*fade(local-.92,.54);
+    return unstableCentered(r,"VORTEX ENGINE",295.f,2.7f,
+                            183,255,90,letters,secondEnd+local,.40f,false);
+}
+
 bool drawCredit(SDL_Renderer* r, double time, std::uint32_t launchSeed)
 {
     if (!blackBackground(r) || !drawECG(r,time,launchSeed)) return false;
     if (time<firstEnd) {
-        const float appear=fade(time-.95,1.2);
-        const float visible=appear*(1.f-fade(time-(firstEnd-1.50),1.35));
-        if (!unstableCentered(r,"CYANIDE SOFTWARE PRESENTS",172.f,2.55f,
-                              178,255,196,visible*textFlicker(time),time,1.05f,true)) return false;
-    } else if (time<secondEnd) {
-        const double local=time-firstEnd;
-        const float appear=fade(local-.85,1.15);
-        const float visible=appear*(1.f-fade(time-(secondEnd-1.55),1.35));
+        // First card: only the port author alias, no interim studio branding.
+        const float appear=fade(time-.65,.95);
+        const float visible=appear*(1.f-fade(time-(firstEnd-1.45),1.25));
         const float intensity=visible*textFlicker(time);
-        if (!unstableCentered(r,"A SOURCE PORT BY",142.f,2.75f,
-                              175,252,198,intensity,time,1.28f,true)) return false;
-        constexpr std::string_view name="Carlos (xXNukem) de la Barrera Perez";
-        const float scale=1.85f;
-        const unsigned count=unsigned(std::clamp((local-1.48)*8.1,0.0,double(name.size())));
-        const float origin=(width-textExtent(name)*scale)*.5f;
-        const std::string typed(name.substr(0,count));
-        if (!unstableText(r,typed,origin,209.f,scale,192,255,212,
-                          intensity,time,1.45f,false)) return false;
-        if (count>name.find("Perez")+1 && !accentOnPerez(r,209.f,scale,intensity)) return false;
-        if (count<name.size() && count>0 && std::fmod(local*1.42,1.0)<.52) {
-            float caret=origin;
-            for (unsigned i=0;i<count;++i) caret+=fontAdvance(static_cast<unsigned char>(name[i]))*scale;
-            if (!color(r,145,255,177,intensity) ||
-                !SDL_RenderLine(r,caret,209.f,caret,227.f)) return false;
-        }
+        if (!unstableCentered(r,"A SOURCE PORT BY",138.f,2.75f,
+                              183,255,90,intensity,time,1.05f,true) ||
+            !unstableCentered(r,"XXNUKEM",212.f,3.7f,
+                              211,255,153,intensity,time,1.25f,false)) return false;
+    } else if (time<secondEnd) {
+        // Original developer and publisher are credited together.
+        const double local=time-firstEnd;
+        const float visible=fade(local-.55,.85)*
+                            (1.f-fade(time-(secondEnd-1.30),1.15));
+        const float first=visible*textFlicker(time);
+        const float second=first*fade(local-1.25,.85);
+        if (!unstableCentered(r,"ORIGINALLY DEVELOPED BY",106.f,2.10f,
+                              183,255,90,first,time,1.05f,true) ||
+            !unstableCentered(r,"BLUE SPHERE",153.f,3.15f,
+                              215,255,163,first,time,1.20f,false) ||
+            !unstableCentered(r,"PUBLISHED BY",237.f,2.10f,
+                              183,255,90,second,time,1.05f,true) ||
+            !unstableCentered(r,"U.S. GOLD",282.f,3.15f,
+                              215,255,163,second,time,1.20f,false)) return false;
+    } else if (time<titleStart) {
+        if (!drawVortexEngine(r,time-secondEnd)) return false;
     } else if (time>=titleStart) {
         const double local=time-titleStart;
         constexpr double hitAt=.25; // Same instant as the existing audio stinger.
         const double impact=local-hitAt;
 
-        // A nervous red charging line announces the strike in the silence.
+        // A nervous pistachio charging line announces the strike in the silence.
         if (impact<0.0) {
             const float charge=fade(local-.05,.13);
             const float flicker=(int(local*90.0)%5==0)?.25f:1.f;
-            if (!color(r,215,32,45,charge*.25f*flicker) ||
+            if (!color(r,138,240,47,charge*.25f*flicker) ||
                 !SDL_RenderLine(r,270.f,200.f,370.f,200.f)) return false;
         } else {
             // The entire title hits in one blow, oversized at first, then
@@ -705,51 +775,51 @@ bool drawCredit(SDL_Renderer* r, double time, std::uint32_t launchSeed)
             const float top=visibility*logoBrightness(local,2);
             const float bottom=visibility*logoBrightness(local,3);
 
-            // A single red shock-front lights the monitor at the impact.
+            // A single green shock-front lights the monitor at the impact.
             if (flash>.001f) {
                 const SDL_FRect shock{0.f,0.f,width,height};
-                if (!color(r,200,8,25,flash*.105f*visibility) ||
+                if (!color(r,71,154,11,flash*.105f*visibility) ||
                     !SDL_RenderFillRect(r,&shock) ||
-                    !color(r,255,114,118,flash*.62f*visibility) ||
+                    !color(r,217,255,129,flash*.62f*visibility) ||
                     !SDL_RenderLine(r,0.f,200.f,width,200.f)) return false;
             }
 
             // The two bars grow outwards from the exact horizontal centre.
             // Glow is the same distance above and below the title.
-            if (!color(r,200,20,40,top*.18f) ||
+            if (!color(r,77,165,25,top*.18f) ||
                 !SDL_RenderLine(r,320.f-extent,upper-2.f,320.f+extent,upper-2.f) ||
-                !color(r,200,20,40,bottom*.18f) ||
+                !color(r,77,165,25,bottom*.18f) ||
                 !SDL_RenderLine(r,320.f-extent,lower+2.f,320.f+extent,lower+2.f) ||
-                !color(r,239,39,57,top*.92f) ||
+                !color(r,183,255,90,top*.92f) ||
                 !SDL_RenderLine(r,320.f-extent,upper,320.f+extent,upper) ||
-                !color(r,239,39,57,bottom*.92f) ||
+                !color(r,183,255,90,bottom*.92f) ||
                 !SDL_RenderLine(r,320.f-extent,lower,320.f+extent,lower)) return false;
 
-            // Deep red phosphor bleed, plus a brief, offset after-image that
+            // Deep green phosphor bleed, plus a brief, offset after-image that
             // snaps into place with the impact sound.
             const float ghostOffset=12.f*recoil;
-            if (!textAt(r,"EXTREMIS",wordX-3.f,wordY+1.f,scale,160,16,28,a*.25f) ||
-                !textAt(r,"EXTREMIS",wordX+2.f,wordY-1.f,scale,238,52,65,a*.20f) ||
+            if (!textAt(r,"EXTREMIS",wordX-3.f,wordY+1.f,scale,75,128,23,a*.25f) ||
+                !textAt(r,"EXTREMIS",wordX+2.f,wordY-1.f,scale,161,223,63,a*.20f) ||
                 !textAt(r,"EXTREMIS",wordX-ghostOffset,wordY+2.f*recoil,scale,
-                        255,124,132,a*.33f*recoil) ||
-                !corruptedWord(r,"EXTREMIS",wordX,wordY,scale,252,69,76,a,
+                        229,255,158,a*.33f*recoil) ||
+                !corruptedWord(r,"EXTREMIS",wordX,wordY,scale,183,255,90,a,
                                local,0) ||
-                !textAt(r,"RE",reX-2.f,reY+1.f,scale,160,16,28,b*.25f) ||
-                !textAt(r,"RE",reX+3.f,reY-1.f,scale,238,52,65,b*.20f) ||
+                !textAt(r,"RE",reX-2.f,reY+1.f,scale,75,128,23,b*.25f) ||
+                !textAt(r,"RE",reX+3.f,reY-1.f,scale,161,223,63,b*.20f) ||
                 !textAt(r,"RE",reX+ghostOffset,reY-2.f*recoil,scale,
-                        255,124,132,b*.33f*recoil) ||
-                !corruptedWord(r,"RE",reX,reY,scale,252,69,76,b,
+                        229,255,158,b*.33f*recoil) ||
+                !corruptedWord(r,"RE",reX,reY,scale,183,255,90,b,
                                local,1)) return false;
 
-            // An ominous, slowly crawling red phosphor after-image persists
+            // An ominous, slowly crawling green phosphor after-image persists
             // under the complete logo. Nothing strobes or removes the main text.
             const float decay=fade(impact-.65,1.25);
             if (decay>.001f && visibility>.001f) {
                 const float drift=1.6f*std::sin(float(local)*2.7f);
                 if (!textAt(r,"EXTREMIS",wordX+3.f+drift,wordY+3.f,scale,
-                            119,9,21,a*.16f*decay) ||
+                            61,114,16,a*.16f*decay) ||
                     !textAt(r,"RE",reX-3.f-drift,reY+3.f,scale,
-                            119,9,21,b*.16f*decay)) return false;
+                            61,114,16,b*.16f*decay)) return false;
             }
 
             // Three distinct, sustained signal breakdowns after the complete
@@ -760,7 +830,7 @@ bool drawCredit(SDL_Renderer* r, double time, std::uint32_t launchSeed)
                 if (!drawTitleRupture(r,left,y,scale,wordX,reX,wordY,reY,
                                       visibility,rupture)) return false;
                 if (rupture.strength>.015f) {
-                    // Tiny missing sections in each red bar, with no change
+                    // Tiny missing sections in each green bar, with no change
                     // to their position or symmetrical spacing.
                     for (unsigned i=0;i<3;++i) {
                         const float x=left+float((rupture.phase*59u+i*97u)%360u);
@@ -779,7 +849,7 @@ bool drawCredit(SDL_Renderer* r, double time, std::uint32_t launchSeed)
                     const float x=left+float((fault.phase*19u+i*37u)%270u);
                     const float row=y+float(int((fault.phase*7u+i*9u)%43u)-5);
                     const float len=35.f+float((fault.phase*11u+i*13u)%125u);
-                    if (!color(r,255,57,68,visibility*(fault.active?.46f:.28f)*
+                    if (!color(r,170,255,74,visibility*(fault.active?.46f:.28f)*
                                (i%3==0?1.f:.60f)) ||
                         !SDL_RenderLine(r,x,row,std::min(width-50.f,x+len),row)) return false;
                 }

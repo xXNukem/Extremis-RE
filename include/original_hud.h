@@ -50,6 +50,9 @@ public:
     // Composes onto a complete 320x200 software framebuffer. No allocations.
     // Returns false, without writes, for an invalid framebuffer size.
     bool draw(std::vector<std::uint32_t>& pixels, const State& state) const;
+    // One untouched background pixel per scanline, directly from CASQUE[1].
+    // Never sample the composed HUD: its edges can contain radar/other overlays.
+    std::uint32_t panelBackgroundEdge(int row, bool right) const;
 private:
     void image(std::vector<std::uint32_t>& pixels, const spr_format::Image& sprite,
                int x, int y, bool transparent = false, int columns = -1) const;

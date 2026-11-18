@@ -3,6 +3,7 @@
 #include "plane_renderer.h"
 #include "sprite_renderer.h"
 #include "player_collision.h"
+#include "port_menu.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <cmath>
@@ -284,9 +285,12 @@ const wall_textures::Texture* selectWallTexture(const WallHit& hit,
 template <typename DrawColumn>
 bool renderVisibleColumns(const game_lab::Level& level, const Camera& camera,
                           int width, int height, const std::vector<doors::Door>* doors,
-                          DrawColumn drawColumn)
+                          DrawColumn drawColumn, int referenceWidth = 0)
 {
-    const double plane = std::tan(fov * 0.5);
+    // Preserve the original vertical field of view. Extra width adds rays on
+    // BOTH sides instead of stretching the same 320 columns horizontally.
+    const double reference = referenceWidth > 0 ? referenceWidth : width;
+    const double plane = std::tan(fov * 0.5) * double(width) / reference;
     const CameraProjection projection{width, height, std::cos(camera.angle),
                                       std::sin(camera.angle), plane, width / (2 * plane), camera.viewHeight()};
     for (int column = 0; column < width; ++column) {
@@ -436,6 +440,7 @@ bool FirstPersonRenderer::resizeFrame(int width, int height, bool withHud)
     frameReady_=false; showingMap_=false;
     pixels_.resize(std::size_t(width) * height);
     composed_.resize(withHud ? hud::width * hud::height : 0);
+    wideComposed_.resize(withHud && width>hud::width ? std::size_t(width)*hud::height : 0);
     uploadTexture_ = std::move(texture);
     width_ = width;
     height_ = height;
@@ -443,14 +448,56 @@ bool FirstPersonRenderer::resizeFrame(int width, int height, bool withHud)
     return true;
 }
 
-bool FirstPersonRenderer::presentFrame(bool withHud, int outputWidth, int outputHeight)
+bool FirstPersonRenderer::presentFrame(bool withHud, int outputWidth, int outputHeight,
+                                       const hud::Renderer* hudRenderer)
 {
-    const auto& frame = withHud ? composed_ : pixels_;
-    if (!SDL_UpdateTexture(uploadTexture_.get(), nullptr, frame.data(),
+    const std::vector<std::uint32_t>* frame = withHud ? &composed_ : &pixels_;
+    if (withHud && width_>hud::width) {
+        if (!hudRenderer) return SDL_SetError("Missing original HUD for widescreen panel");
+        // The world is the full width of the screen. Only the DOS artwork
+        // remains at its original 320-pixel width in the centre.
+        const int inset=(width_-hud::width)/2;
+        constexpr int cornerCounts[10]={60,48,40,32,24,20,16,12,8,4};
+        for (int y=0;y<hud::viewHeight;++y) {
+            auto* target=wideComposed_.data()+std::size_t(y)*width_;
+            const auto* world=pixels_.data()+std::size_t(y)*width_;
+            std::copy_n(world,width_,target);
+            for (int x=0;x<hud::width;++x) {
+                const auto overlay=composed_[std::size_t(y)*hud::width+x];
+                if (overlay==world[inset+x]) continue;
+                // Keep the original DOS helmet corner shapes at the edges
+                // of the *extended* viewport rather than in the old 4:3 area.
+                const int corner=(y<10)?cornerCounts[y]:
+                                 (y>=140?cornerCounts[9-(y-140)]:0);
+                if (x<corner) target[x]=overlay;
+                else if (x>=hud::width-corner) target[width_-hud::width+x]=overlay;
+                else target[inset+x]=overlay;
+            }
+        }
+        // Extend the actual CASQUE[1] background in each row, without
+        // stretching or repeating the original instruments or helmet geometry.
+        // The DOS 320x50 panel remains pixel-for-pixel unchanged in the middle.
+        // The right-side count also handles odd widescreen widths correctly.
+        for (int y=hud::viewHeight;y<hud::height;++y) {
+            const int panelRow=y-hud::viewHeight;
+            auto* destination=wideComposed_.data()+std::size_t(y)*width_;
+            const auto* original=composed_.data()+std::size_t(y)*hud::width;
+            std::fill_n(destination,inset,hudRenderer->panelBackgroundEdge(panelRow,false));
+            std::copy_n(original,hud::width,destination+inset);
+            std::fill_n(destination+inset+hud::width,width_-inset-hud::width,
+                        hudRenderer->panelBackgroundEdge(panelRow,true));
+        }
+        frame=&wideComposed_;
+    }
+    if (!SDL_UpdateTexture(uploadTexture_.get(), nullptr, frame->data(),
                            width_ * int(sizeof(std::uint32_t)))) return false;
     if (!withHud) return SDL_RenderTexture(renderer_, uploadTexture_.get(), nullptr, nullptr);
-    const auto fit = hud::presentation(outputWidth,outputHeight);
-    const SDL_FRect destination{fit.x,fit.y,fit.width,fit.height};
+    // 320x200 was displayed on a 4:3 CRT (non-square VGA pixels).
+    // Wider game canvases keep the same pixel aspect, without pillarboxing.
+    const float ratio=(4.f/3.f)*(float(width_)/float(hud::width));
+    const float w=std::min(float(outputWidth),float(outputHeight)*ratio);
+    const float h=w/ratio;
+    const SDL_FRect destination{(outputWidth-w)*.5f,(outputHeight-h)*.5f,w,h};
     return SDL_RenderTexture(renderer_, uploadTexture_.get(), nullptr, &destination);
 }
 bool FirstPersonRenderer::drawFrame(const std::vector<std::uint32_t>& pixels)
@@ -487,7 +534,17 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
         return true;
     }
     const int outputWidth = width, outputHeight = height;
-    if (hudRenderer) { width = hud::width; height = hud::viewHeight; }
+    if (hudRenderer) {
+        const double monitorAspect=double(outputWidth)/outputHeight;
+        const double aspect=portVideoAspectChoice==0 ? 4.0/3.0 :
+                            portVideoAspectChoice==1 ? 16.0/9.0 :
+                            portVideoAspectChoice==2 ? 21.0/9.0 : monitorAspect;
+        // Width is measured in the original DOS game's non-square pixels;
+        // its native 320x200 image corresponds to a 4:3 physical display.
+        width=std::clamp(int(std::lround(hud::width*aspect/(4.0/3.0))),
+                         hud::width,hud::width*3);
+        height=hud::viewHeight;
+    }
     if (!resizeFrame(width, height, hudRenderer != nullptr)) {
         return false;
     }
@@ -496,12 +553,12 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
         showingMap_=true;
         composed_=mapBackground_;
         if (!map->draw(composed_,*mapState)) return SDL_SetError("Invalid original map framebuffer");
-        return presentFrame(true,outputWidth,outputHeight);
+        return presentFrame(true,outputWidth,outputHeight,hudRenderer);
     }
     showingMap_=false;
     fillBackground(pixels_, width, height);
     if (spriteScene || projectileScene || enemyScene) depth_.assign(pixels_.size(), std::numeric_limits<double>::infinity());
-    const double focal = width / (2 * std::tan(fov * 0.5));
+    const double focal = (hudRenderer ? hud::width : width) / (2 * std::tan(fov * 0.5));
     if (planes) {
         planes::render(pixels_, camera, {width, height, focal, camera.viewHeight(), wallHeight}, *planes);
     }
@@ -511,7 +568,7 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
             rasterizeWallColumn(pixels_, width, height, column, hit, projected, texture,
                                 (spriteScene || projectileScene || enemyScene) ? &depth_ : nullptr);
             return true;
-        });
+        },hudRenderer ? hud::width : 0);
     if (!wallsDrawn) return false;
     if (spriteScene) sprites::render(pixels_, depth_, *spriteScene, camera,
                                     {width, height, focal, camera.viewHeight()});
@@ -522,7 +579,16 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
     if (projectileScene) sprites::render(pixels_,depth_,*projectileScene,camera,
                                         {width,height,focal,camera.viewHeight()});
     if (hudRenderer) {
-        std::copy(pixels_.begin(),pixels_.end(),composed_.begin());
+        if (width==hud::width) {
+            std::copy(pixels_.begin(),pixels_.end(),composed_.begin());
+        } else {
+            // The DOS interface still receives precisely 320x200 pixels.
+            // Its view area is a centred crop of the expanded world.
+            const int inset=(width-hud::width)/2;
+            for(int y=0;y<hud::viewHeight;++y)
+                std::copy_n(pixels_.data()+std::size_t(y)*width+inset,hud::width,
+                            composed_.data()+std::size_t(y)*hud::width);
+        }
         if (!hudRenderer->draw(composed_,hudState)) return SDL_SetError("Invalid HUD framebuffer");
         if (interactionRenderer && interactionState && !interactionRenderer->draw(composed_,*interactionState))
             return SDL_SetError("Invalid original interaction framebuffer");
@@ -532,5 +598,5 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
         }
     }
     frameReady_=true;
-    return presentFrame(hudRenderer != nullptr,outputWidth,outputHeight);
+    return presentFrame(hudRenderer != nullptr,outputWidth,outputHeight,hudRenderer);
 }

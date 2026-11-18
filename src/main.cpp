@@ -198,7 +198,7 @@ int main(int argc, char* argv[])
     }
 
     SDL_Window* window = SDL_CreateWindow(survival.windowTitle(texturePreview.windowTitle()).c_str(), 960, 600,
-                                           SDL_WINDOW_RESIZABLE);
+                                           SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_FULLSCREEN);
     if (!window) {
         SDL_Log("Window creation failed: %s", SDL_GetError());
         SDL_Quit();

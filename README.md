@@ -32,30 +32,44 @@ If you'd like to support development:
 
 The project uses the original DOS executable and game data as references for gameplay, rendering, audio and interface behaviour. It aims to preserve the original game rather than redesign it. Players must supply their own game files.
 
+## About Vortex Engine
+
+<div align="center">
+  <img src="docs/images/vortex-engine-logo.png" alt="Vortex Engine" width="280">
+</div>
+
+Vortex Engine is a C++17 and SDL3 engine currently being developed as part of Extremis RE.
+
+Its purpose is to restore classic and largely forgotten first-person shooters, making them playable on modern systems while preserving their original gameplay, appearance and behaviour.
+
+The idea is to build a versatile engine that adapts to each game, rather than forcing games to adapt to the engine. Different approaches to rendering, geometry, physics and game logic should be supported according to the needs of each original title.
+
+*In Extremis* is the first game being reconstructed using Vortex Engine, and serves as the foundation for its development.
+
 ## Development progress
 
 **Estimated completion: ~65%** (manual estimate, not a measured percentage of code or completed levels).
 
 **🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩⬛⬛⬛⬛⬛⬛⬛ &nbsp; 65%**
 
-The core engine, major original cinematics, level 22 events and a navigable port menu prototype are implemented. Save/load, functional menu settings, campaign-wide verification and release testing are still outstanding.
+The core engine, major original cinematics, level 22 events and a port menu with working display and aspect-ratio settings are implemented. Save/load, the remaining menu settings, campaign-wide verification and release testing are still outstanding.
 
 ### Feature status
 
 | Area | Status | Notes |
 |:--|:--|:--|
 | Original game data and 30 level definitions | Implemented | All level definitions can be loaded; later levels require gameplay verification |
-| 3D renderer | Functional | Textured walls, floors, ceilings and sprites; visual issues, aspect ratios and performance remain |
+| 3D renderer | Functional | Textured walls, floors, ceilings and sprites; widescreen rendering is supported, while higher internal resolutions and performance work remain |
 | Player controls and survival | Functional | Movement, health, oxygen, running and collision; timing and edge cases need further verification |
 | Doors, terminals and elevators | Functional | Opening/closing, security, interactions and level transfers; special cases remain to be tested |
 | Weapons, projectiles and enemies | Functional | Combat and enemy behaviour implemented; all banks and later-game encounters are not fully verified |
 | Decorative objects | Functional | Sprite animations and collision implemented; some timing and bank-specific behaviour remain |
-| HUD, inventory and map | Functional | Original 320×200 layout and interfaces; remaining interaction details need checking |
+| HUD, inventory and map | Functional | Original 320×200 layout and interfaces, with an extended HUD in widescreen; visual polish and interaction checks remain |
 | Sound effects | Functional | Original audio resources and gameplay cues; ambient audio and some timing need verification |
 | Original startup presentation | Implemented | Blue Sphere, Présente, title, four credits and all 12 PSEQ stages; timing differences remain |
 | Player death and GAME OVER | Implemented | Health, oxygen and self-destruction death sequences, GAME OVER and menu return; some timing is adapted |
 | Original main menu | Partial | Returns after GAME OVER and victory; original startup integration and password continuation are unfinished |
-| Port main menu and OPTIONS | Prototype | Startup and in-game menu with navigable VIDEO, AUDIO, CONTROLS and LANGUAGE screens; settings are previews and LOAD GAME is pending |
+| Port main menu and OPTIONS | Partial | Startup and in-game menu with BACK TO GAME, fullscreen display modes and aspect-ratio selection; other settings and LOAD GAME remain pending |
 | Final cinematic | Implemented | Original FSEQ sequence, connected to MONS9 defeat; visually validated, full-campaign trigger still to be verified |
 | Inter-level elevator cinematics | Implemented | Four original movement variants integrated and visually validated; DOS timing comparison pending |
 | Level 22 self-destruction | Implemented | 16 security conditions, countdown, alarms and explosion death; persistence across levels verified |
@@ -76,7 +90,7 @@ The core engine, major original cinematics, level 22 events and a navigable port
 - Doors, readers, terminals, elevators, inventory, HUD and map.
 - Decorative sprite animation and collision handling.
 - Custom Extremis RE startup presentation.
-- Navigable port menu and OPTIONS prototype, with original DOS sound effects for entering, leaving and changing preview values.
+- Port menu with original DOS sound effects, BACK TO GAME, fullscreen display-mode selection, widescreen rendering and an extended HUD.
 - Original Blue Sphere presentation, In Extremis title, credits and PSEQ introduction.
 - Original health/oxygen death presentations, GAME OVER and final FSEQ cinematic.
 - Original four-variant elevator transitions and level 22 shuttle evacuation to level 23.
@@ -86,7 +100,8 @@ The core engine, major original cinematics, level 22 events and a navigable port
 ### Main work remaining
 
 - Save/load and full game-state restoration.
-- Implement LOAD GAME, make port OPTIONS settings functional, and finish original menu/password integration.
+- Implement LOAD GAME, finish the remaining port OPTIONS settings and original menu/password integration.
+- Higher internal rendering resolutions (up to 4K), extended HUD polish and a custom optional floating HUD.
 - Translate remaining French dialogue and correct spelling and grammar in English text.
 - Fidelity checks for animation timing, audio and specific original effects.
 - Remaining gameplay, collision and rendering edge cases.

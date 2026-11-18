@@ -3,6 +3,8 @@
 #include <SDL3/SDL_scancode.h>
 #include <filesystem>
 #include <string>
+#include <utility>
+#include <vector>
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -10,7 +12,16 @@ struct SDL_Renderer;
 enum class PortMenuChoice { None, Resume, NewGame, Exit, Error };
 enum class PortMenuPage { Main, Options, Video, Audio, Controls, Language };
 
-// Menu-only preview: settings do not affect the running game or persist.
+// VIDEO applies output display settings during this process; other sections
+// remain previews. The DOS framebuffer/HUD is preserved at original aspect.
+// SDL3 display mode dimensions are logical. Density supplies physical pixels.
+struct PortVideoMode { int width=0, height=0; float density=1.f; };
+
+// Runtime selection, shared with the renderer. The default is AUTO (3).
+// We only keep this UI choice here; SDL display modes remain independent.
+inline unsigned portVideoAspectChoice = 3;
+
+
 class PortMenuState {
 public:
     explicit PortMenuState(bool inGame) : inGame_(inGame) {}
@@ -22,11 +33,26 @@ public:
     PortMenuChoice key(SDL_Scancode key, bool repeated = false);
     bool pointerMove(float x, float y);
     PortMenuChoice pointerClick(float x, float y);
+    void setDisplaySize(int physicalWidth,int physicalHeight);
+    void setVideoChoices(unsigned aspect,unsigned resolution);
+    void setAvailableVideoModes(std::vector<PortVideoMode> modes);
+    const PortVideoMode* selectedVideoMode() const;
+    unsigned availableModeCount() const { return unsigned(videoModes_.size()); }
+    void setAppliedVideoSize(int physicalWidth,int physicalHeight);
+    void setVideoModeAvailable(bool available) { videoModeAvailable_ = available; }
+    bool videoModeAvailable() const { return videoModeAvailable_; }
+    unsigned aspectChoice() const { return aspect_; }
+    unsigned resolutionChoice() const { return resolution_; }
+    std::pair<int,int> videoDimensions() const;
 private:
     bool inGame_;
     PortMenuPage page_ = PortMenuPage::Main;
     unsigned selection_ = 0;
-    unsigned aspect_ = 1, resolution_ = 3, volume_ = 80, language_ = 1;
+    unsigned aspect_ = 3, resolution_ = 0, volume_ = 80, language_ = 1;
+    std::vector<PortVideoMode> videoModes_;
+    int monitorWidth_ = 1920, monitorHeight_ = 1080;
+    int appliedWidth_ = 0, appliedHeight_ = 0;
+    bool videoModeAvailable_ = true;
     bool planes_ = true, coloredLights_ = false, modernControls_ = true;
     static int hitTest(float x, float y, unsigned count, bool submenu);
     PortMenuChoice activate();
@@ -34,6 +60,7 @@ private:
     void changeValue(int delta);
 };
 
-// SDL modal: suspends gameplay; all settings here are presentation-only.
+// SDL modal: suspends gameplay; VIDEO changes the real output window.
+// Other settings remain menu-only previews.
 PortMenuChoice showPortMenu(SDL_Window* window, SDL_Renderer* renderer,
                             const std::filesystem::path& dataDirectory, bool inGame);

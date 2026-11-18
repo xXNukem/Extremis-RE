@@ -69,12 +69,16 @@ private:
     };
 
     bool resizeFrame(int width, int height, bool withHud);
-    bool presentFrame(bool withHud, int outputWidth, int outputHeight);
+    bool presentFrame(bool withHud, int outputWidth, int outputHeight,
+                      const hud::Renderer* hudRenderer = nullptr);
 
     SDL_Renderer* renderer_;
     std::unique_ptr<SDL_Texture, TextureDeleter> uploadTexture_;
     std::vector<std::uint32_t> pixels_;
     std::vector<std::uint32_t> composed_;
+    // Widescreen composition: extended world with the original 320x200 HUD
+    // overlaid in the middle; cinematics still use their native 4:3 frame.
+    std::vector<std::uint32_t> wideComposed_;
     std::vector<double> depth_;
     std::vector<std::uint32_t> mapBackground_;
     bool showingMap_ = false, frameReady_ = false;

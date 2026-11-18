@@ -108,6 +108,19 @@ Renderer::Renderer(Resources resources) : resources_(std::move(resources))
     }
 }
 
+std::uint32_t Renderer::panelBackgroundEdge(int row, bool right) const
+{
+    // Original EXTENDED v1: prolong the real outer edge, not the instruments.
+    // CASQUE[1] reserves palette index 216 for the radar and weapon graphics.
+    // Outside the original HUD those displays must remain empty, using the
+    // same background as Renderer::weapon(), never a weapon/radar pixel.
+    const auto& panel=resources_.casque[1];
+    const int x=right ? panel.width-1 : 0;
+    const int y=std::clamp(row,0,panel.height-1);
+    const auto index=panel.indices[std::size_t(y)*panel.width+x];
+    return colors_[index==216 ? 0 : index];
+}
+
 void Renderer::image(std::vector<std::uint32_t>& pixels, const spr_format::Image& sprite,
                      int x, int y, bool transparent, int columns) const
 {

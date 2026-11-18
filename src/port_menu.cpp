@@ -25,9 +25,13 @@ constexpr SDL_Color dim{93,125,77,255};
 constexpr SDL_Color frame{62,112,52,255};
 constexpr SDL_Color dark{4,10,6,255};
 constexpr std::array<std::string_view,4> mainLabels{{"NEW GAME","LOAD GAME","OPTIONS","EXIT"}};
+constexpr std::array<std::string_view,5> inGameLabels{{"BACK TO GAME","NEW GAME","LOAD GAME","OPTIONS","EXIT"}};
 constexpr std::array<std::string_view,5> optionsLabels{{"VIDEO","AUDIO","CONTROLS","LANGUAGE","BACK"}};
 constexpr std::array<std::string_view,4> aspectValues{{"4:3","16:9","21:9","AUTO"}};
-constexpr std::array<std::string_view,5> resolutions{{"640 X 400","1024 X 768","1280 X 720","1920 X 1080","2560 X 1440"}};
+// Resolution 0 = desktop AUTO; 1..N = modes actually returned by SDL3.
+// Aspect choices describe the intended future view; they do not change the
+// hardware mode nor distort the original 320x200/HUD rendering.
+constexpr unsigned automaticResolution=0;
 constexpr std::array<std::string_view,3> languageLabels{{"FRENCH","ENGLISH","SPANISH"}};
 
 float rowTop(unsigned row,unsigned count,bool submenu)
@@ -397,7 +401,7 @@ bool drawOptions(SDL_Renderer* r,const original_font::Font* font,
     // A single fixed scale for all submenu values, including their longest
     // alternatives. Changing resolution, language or scheme never resizes text.
     constexpr std::array<std::string_view,5> largestLabels{{
-        "RESOLUTION : 2560 X 1440", "FLOOR AND CEILING : OFF",
+        "RESOLUTION : 3840 X 2160 RETINA", "FLOOR AND CEILING : OFF",
         "CONTROL SCHEME : CLASSIC", "SPANISH - SELECTED",
         "MASTER VOLUME : 100"
     }};
@@ -442,6 +446,16 @@ bool drawOptions(SDL_Renderer* r,const original_font::Font* font,
             return false;
         if (!textAt(r,font,label,x,textY,glyphScale,tint,selected?1.f:.80f)) return false;
     }
+    if (state.page()==PortMenuPage::Video) {
+        const std::string_view notice = !state.videoModeAvailable()
+            ? "DISPLAY MODE SWITCH FAILED"
+            : state.aspectChoice()==0 ? "4:3 ORIGINAL DOS VIEW"
+            : state.aspectChoice()==1 ? "16:9 EXPANDED GAME VIEW"
+            : state.aspectChoice()==2 ? "21:9 EXPANDED GAME VIEW"
+                                      : "AUTO: MATCH MONITOR ASPECT";
+        const float x=320.f-textWidth(font,notice,1.f)*.5f;
+        if (!textAt(r,font,notice,x,355.f,1.f,pale,.88f)) return false;
+    }
     return true;
 }
 
@@ -464,10 +478,65 @@ bool render(SDL_Renderer* r,const original_font::Font* font,
 }
 } // namespace
 
+// The reported display ratio is informational. AUTO uses the monitor's
+// measured dimensions, rather than assuming that every screen is 16:9.
+const char* detectedAspect(int w,int h)
+{
+    if (w<=0 || h<=0) return "UNKNOWN";
+    const double ratio=double(w)/double(h);
+    if (std::abs(ratio-4.0/3.0)<.045) return "4:3";
+    if (std::abs(ratio-3.0/2.0)<.025) return "3:2";
+    if (std::abs(ratio-16.0/10.0)<.045) return "16:10";
+    if (std::abs(ratio-16.0/9.0)<.045) return "16:9";
+    if (std::abs(ratio-21.0/9.0)<.060) return "21:9";
+    if (std::abs(ratio-32.0/9.0)<.080) return "32:9";
+    return "CUSTOM";
+}
+
+void PortMenuState::setDisplaySize(int width,int height)
+{
+    if(width>0 && height>0) { monitorWidth_=width; monitorHeight_=height; }
+}
+
+void PortMenuState::setVideoChoices(unsigned aspect,unsigned resolution)
+{
+    aspect_=std::min(aspect,unsigned(aspectValues.size()-1));
+    resolution_=std::min(resolution,unsigned(videoModes_.size()));
+}
+
+void PortMenuState::setAvailableVideoModes(std::vector<PortVideoMode> modes)
+{
+    videoModes_=std::move(modes);
+    if(resolution_>videoModes_.size()) resolution_=automaticResolution;
+}
+
+const PortVideoMode* PortMenuState::selectedVideoMode() const
+{
+    return resolution_>0 && resolution_<=videoModes_.size()
+        ? &videoModes_[resolution_-1] : nullptr;
+}
+
+void PortMenuState::setAppliedVideoSize(int physicalWidth,int physicalHeight)
+{
+    if(physicalWidth>0 && physicalHeight>0) {
+        appliedWidth_=physicalWidth;
+        appliedHeight_=physicalHeight;
+    }
+}
+
+std::pair<int,int> PortMenuState::videoDimensions() const
+{
+    const auto* mode=selectedVideoMode();
+    if(!mode) return {monitorWidth_,monitorHeight_};
+    const float density=mode->density>0.f?mode->density:1.f;
+    return {int(std::lround(mode->width*density)),
+            int(std::lround(mode->height*density))};
+}
+
 unsigned PortMenuState::rowCount() const
 {
     switch(page_) {
-    case PortMenuPage::Main: return 4;
+    case PortMenuPage::Main: return inGame_?5:4;
     case PortMenuPage::Options: case PortMenuPage::Video: return 5;
     case PortMenuPage::Audio: case PortMenuPage::Controls: return 2;
     case PortMenuPage::Language: return 4;
@@ -492,12 +561,19 @@ std::string PortMenuState::label(unsigned row) const
 {
     if (row>=rowCount()) return "";
     switch(page_) {
-    case PortMenuPage::Main: return std::string(mainLabels[row]);
+    case PortMenuPage::Main: return std::string(inGame_?inGameLabels[row]:mainLabels[row]);
     case PortMenuPage::Options: return std::string(optionsLabels[row]);
     case PortMenuPage::Video:
         switch(row) {
-        case 0: return "ASPECT RATIO : "+std::string(aspectValues[aspect_]);
-        case 1: return "RESOLUTION : "+std::string(resolutions[resolution_]);
+        case 0: return "ASPECT RATIO : "+std::string(aspectValues[aspect_])+
+                       (aspect_==3?" ("+std::string(detectedAspect(monitorWidth_,monitorHeight_))+")":"");
+        case 1: {
+            const auto [w,h]=videoDimensions();
+            return "RESOLUTION : "+std::string(resolution_==automaticResolution?"AUTO (":"")+
+                   std::to_string(w)+" X "+std::to_string(h)+
+                   (resolution_==automaticResolution?")":
+                    (selectedVideoMode() && selectedVideoMode()->density>1.1f?" RETINA":""));
+        }
         case 2: return std::string("FLOOR AND CEILING : ")+(planes_?"ON":"OFF");
         case 3: return std::string("COLORED LIGHTS : ")+(coloredLights_?"ON":"OFF");
         default: return "BACK";
@@ -524,7 +600,11 @@ void PortMenuState::changeValue(int delta)
     case PortMenuPage::Video:
         switch(selection_) {
         case 0: aspect_=unsigned((int(aspect_)+delta+int(aspectValues.size()))%int(aspectValues.size())); break;
-        case 1: resolution_=unsigned((int(resolution_)+delta+int(resolutions.size()))%int(resolutions.size())); break;
+        case 1: {
+            const int choices=int(videoModes_.size())+1;
+            resolution_=unsigned((int(resolution_)+delta+choices)%choices);
+            break;
+        }
         case 2: planes_=!planes_; break;
         case 3: coloredLights_=!coloredLights_; break;
         }
@@ -546,9 +626,10 @@ PortMenuChoice PortMenuState::activate()
 {
     switch(page_) {
     case PortMenuPage::Main:
-        if(selection_==0) return PortMenuChoice::NewGame;
-        if(selection_==2) {page_=PortMenuPage::Options;selection_=0;}
-        if(selection_==3) return PortMenuChoice::Exit;
+        if(inGame_ && selection_==0) return PortMenuChoice::Resume;
+        if(selection_==(inGame_?1u:0u)) return PortMenuChoice::NewGame;
+        if(selection_==(inGame_?3u:2u)) {page_=PortMenuPage::Options;selection_=0;}
+        if(selection_==(inGame_?4u:3u)) return PortMenuChoice::Exit;
         break; // LOAD GAME is visible and selectable, not operational.
     case PortMenuPage::Options:
         if(selection_==4) back();
@@ -617,6 +698,90 @@ PortMenuChoice PortMenuState::key(SDL_Scancode pressed,bool repeated)
     return PortMenuChoice::None;
 }
 
+// Returns physical pixels; SDL3 desktop modes use logical size plus
+// pixel_density on Retina / high-DPI screens.
+std::pair<int,int> activeDisplaySize(SDL_Window* window)
+{
+    const SDL_DisplayID display=SDL_GetDisplayForWindow(window);
+    const SDL_DisplayMode* mode=display?SDL_GetDesktopDisplayMode(display):nullptr;
+    if(mode && mode->w>0 && mode->h>0) {
+        const float density=mode->pixel_density>0.f?mode->pixel_density:1.f;
+        return {int(std::lround(mode->w*density)),int(std::lround(mode->h*density))};
+    }
+    int w=0,h=0;
+    if(SDL_GetWindowSizeInPixels(window,&w,&h) && w>0 && h>0)
+        return {w,h};
+    return {1920,1080};
+}
+
+// Read real display modes every time a menu is opened, including Retina density.
+// Do not cache SDL_DisplayMode pointers, which belong to temporary SDL arrays.
+std::vector<PortVideoMode> availableVideoModes(SDL_Window* window)
+{
+    std::vector<PortVideoMode> result;
+    const SDL_DisplayID display=SDL_GetDisplayForWindow(window);
+    if(!display) return result;
+    int count=0;
+    SDL_DisplayMode** list=SDL_GetFullscreenDisplayModes(display,&count);
+    if(!list) return result;
+    for(int i=0;i<count;++i) {
+        const auto* mode=list[i];
+        if(mode && mode->w>0 && mode->h>0)
+            result.push_back({mode->w,mode->h,
+                              mode->pixel_density>0.f?mode->pixel_density:1.f});
+    }
+    SDL_free(list);
+    return result;
+}
+
+bool sameVideoMode(const PortVideoMode& a,const PortVideoMode& b)
+{
+    return a.width==b.width && a.height==b.height &&
+           std::abs(a.density-b.density)<.01f;
+}
+
+// Only modes actually advertised by SDL3 may be applied. Aspect selection
+// remains independent: the current renderer does not yet support wide FOV.
+bool applyVideoWindowSize(SDL_Window* window,PortMenuState& state)
+{
+    const SDL_DisplayID display=SDL_GetDisplayForWindow(window);
+    if(!display) return false;
+    const auto* requested=state.selectedVideoMode();
+    if(!requested) {
+        if(!SDL_SetWindowFullscreenMode(window,nullptr) ||
+           !SDL_SetWindowFullscreen(window,true) || !SDL_SyncWindow(window)) {
+            SDL_Log("VIDEO: cannot restore desktop fullscreen: %s",SDL_GetError());
+            return false;
+        }
+        const auto [w,h]=activeDisplaySize(window);
+        state.setAppliedVideoSize(w,h);
+        return true;
+    }
+
+    int count=0;
+    SDL_DisplayMode** modes=SDL_GetFullscreenDisplayModes(display,&count);
+    if(!modes) return false;
+    const SDL_DisplayMode* selected=nullptr;
+    for(int i=0;i<count;++i) {
+        const auto* item=modes[i];
+        if(!item) continue;
+        PortVideoMode candidate{item->w,item->h,
+                                item->pixel_density>0.f?item->pixel_density:1.f};
+        if(sameVideoMode(candidate,*requested)) {selected=item;break;}
+    }
+    if(!selected) { SDL_free(modes);return false; }
+    // SDL copies the mode value, so it is safe to free the array afterwards.
+    const bool ok=SDL_SetWindowFullscreenMode(window,selected) &&
+                  SDL_SetWindowFullscreen(window,true) && SDL_SyncWindow(window);
+    if(ok) {
+        const auto [w,h]=state.videoDimensions();
+        state.setAppliedVideoSize(w,h);
+        SDL_Log("VIDEO: selected fullscreen %d x %d pixels",w,h);
+    } else SDL_Log("VIDEO: cannot switch fullscreen mode: %s",SDL_GetError());
+    SDL_free(modes);
+    return ok;
+}
+
 PortMenuChoice showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
                             const std::filesystem::path& dataDirectory,bool inGame)
 {
@@ -636,7 +801,27 @@ PortMenuChoice showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
     }
     MenuAudio audio(dataDirectory);
     const auto windowId=SDL_GetWindowID(window);
+    // Remember the exact logical mode/density, not an index that might
+    // change if SDL3 enumerates modes in a different order next time.
+    static unsigned selectedAspect=3;
+    static PortVideoMode selectedMode{};
+    static bool hasSelectedMode=false;
     PortMenuState state(inGame);
+    const auto [desktopWidth,desktopHeight]=activeDisplaySize(window);
+    state.setDisplaySize(desktopWidth,desktopHeight);
+    state.setAvailableVideoModes(availableVideoModes(window));
+    unsigned selectedResolution=automaticResolution;
+    if(hasSelectedMode) {
+        for(unsigned i=1;i<=state.availableModeCount();++i) {
+            state.setVideoChoices(selectedAspect,i);
+            if(const auto* mode=state.selectedVideoMode();
+               mode && sameVideoMode(*mode,selectedMode)) {
+                selectedResolution=i;break;
+            }
+        }
+    }
+    state.setVideoChoices(selectedAspect,selectedResolution);
+    state.setVideoModeAvailable(true);
     double seconds=0.,selectionChangedAt=0.;
     const std::uint32_t effectSeed=hash32(std::uint32_t(SDL_GetTicksNS()));
     std::uint32_t selectionSeed=hash32(effectSeed ^ 0x51409a6du);
@@ -654,6 +839,25 @@ PortMenuChoice showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
     const auto selectionChanged=[&](PortMenuPage previousPage,unsigned previousSelection,
                                     const std::string& previousValues) {
         const bool changedPage=state.page()!=previousPage;
+        // A requested aspect must not force an exclusive hardware resolution.
+        // It is still an unimplemented wide-FOV view choice, shown as such.
+        if(state.page()==PortMenuPage::Video) {
+            selectedAspect=state.aspectChoice();
+            portVideoAspectChoice=selectedAspect;
+            if(state.resolutionChoice()!=selectedResolution) {
+                const bool supported=applyVideoWindowSize(window,state);
+                state.setVideoModeAvailable(supported);
+                if(supported) {
+                    selectedResolution=state.resolutionChoice();
+                    if(const auto* mode=state.selectedVideoMode()) {
+                        selectedMode=*mode;hasSelectedMode=true;
+                    } else hasSelectedMode=false;
+                } else {
+                    SDL_Log("VIDEO: real display mode switch failed; keeping prior selection");
+                    state.setVideoChoices(selectedAspect,selectedResolution);
+                }
+            }
+        }
         const bool changedValue=!changedPage && valuesOnPage()!=previousValues;
         if (!changedPage && !changedValue && state.selection()==previousSelection) return;
         selectionChangedAt=seconds;
