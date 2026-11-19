@@ -35,7 +35,8 @@ void testTextureSampling(double height)
           "Endpoint intersection fractions incorrect");
     for (const auto type : {0x0003, 0x2003, 0x2016, 0x2020, 0x202a, 0x2034, 0x3003}) {
         level.sectors[0].walls[0].type = type;
-        for (const auto size : {SDL_Point{101, 81}, SDL_Point{161, 101}, SDL_Point{101, 161}}) {
+        for (const auto size : {SDL_Point{101, 74}, SDL_Point{101, 75}, SDL_Point{101, 81},
+                                SDL_Point{161, 101}, SDL_Point{101, 161}}) {
             std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> surface(
                 SDL_CreateSurface(size.x, size.y, SDL_PIXELFORMAT_RGBA32), SDL_DestroySurface);
             check(bool(surface), "Texture test surface failed");
@@ -47,7 +48,8 @@ void testTextureSampling(double height)
                   "Textured rendering failed");
             const double focal = size.x / (2 * std::tan(70.0 * 3.14159265358979323846 / 360));
             const double top = size.y * 0.5 - (256-camera.viewHeight()) * focal / 50;
-            const double wallPixels = 256 * focal / 50;
+            const double bottom = size.y * 0.5 + camera.viewHeight() * focal / 50;
+            const double wallPixels = bottom - top;
             const double shade = 0.2 + 0.8 / (1 + 50.0 / 700);
             for (const int x : {0, size.x / 2, size.x - 1}) {
                 const double offset = (2 * (x + 0.5) / size.x - 1) *
@@ -55,7 +57,7 @@ void testTextureSampling(double height)
                 const double u = (50 - 50 * offset) / 100;
                 const int columns = (type & 0xf000) == 0x2000 ? 30 : 60;
                 const int texX = int(u * columns);
-                for (const int y : {0, size.y / 2, size.y - 1}) {
+                for (int y = 0; y < size.y; ++y) {
                     const int texY = int((y + 0.5 - top) / wallPixels * texture.height);
                     Uint8 r = 0, g = 0, b = 0, a = 0;
                     check(SDL_ReadSurfacePixel(surface.get(), x, y, &r, &g, &b, &a) &&

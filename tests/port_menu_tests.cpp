@@ -31,25 +31,34 @@ int main()
     assert(start.label(2)=="CONTROLS" && start.label(3)=="LANGUAGE");
     assert(start.label(4)=="BACK");
 
-    // Mouse navigation into video, hit-tested using the five-row layout.
+    // Six VIDEO rows: the effect is independent of resolution and aspect.
     assert(start.pointerClick(320.f,131.f)==PortMenuChoice::None);
-    assert(start.page()==PortMenuPage::Video && start.rowCount()==5);
+    assert(start.page()==PortMenuPage::Video && start.rowCount()==6);
     assert(start.label(0)=="ASPECT RATIO : AUTO (16:9)");
-    assert(start.videoDimensions()==std::make_pair(1920,1080));
-    assert(start.label(1)=="RESOLUTION : AUTO (1920 X 1080)");
-    assert(start.label(2)=="FLOOR AND CEILING : ON");
-    assert(start.label(3)=="COLORED LIGHTS : OFF");
+    assert(start.videoDimensions()==std::make_pair(320,200));
+    assert(start.label(1)=="RESOLUTION : 320 X 200 (ORIGINAL)");
+    assert(start.label(2)=="FISHEYE EFFECT : OFF");
+    assert(!start.fisheyeEnabled());
+    assert(start.label(3)=="FLOOR AND CEILING : ON");
+    assert(start.label(4)=="COLORED LIGHTS : OFF");
     start.key(SDL_SCANCODE_RIGHT);
     assert(start.label(0)=="ASPECT RATIO : 4:3");
     start.key(SDL_SCANCODE_LEFT);
     assert(start.label(0)=="ASPECT RATIO : AUTO (16:9)");
-    assert(start.pointerClick(320.f,178.f)==PortMenuChoice::None);
+    assert(start.pointerClick(320.f,154.f)==PortMenuChoice::None);
     assert(start.label(1)=="RESOLUTION : 853 X 480");
-    assert(start.pointerClick(320.f,224.f)==PortMenuChoice::None);
-    assert(start.label(2)=="FLOOR AND CEILING : OFF");
-    assert(start.pointerClick(320.f,269.f)==PortMenuChoice::None);
-    assert(start.label(3)=="COLORED LIGHTS : ON");
-    assert(start.pointerClick(320.f,315.f)==PortMenuChoice::None);
+    assert(start.pointerClick(320.f,197.f)==PortMenuChoice::None);
+    assert(start.label(2)=="FISHEYE EFFECT : ON");
+    assert(start.fisheyeEnabled());
+    start.key(SDL_SCANCODE_LEFT);
+    assert(start.label(2)=="FISHEYE EFFECT : OFF");
+    start.key(SDL_SCANCODE_RETURN);
+    assert(start.label(2)=="FISHEYE EFFECT : ON");
+    assert(start.pointerClick(320.f,240.f)==PortMenuChoice::None);
+    assert(start.label(3)=="FLOOR AND CEILING : OFF");
+    assert(start.pointerClick(320.f,283.f)==PortMenuChoice::None);
+    assert(start.label(4)=="COLORED LIGHTS : ON");
+    assert(start.pointerClick(320.f,326.f)==PortMenuChoice::None);
     assert(start.page()==PortMenuPage::Options);
 
     choose(start,1);
@@ -89,12 +98,11 @@ int main()
     assert(start.key(SDL_SCANCODE_ESCAPE)==PortMenuChoice::None);
     assert(start.pointerClick(320.f,298.f)==PortMenuChoice::Exit);
 
-    // Real display modes (including Retina) are supplied by SDL3, not
-    // synthesized from arbitrary heights or the selected aspect.
+    // Preview data includes Retina and synthetic internal-resolution modes.
     PortMenuState video(false);
     video.setDisplaySize(3840,2160);
     video.setAvailableVideoModes({{1920,1080,1.f},{1470,956,2.f}});
-    assert(video.videoDimensions()==std::make_pair(3840,2160));
+    assert(video.videoDimensions()==std::make_pair(320,200));
     while (video.page()!=PortMenuPage::Video) {
         video.key(SDL_SCANCODE_DOWN);video.key(SDL_SCANCODE_DOWN);
         video.key(SDL_SCANCODE_RETURN); // Main -> Options
@@ -102,18 +110,26 @@ int main()
     }
     assert(video.label(0)=="ASPECT RATIO : AUTO (16:9)");
     video.key(SDL_SCANCODE_RIGHT); // manual 4:3
-    assert(video.videoDimensions()==std::make_pair(3840,2160));
+    assert(video.videoDimensions()==std::make_pair(320,200));
     video.key(SDL_SCANCODE_RIGHT); // manual 16:9
-    assert(video.videoDimensions()==std::make_pair(3840,2160));
+    assert(video.videoDimensions()==std::make_pair(320,200));
     video.key(SDL_SCANCODE_RIGHT); // 21:9 fits within desktop
-    assert(video.videoDimensions()==std::make_pair(3840,2160));
+    assert(video.videoDimensions()==std::make_pair(320,200));
     video.setVideoChoices(3,2); // Real Retina mode: 1470x956 at density 2
     assert(video.videoDimensions()==std::make_pair(2940,1912));
-    assert(video.label(1)=="RESOLUTION : 2940 X 1912 RETINA");
+    assert(video.label(1)=="RESOLUTION : 2940 X 1912");
     video.setDisplaySize(3024,1964); // Retina displays may not be 16:9.
     video.setVideoChoices(3,0);
-    assert(video.videoDimensions()==std::make_pair(3024,1964));
+    assert(video.videoDimensions()==std::make_pair(320,200));
     assert(video.label(0)=="ASPECT RATIO : AUTO (CUSTOM)");
+
+    // Native maximum is an internal rendering mode, not exclusive fullscreen.
+    video.setAvailableVideoModes({{640,400,1.f,false},{3840,2160,1.f,true}});
+    video.setVideoChoices(3,2);
+    assert(video.selectedVideoMode() && video.selectedVideoMode()->nativeMax);
+    assert(video.label(1)=="RESOLUTION : 3840 X 2160 (MAX)");
+    video.setVideoChoices(3,0);
+    assert(video.videoDimensions()==std::make_pair(320,200));
 
     PortMenuState unavailable(false);
     unavailable.setAvailableVideoModes({{1920,1080,1.f},{3360,1440,1.f}});
@@ -139,7 +155,7 @@ int main()
     noModes.setDisplaySize(2940,1912);
     noModes.setAvailableVideoModes({});
     noModes.setVideoChoices(3,99);
-    assert(noModes.videoDimensions()==std::make_pair(2940,1912));
+    assert(noModes.videoDimensions()==std::make_pair(320,200));
     assert(noModes.label(0)=="NEW GAME"); // no phantom resolution choices
 
     PortMenuState game(true);

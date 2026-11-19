@@ -18,6 +18,7 @@ int clippedEdge(double value, int limit)
     return int(std::ceil(std::clamp(value - 0.5, 0.0, double(limit))));
 }
 
+template<bool noNaN>
 void drawObject(std::vector<std::uint32_t>& pixels, std::vector<double>& depth,
                 const Instance& object, const Image& image, const Rectangle& rect,
                 const Projection& projection)
@@ -27,6 +28,7 @@ void drawObject(std::vector<std::uint32_t>& pixels, std::vector<double>& depth,
     const int x1 = clippedEdge(rect.left + rect.width, projection.width);
     const int y0 = clippedEdge(rect.top, projection.height);
     const int y1 = clippedEdge(rect.top + rect.height, projection.height);
+    if (x0 >= x1 || y0 >= y1) return;
     // At an oblique wall, a camera-facing impact billboard straddles the
     // wall's Z buffer. Estimate the struck wall surface from its inverse-depth
     // slope at the impact point (inverse depth is linear in screen X).
@@ -52,20 +54,69 @@ void drawObject(std::vector<std::uint32_t>& pixels, std::vector<double>& depth,
             }
         }
     }
+    if (!wallSurface) {
+        // Reuse the exact pixel-center sampling across rows. Magnified texels
+        // form horizontal runs that share one transparency test and color.
+        struct Run { int begin, end, u; };
+        std::vector<Run> runs;
+        const bool flipX = object.type & 0x0200;
+        const bool flipY = object.type & 0x0100;
+        const double objectDepth = rect.depth;
+        const auto* limit = noNaN ? projection.columnDepthLimit : nullptr;
+        runs.reserve(std::min(x1 - x0, texture.width));
+        for (int x = x0; x < x1; ++x) {
+            // Earlier sprites can only decrease depth. A wall-hidden column
+            // therefore rejects this sprite on every row.
+            if (limit && objectDepth >= limit[x]) continue;
+            int u = std::clamp(int((x + 0.5 - rect.left) * texture.width / rect.width),
+                               0, texture.width - 1);
+            if (flipX) u = texture.width - 1 - u;
+            if (!runs.empty() && runs.back().end == x && runs.back().u == u)
+                runs.back().end = x + 1;
+            else
+                runs.push_back({x, x + 1, u});
+        }
+        if (runs.empty()) return;
+        for (int y = y0; y < y1; ++y) {
+            const auto row = std::size_t(y) * projection.width;
+            auto* rowDepth = depth.data() + row;
+            auto* rowPixels = pixels.data() + row;
+            int v = std::clamp(int((y + 0.5 - rect.top) * texture.height / rect.height),
+                               0, texture.height - 1);
+            if (flipY) v = texture.height - 1 - v;
+            const auto textureRow = std::size_t(v) * texture.width;
+            for (const auto& run : runs) {
+                const auto source = textureRow + run.u;
+                if (image.indices[source] == 0) continue;
+                const auto c = texture.pixels[source];
+                const auto color = (std::uint32_t(c.r) << 24) | (std::uint32_t(c.g) << 16) |
+                                   (std::uint32_t(c.b) << 8) | 255;
+                for (int x = run.begin; x < run.end; ++x) {
+                    if (objectDepth >= rowDepth[x]) continue;
+                    rowPixels[x] = color;
+                    if constexpr (noNaN) {
+                        rowDepth[x] = objectDepth;
+                    } else {
+                        // Unordered depth accepts color and retains its original bits.
+                        if (objectDepth < rowDepth[x]) rowDepth[x] = objectDepth;
+                    }
+                }
+            }
+        }
+        return;
+    }
     for (int y = y0; y < y1; ++y) {
         int v = std::clamp(int((y + 0.5 - rect.top) * texture.height / rect.height),
                            0, texture.height - 1);
         if (object.type & 0x0100) v = texture.height - 1 - v;
         for (int x = x0; x < x1; ++x) {
             const auto target = std::size_t(y) * projection.width + x;
-            if (wallSurface) {
-                const double inverse=inverseCenter+(x-centerX)*inverseSlope;
-                if (inverse<=0) continue;
-                const double expected=1.0/inverse;
-                // Reject a foreground object or a different wall plane.
-                if (!std::isfinite(depth[target]) ||
-                    std::abs(depth[target]-expected)>std::max(.5,expected*.015)) continue;
-            } else if (rect.depth >= depth[target]) continue;
+            const double inverse=inverseCenter+(x-centerX)*inverseSlope;
+            if (inverse<=0) continue;
+            const double expected=1.0/inverse;
+            // Reject a foreground object or a different wall plane.
+            if (!std::isfinite(depth[target]) ||
+                std::abs(depth[target]-expected)>std::max(.5,expected*.015)) continue;
             int u = std::clamp(int((x + 0.5 - rect.left) * texture.width / rect.width),
                                0, texture.width - 1);
             if (object.type & 0x0200) u = texture.width - 1 - u;
@@ -101,22 +152,24 @@ std::optional<Rectangle> project(const Instance& object, const Image& image,
 }
 
 void render(std::vector<std::uint32_t>& pixels, std::vector<double>& depth,
-            const Scene& scene, const Camera& camera, const Projection& projection)
+            const Scene& scene, const Camera& camera, const Projection& projection,
+            DepthInput depthInput)
 {
-    render(pixels,depth,scene.bank,scene.objects,camera,projection);
+    render(pixels,depth,scene.bank,scene.objects,camera,projection,depthInput);
 }
 void render(std::vector<std::uint32_t>& pixels, std::vector<double>& depth,
             const Bank& bank, const std::vector<Instance>& objects, const Camera& camera,
-            const Projection& projection)
+            const Projection& projection, DepthInput depthInput)
 {
     if (projection.width <= 0 || projection.height <= 0 ||
         pixels.size() != std::size_t(projection.width) * projection.height ||
         depth.size() != pixels.size()) return;
+    const auto draw = depthInput == DepthInput::NoNaN ? drawObject<true> : drawObject<false>;
     for (const auto& object : objects) {
         if (object.image >= bank.images.size()) continue;
         const auto& image = bank.images[object.image];
         const auto rectangle = project(object, image, camera, projection);
-        if (rectangle) drawObject(pixels, depth, object, image, *rectangle, projection);
+        if (rectangle) draw(pixels, depth, object, image, *rectangle, projection);
     }
 }
 } // namespace sprites

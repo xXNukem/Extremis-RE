@@ -27,3 +27,16 @@ assets/extracted/
 # Python
 __pycache__/
 *.pyc
+
+# Agentes, instrucciones y skills locales
+/AGENTS.md
+/.agents/
+/.codex/
+
+# Copias de seguridad temporales
+*.bak
+
+# Instalador temporal de la introducción
+/README.txt
+/install_intro_font.py
+/payload/

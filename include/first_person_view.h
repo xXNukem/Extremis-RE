@@ -8,11 +8,14 @@
 #include "original_hud.h"
 #include "original_interactions.h"
 #include "original_map.h"
+#include "fisheye_effect.h"
 
 #include <memory>
+#include <utility>
 
 struct SDL_Renderer;
 struct SDL_Texture;
+class StaticRayGrid;
 
 struct WallHit {
     double distance; // Ray parameter; perpendicular depth for camera-plane rays.
@@ -47,6 +50,8 @@ class FirstPersonRenderer {
 public:
     explicit FirstPersonRenderer(SDL_Renderer* renderer);
     ~FirstPersonRenderer();
+    // Call when replacing the active level or its static geometry.
+    void setRaycastLevel(const game_lab::Level& level);
     const std::vector<std::uint32_t>& frame() const { return composed_; }
     bool drawFrame(const std::vector<std::uint32_t>& pixels);
     bool draw(const game_lab::Level& level, const Camera& camera,
@@ -73,6 +78,7 @@ private:
                       const hud::Renderer* hudRenderer = nullptr);
 
     SDL_Renderer* renderer_;
+    std::unique_ptr<StaticRayGrid> rayGrid_;
     std::unique_ptr<SDL_Texture, TextureDeleter> uploadTexture_;
     std::vector<std::uint32_t> pixels_;
     std::vector<std::uint32_t> composed_;
@@ -80,8 +86,13 @@ private:
     // overlaid in the middle; cinematics still use their native 4:3 frame.
     std::vector<std::uint32_t> wideComposed_;
     std::vector<double> depth_;
+    std::vector<double> wallDepthColumns_;
+    // VORTEX_HIDDEN_PLANE_CULLING_V1: nearest opaque wall range in each screen column.
+    std::vector<std::pair<int,int>> coveredWallRows_;
+    FisheyeEffect fisheye_;
     std::vector<std::uint32_t> mapBackground_;
     bool showingMap_ = false, frameReady_ = false;
     int width_ = 0, height_ = 0;
     bool withHud_ = false;
+    bool nativeComposed_ = false; // Native device output vs integer DOS scaling.
 };

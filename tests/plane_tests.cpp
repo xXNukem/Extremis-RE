@@ -165,6 +165,40 @@ void testRasterOrientation(const wall_textures::PlaneBank& bank)
     check(pixels[40 * 101 + 50] == 0x141720ff, "Exact horizon overwrote flat fallback");
 }
 
+// Give every texel a distinct color so an off-by-one UV cannot match by chance.
+void testSampledRows()
+{
+    wall_textures::PlaneBank bank;
+    for (auto* texture : {&bank.floor, &bank.ceiling}) {
+        texture->width = texture->height = 128;
+        for (int i = 0; i < 16384; ++i)
+            texture->pixels.push_back({std::uint8_t(i), std::uint8_t(i >> 8),
+                                       std::uint8_t(texture == &bank.floor)});
+    }
+    for (const Camera camera : {Camera{-400, 400, 0}, Camera{3.125, -3.125, 1.5707963267948966},
+                                Camera{-400.0000000001, -27, -0.37}, Camera{1000100, 17, 0.64}}) {
+        const planes::Projection p{841, 361, 400, 165, 256};
+        std::vector<std::pair<int,int>> mask(p.width);
+        for (int x = 0; x < p.width; ++x) mask[x] = {80 + x % 19, 270 - x % 23};
+        std::vector<std::uint32_t> pixels(p.width * p.height, 0);
+        planes::render(pixels, camera, p, bank, &mask);
+        for (int y = 0; y < p.height; ++y) {
+            const auto row = planes::projectRow(camera, p, y);
+            for (int x = 0; x < p.width; ++x) {
+                std::uint32_t expected = 0;
+                if (row && (y < mask[x].first || y >= mask[x].second)) {
+                    const auto uv = plane_material::coordinates(row->x + x * row->stepX,
+                        row->y + x * row->stepY, 128, 128);
+                    const unsigned index = unsigned(uv.y * 128 + uv.x);
+                    expected = (index << 24) | ((index >> 8) << 16) |
+                               (unsigned(!row->ceiling) << 8) | 255;
+                }
+                check(pixels[y * p.width + x] == expected, "Plane row differs from material sampler");
+            }
+        }
+    }
+}
+
 void testInvalidResources(const std::filesystem::path& root)
 {
     for (const std::size_t size : {0u, 32767u, 32769u}) {
@@ -187,6 +221,7 @@ int main(int argc, char* argv[])
         const std::filesystem::path root = argv[1];
         fixtures(root);
         testProjection();
+        testSampledRows();
         testCoordinates();
         testDecodeAndSwitch(root);
         const auto bank = wall_textures::loadPlanes(root / "DATA", 1, 1);

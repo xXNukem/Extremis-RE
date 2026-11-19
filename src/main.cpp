@@ -7,6 +7,9 @@
 #include "texture_preview.h"
 #include "player_input.h"
 #include "debug_menu.h"
+#ifdef EXTREMIS_DEBUG_MENU
+#include "vortex_debug_profiler.h" // VORTEX_DEBUG_PROFILER_V1
+#endif
 #include "plane_appearance.h"
 #include "sprite_animation.h"
 #include "decorative_animation.h"
@@ -244,6 +247,7 @@ int main(int argc, char* argv[])
     }
     if (credits==StartupCreditsResult::Continue || credits==StartupCreditsResult::SkipAll) {
         FirstPersonRenderer firstPerson(renderer);
+        if (data) firstPerson.setRaycastLevel(data->level);
         game_lab::Level emptyLevel;
         DoorControl doorControl(collisionWorld, levelDoors, data ? data->level : emptyLevel);
         PlayerInput playerInput(window, doorControl);
@@ -267,7 +271,17 @@ int main(int argc, char* argv[])
         bool showPolygons = false;
         bool show3D = camera.has_value();
         Uint64 previousTicks = SDL_GetTicks();
+#ifdef EXTREMIS_DEBUG_MENU
+        // VORTEX_DEBUG_FPS_V1: FPS of actually presented gameplay frames.
+        Uint64 fpsPreviousPresentNs = 0;
+        Uint64 fpsAccumulatedNs = 0;
+        unsigned fpsFrameCount = 0;
+        double gameplayFps = 0.0;
+#endif
         while (running) {
+#ifdef EXTREMIS_DEBUG_MENU
+            vortex_debug_profiler::beginFrame();
+#endif
             bool restartRequested=false;
             auto* activeEnemies=enemySystem?&*enemySystem:nullptr;
             bool debugPaused=false;
@@ -293,6 +307,15 @@ int main(int argc, char* argv[])
                     SDL_ResetKeyboard();
                     SDL_FlushEvents(SDL_EVENT_KEY_DOWN,SDL_EVENT_KEY_UP);
                     previousTicks=SDL_GetTicks(); // Never simulate time spent in the menu.
+#ifdef EXTREMIS_DEBUG_MENU
+                    vortex_debug_profiler::reset();
+#endif
+#ifdef EXTREMIS_DEBUG_MENU
+                    // Menu time must not skew the gameplay FPS average.
+                    fpsPreviousPresentNs = 0;
+                    fpsAccumulatedNs = 0;
+                    fpsFrameCount = 0;
+#endif
                     if (choice==PortMenuChoice::Exit || choice==PortMenuChoice::Error) {
                         if (choice==PortMenuChoice::Error) exitCode=1;
                         running=false;
@@ -538,6 +561,7 @@ int main(int argc, char* argv[])
                         items.clearInput();
                     }
                     data=std::move(next); camera=nextCamera;
+                    firstPerson.setRaycastLevel(data->level);
                     collisionWorld=std::move(nextWorld); levelDoors=std::move(nextDoors);
                     doorControl.resetLevel();
                     spriteScene=std::move(nextSprites); spriteAnimation=sprites::Animation{};
@@ -743,6 +767,36 @@ int main(int argc, char* argv[])
                     ((((c>>16)&255)*(100-amount)/100)<<16)|((((c>>8)&255)*(100-amount)/100)<<8)|255;
                 return firstPerson.drawFrame(faded);
             };
+#ifdef EXTREMIS_DEBUG_MENU
+            // Draw outside the DOS framebuffer; overlay is absent from Release.
+            const auto drawGameplayFps = [&]() -> bool {
+                if (!data || !show3D || !camera || debugMenu.open() || mapSession.state())
+                    return true;
+                int outputWidth=0, outputHeight=0;
+                if (!SDL_GetRenderOutputSize(renderer,&outputWidth,&outputHeight)) return false;
+                float previousScaleX=1.f, previousScaleY=1.f;
+                if (!SDL_GetRenderScale(renderer,&previousScaleX,&previousScaleY)) return false;
+                const float scale=outputHeight>=1800?3.f:outputHeight>=900?2.f:1.f;
+                const SDL_FRect plate{8.f,8.f,200.f,171.f};
+                const auto& perf=vortex_debug_profiler::displayed;
+                const bool drawn=SDL_SetRenderScale(renderer,scale,scale) &&
+                    SDL_SetRenderDrawColor(renderer,0,0,0,255) &&
+                    SDL_RenderFillRect(renderer,&plate) &&
+                    SDL_SetRenderDrawColor(renderer,255,230,70,255) &&
+                    SDL_RenderDebugTextFormat(renderer,14.f,16.f,"FPS: %.1f",gameplayFps) &&
+                    SDL_RenderDebugTextFormat(renderer,14.f,32.f,"FRAME: %.1f ms",perf.totalMs) &&
+                    SDL_RenderDebugTextFormat(renderer,14.f,48.f,"RAY: %.1f ms",perf.ms[vortex_debug_profiler::Rays]) &&
+                    SDL_RenderDebugTextFormat(renderer,14.f,64.f,"WALL: %.1f ms",perf.ms[vortex_debug_profiler::Walls]) &&
+                    SDL_RenderDebugTextFormat(renderer,14.f,80.f,"PLANES: %.1f ms",perf.ms[vortex_debug_profiler::Planes]) &&
+                    SDL_RenderDebugTextFormat(renderer,14.f,96.f,"SPRITES: %.1f ms",perf.ms[vortex_debug_profiler::Sprites]) &&
+                    SDL_RenderDebugTextFormat(renderer,14.f,112.f,"HUD: %.1f ms",perf.ms[vortex_debug_profiler::Hud]) &&
+                    SDL_RenderDebugTextFormat(renderer,14.f,128.f,"COMP/SDL: %.1f ms",perf.ms[vortex_debug_profiler::Composition]) &&
+                    SDL_RenderDebugTextFormat(renderer,14.f,144.f,"PRESENT: %.1f ms",perf.ms[vortex_debug_profiler::Present]) &&
+                    SDL_RenderDebugTextFormat(renderer,14.f,160.f,"OTHER: %.1f ms",perf.otherMs);
+                const bool restored=SDL_SetRenderScale(renderer,previousScaleX,previousScaleY);
+                return drawn && restored;
+            };
+#endif
             if (!SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) ||
                 !SDL_RenderClear(renderer) ||
                 (data && !(show3D && camera
@@ -759,14 +813,44 @@ int main(int argc, char* argv[])
                 !shuttleDoorFade() ||
 #ifdef EXTREMIS_DEBUG_MENU
                 !debugMenu.draw(renderer,data?data->level.zoneIndex:0) ||
+                !drawGameplayFps() ||
 #endif
+#ifdef EXTREMIS_DEBUG_MENU
+                !vortex_debug_profiler::timedPresent(renderer)) {
+#else
                 !SDL_RenderPresent(renderer)) {
+#endif
                 SDL_Log("Rendering failed: %s", SDL_GetError());
                 exitCode = 1;
                 break;
             }
 
-            SDL_Delay(16);
+#ifdef EXTREMIS_DEBUG_MENU
+            // Sample after SDL_RenderPresent, so its cost is reflected in FPS.
+            if (data && show3D && camera && !debugMenu.open() && !mapSession.state()) {
+                const Uint64 now = SDL_GetTicksNS();
+                if (fpsPreviousPresentNs && now > fpsPreviousPresentNs) {
+                    fpsAccumulatedNs += now - fpsPreviousPresentNs;
+                    ++fpsFrameCount;
+                    if (fpsAccumulatedNs >= 500000000ULL) {
+                        gameplayFps = double(fpsFrameCount) * 1000000000.0 /
+                                      double(fpsAccumulatedNs);
+                        fpsAccumulatedNs = 0;
+                        fpsFrameCount = 0;
+                    }
+                }
+                fpsPreviousPresentNs = now;
+            } else {
+                fpsPreviousPresentNs = 0;
+                fpsAccumulatedNs = 0;
+                fpsFrameCount = 0;
+            }
+            if (data && show3D && camera && !debugMenu.open() && !mapSession.state())
+                vortex_debug_profiler::endFrame();
+            else
+                vortex_debug_profiler::reset();
+#endif
+            // No fixed SDL_Delay: SDL/presentation controls any necessary pacing.
         }
     }
 

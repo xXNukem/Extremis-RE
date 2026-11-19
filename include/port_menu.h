@@ -12,14 +12,23 @@ struct SDL_Renderer;
 enum class PortMenuChoice { None, Resume, NewGame, Exit, Error };
 enum class PortMenuPage { Main, Options, Video, Audio, Controls, Language };
 
-// VIDEO applies output display settings during this process; other sections
-// remain previews. The DOS framebuffer/HUD is preserved at original aspect.
-// SDL3 display mode dimensions are logical. Density supplies physical pixels.
-struct PortVideoMode { int width=0, height=0; float density=1.f; };
+// VIDEO chooses internal software 3D resolution on the active display.
+// SDL display modes contribute the physical MAX; the DOS HUD remains unchanged.
+struct PortVideoMode { int width=0, height=0; float density=1.f; bool nativeMax=false; bool dosPreset=false; };
 
 // Runtime selection, shared with the renderer. The default is AUTO (3).
 // We only keep this UI choice here; SDL display modes remain independent.
 inline unsigned portVideoAspectChoice = 3;
+// VORTEX_VIDEO_RESOLUTION_V2: requested physical mode, 0 = current desktop.
+inline int portVideoRequestedPixelWidth = 0;
+inline int portVideoRequestedPixelHeight = 0;
+// VORTEX_VIDEO_RESOLUTION_V3: independent quality settings for CPU 3D.
+inline int portVideoRenderScale = 1;  // 1 = unscaled original DOS
+inline bool portVideoNativeMax = false;
+inline int portVideoNativeWidth = 0;
+inline int portVideoNativeHeight = 0;
+// OFF by default. It affects only the 3D world, never the DOS HUD.
+inline bool portVideoFisheyeEnabled = false;
 
 
 class PortMenuState {
@@ -43,6 +52,8 @@ public:
     bool videoModeAvailable() const { return videoModeAvailable_; }
     unsigned aspectChoice() const { return aspect_; }
     unsigned resolutionChoice() const { return resolution_; }
+    bool fisheyeEnabled() const { return fisheye_; }
+    void setFisheyeEnabled(bool enabled) { fisheye_ = enabled; }
     std::pair<int,int> videoDimensions() const;
 private:
     bool inGame_;
@@ -54,6 +65,7 @@ private:
     int appliedWidth_ = 0, appliedHeight_ = 0;
     bool videoModeAvailable_ = true;
     bool planes_ = true, coloredLights_ = false, modernControls_ = true;
+    bool fisheye_ = false;
     static int hitTest(float x, float y, unsigned count, bool submenu);
     PortMenuChoice activate();
     void back();

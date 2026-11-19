@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -104,6 +105,34 @@ void wallImpactDepth()
     check(pixels[50*w+70]==0x112233ff && pixels[50*w+73]==0x112233ff &&
           pixels[50*w+60]==0xff0000ff,
           "Wall impact ignored nearer geometry or did not render elsewhere");
+}
+
+void wallColumnOcclusion()
+{
+    constexpr int width = 8, height = 4;
+    // A single magnified texel spans several disjoint visible column ranges.
+    const std::array<double, width> wallDepth{{200, 99, 200, 100, 200, 200, 99, 200}};
+    std::vector<double> depth(width * height);
+    for (int y = 0; y < height; ++y)
+        std::copy(wallDepth.begin(), wallDepth.end(), depth.begin() + y * width);
+    depth[2 * width + 4] = 50; // A nearer sprite has already written here.
+    std::vector<std::uint32_t> pixels(depth.size(), 0x112233ff);
+    auto expectedDepth = depth;
+    auto expectedPixels = pixels;
+    sprites::Scene scene;
+    scene.bank.images.push_back({{1, 1, {{255, 0, 0}}}, 0, 0, {2}});
+    scene.objects.push_back({100, 50, 153, 100, 0, 0, 0});
+
+    sprites::render(expectedPixels, expectedDepth, scene, {}, {width, height, 8, 128},
+                    sprites::DepthInput::NoNaN);
+    sprites::render(pixels, depth, scene, {}, {width, height, 8, 128, wallDepth.data()},
+                    sprites::DepthInput::NoNaN);
+    check(pixels == expectedPixels &&
+          std::memcmp(depth.data(), expectedDepth.data(), depth.size() * sizeof(double)) == 0,
+          "Wall column rejection changed color or depth");
+    check(pixels[2 * width + 2] == 0xff0000ff && pixels[2 * width + 4] == 0x112233ff &&
+          pixels[2 * width + 5] == 0xff0000ff,
+          "Wall column fixture did not exercise separated spans and nearer sprite depth");
 }
 
 void placement()
@@ -717,7 +746,8 @@ int main(int argc, char* argv[])
             std::cout << "OBJET falling selection, displacement and wrap passed.\n";
             return 0;
         }
-        decoding(); placement(); projection(); spriteDepth(); wallImpactDepth(); sceneOcclusion(); fallingDrops();
+        decoding(); placement(); projection(); spriteDepth(); wallImpactDepth(); wallColumnOcclusion();
+        sceneOcclusion(); fallingDrops();
         fallingDropSelection();
         decorativeFrames();
         objet3Frames();
