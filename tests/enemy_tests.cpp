@@ -1,10 +1,11 @@
-#include "enemy_system.h"
-#include "enemy_profiles.h"
-#include "sprite_renderer.h"
-#include "weapon_fire.h"
-#include "enemy_navigation.h"
-#include "objet_collision.h"
+#include "extremis/gameplay/enemies/enemy_system.h"
+#include "extremis/gameplay/enemies/enemy_profiles.h"
+#include "vortex/render/first_person/sprites/sprite_renderer.h"
+#include "extremis/gameplay/player/weapon_fire.h"
+#include "extremis/gameplay/enemies/enemy_navigation.h"
+#include "extremis/world/objet_collision.h"
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <iostream>
 #include <cmath>
@@ -45,16 +46,16 @@ void placement(const std::filesystem::path& directory)
     const auto& object=system.scene().objects.at(0);
     check(object.x==1300 && object.y==2100 && object.height==270 && object.z==0,
           "Enemy coordinate/height conversion failed");
-    check(object.image==0 && object.type==0,"Incorrect initial frame/flags");
+    check(object.image==0 && !object.flipX && !object.flipY,"Incorrect initial frame/flags");
     const Camera camera{1000,2100,0};
-    const auto rect=sprites::project(object,system.scene().bank.images[0],camera,{320,150,200,128});
+    const auto rect=vortex::sprites::project(object,system.scene().bank.images[0],camera.renderPose(),{320,150,200,128});
     check(rect && std::abs(rect->height-180)<1e-9,"Enemy scale incorrect");
     std::vector<std::uint32_t> pixels(320*150,0);
     std::vector<double> depth(pixels.size(),100); // A closed surface in front of enemy.
-    sprites::render(pixels,depth,system.scene(),camera,{320,150,200,128});
+    vortex::sprites::render(pixels,depth,system.scene().bank,system.scene().objects,camera.renderPose(),{320,150,200,128});
     for (auto pixel:pixels) check(pixel==0,"Enemy drawn through wall/door depth");
     level.enemies[0].sprite=0xa000;
-    system.load(level,directory); check(system.scene().objects[0].type==0x0200,"Mirror flag lost");
+    system.load(level,directory); check(system.scene().objects[0].flipX && !system.scene().objects[0].flipY,"Mirror flag lost");
     level.enemies[0].health=0xffff;
     system.load(level,directory); check(system.scene().objects.empty(),"Removed enemy reappeared");
     level.enemies[0].health=4;
@@ -122,7 +123,8 @@ void objetCollisions(const std::filesystem::path& directory)
         // Current image, not the initial entity image or rendered dimensions.
         level.sectors[0].entitiesA[0].type=0x5007;
         sprites::Scene scene; scene.objetBank=1;
-        scene.objects.push_back({500,500,256,1,21,0x5007,0,0,0});
+        scene.objects.push_back({500,500,256,1,21});
+        scene.placements.push_back({0,0,0x5007,0});
         level.enemies[0].x=340;
         enemies::System system; system.load(level,directory);
         player::Vitals vitals; const Camera camera{900,500,0};
@@ -149,6 +151,86 @@ void objetCollisions(const std::filesystem::path& directory)
         system.update(level,camera,{},vitals,1./18,true);
         check(system.records()[0].x==580 && system.records()[0].angle==640,
               "MONS5 hurt/death recoil bypassed OBJET or used travel direction for angle");
+    }
+}
+void objetSectorTransition(const std::filesystem::path& directory)
+{
+    for (unsigned bank : {1u,5u}) {
+        fixture(directory,bank);
+        auto level=arena();
+        level.monsBank=bank; level.objetBank=1;
+        level.sectors.push_back(level.sectors[0]);
+        level.sectors[0].routes={{1,1000,500}};
+        auto& target=level.sectors[1];
+        target.gx=1000;
+        target.vertices.push_back({100,500});
+        target.entitiesA={{4,0x5004,0,0}};
+        auto& record=level.enemies[0];
+        record.x=990; record.angle=0;
+        for (bool doorOpen : {false,true}) for (bool solid : {false,true}) {
+            target.entitiesA[0].type=solid?0x5004:0x4004;
+            collision::World walls;
+            if (!doorOpen) walls.push_back({{1000,400},{1000,600}});
+            enemies::System system;
+            system.load(level,directory);
+            player::Vitals vitals;
+            const Camera player{1500,500,0};
+            system.update(level,player,walls,vitals,0,true);
+            system.update(level,player,walls,vitals,1./18,true);
+            const auto& enemy=system.records()[0];
+            const unsigned expectedX=!doorOpen?990:solid?180:bank==5?40:20;
+            check(enemy.sector==unsigned(doorOpen) && enemy.x==expectedX &&
+                  enemy.y==500 && enemy.angle==(doorOpen && solid?640:0),
+                  "Cross-sector enemy OBJET used rebased previous coordinates");
+        }
+    }
+}
+void doorClearance(const std::filesystem::path& directory)
+{
+    for (unsigned bank:{1u,5u}) {
+        fixture(directory,bank);
+        auto level=arena();
+        level.monsBank=bank;
+        level.sectors.push_back(level.sectors[0]);
+        level.sectors[1].gx=1000;
+        for (unsigned side:{0u,1u}) {
+            auto& sector=level.sectors[side];
+            const std::uint16_t x=side?0:1000;
+            sector.vertices.push_back({x,std::uint16_t(side?400:600)});
+            sector.vertices.push_back({x,std::uint16_t(side?600:400)});
+            sector.walls={{4,5,0x1017,0}};
+            const auto neighbor=std::uint16_t(1-side);
+            sector.neighbors={neighbor};
+            sector.routes={{neighbor,1000,500}};
+        }
+        level.connectionStates={0};
+        const auto dynamic=doors::closedDoors(level);
+        check(dynamic.size()==1,"Enemy door fixture is unpaired");
+        for (unsigned side:{0u,1u}) for (unsigned state:{0u,59u,0x13du}) {
+            level.connectionStates[0]=state;
+            auto& initial=level.enemies[0];
+            initial.sector=side;
+            initial.x=side?210:790;
+            initial.angle=side?360:0;
+            initial.health=20;
+            const bool open=doors::dos::passageBranchEnabled(state);
+            collision::World walls;
+            if (!open) walls.push_back({{1000,400},{1000,600}});
+            enemies::System system;
+            system.load(level,directory);
+            player::Vitals vitals;
+            const Camera player{side?400.:1600.,500,0};
+            system.update(level,player,walls,vitals,0,true,{},{},dynamic);
+            for (unsigned frame=0;frame<18;++frame)
+                system.update(level,player,walls,vitals,1./18,true,{},{},dynamic);
+            const auto& actor=system.records()[0];
+            const auto& sprite=system.scene().objects[0];
+            check(actor.sector==(open?1-side:side) &&
+                  sprite.x==actor.x+level.sectors[actor.sector].gx && sprite.y==actor.y,
+                  "Enemy sprite center diverged from the actor or crossed a blocked door");
+            const double distance=std::abs(sprite.x-1000);
+            check(open || distance==(state?180:182),"Enemy used circle radius instead of DOS door clearance");
+        }
     }
 }
 void sectorVisibility(const std::filesystem::path& directory)
@@ -297,6 +379,29 @@ void allBanks(const std::filesystem::path& directory, bool synthetic)
               "MONS6 hurt sequence differs");
     }
 }
+void skippedRecordMapping(const std::filesystem::path& directory)
+{
+    fixture(directory);
+    auto level = arena();
+    level.enemies.push_back(level.enemies.front());
+    level.enemies.front().health = 0xffff;
+    level.enemies.front().sector = 1;
+    level.sectors.push_back(level.sectors.front());
+    level.sectors.back().gx = 2000;
+
+    enemies::System system;
+    system.load(level, directory);
+    check(system.scene().objects.size() == 1, "Removed record retained a render instance");
+    const Camera camera{300, 500, 0};
+    const auto hit = system.trace(camera, {300, 500}, {1, 0}, 1000);
+    check(hit && hit->enemy == 1 && hit->distance == 200,
+          "Trace returned a render index instead of the live record");
+    Camera attempted{450, 500, 0};
+    system.constrainPlayer(level, camera, attempted, collision::staticWorld(level));
+    check(attempted.x < 400 && attempted.x > 399.99,
+          "Constrain player used the skipped enemy's sector");
+}
+
 void combat(const std::filesystem::path& directory, unsigned bank=1)
 {
     fixture(directory,bank);
@@ -352,18 +457,61 @@ void combat(const std::filesystem::path& directory, unsigned bank=1)
     check(system.records()[0].x>=430 && vitals.health()==1000,"Closed surface failed to block movement/attacks");
     player::WeaponFire fire; player::Inventory inventory;
     fire.update(camera,blocked,inventory,{true,true},true,0,&system);
-    for(unsigned i=0;i<10;++i) fire.update(camera,blocked,inventory,{},true,0,&system);
+    for(unsigned i=0;i<10;++i) fire.update(camera,blocked,inventory,{},true,1./60,&system);
     check(system.records()[0].health==4 && inventory.ammunition()==499,"Shot crossed wall or charged twice");
     system.load(level,directory);
     player::WeaponFire clearFire; player::Inventory clearInventory;
     clearFire.update(camera,walls,clearInventory,{true,true},true,0,&system);
-    for(unsigned i=0;i<10;++i) clearFire.update(camera,walls,clearInventory,{},true,0,&system);
+    for(unsigned i=0;i<10;++i) clearFire.update(camera,walls,clearInventory,{},true,1./60,&system);
     check(system.records()[0].health==3 && clearInventory.ammunition()==499,"Projectile did not apply one valid hit");
+    // The shot reaches the target's billboard plane after two flight steps.
+    // Render the original phase sequence against an opaque target at that depth.
+    system.load(level,directory);
+    player::WeaponFire visualFire;
+    player::Inventory visualAmmo;
+    sprites::Bank impactBank;
+    for (unsigned frame=0;frame<4;++frame)
+        impactBank.images.push_back({{2,2,std::vector<wall_textures::Rgb>(4,{255,0,0})},1,1,{1,1,1,0}});
+    const std::array<unsigned,7> expectedImages{0,0,1,2,1,2,3};
+    for (unsigned frame=0;frame<=expectedImages.size();++frame) {
+        visualFire.update(camera,walls,visualAmmo,{frame==0,frame==0},true,1./60,&system);
+        const auto& objects=visualFire.scene().objects;
+        if (frame==expectedImages.size()) {
+            check(objects.empty(),"Completed impact left a visible sprite");
+            break;
+        }
+        check(objects.size()==1 && objects.front().image==expectedImages[frame],
+              "Flight or impact stage disappeared before rendering");
+        check(objects.front().x==(frame<2?380+80*frame:500),"Shot or impact moved along a different trajectory");
+        for (int width : {320,640,840}) {
+            const int height=width==320?150:300;
+            const double targetDepth=system.scene().objects.front().x-camera.x;
+            std::vector<double> wallDepth(width,1000);
+            wallDepth[width/2-2]=targetDepth;
+            std::vector<double> depth(width*height,targetDepth);
+            std::vector<std::uint32_t> pixels(width*height,0);
+            const auto nearerPixel=std::size_t(height/2-1)*width+width/2-1;
+            depth[nearerPixel]=targetDepth-10;
+            vortex::sprites::render(pixels,depth,impactBank,objects,camera.renderPose(),
+                {width,height,height*1.5,camera.viewHeight(),wallDepth.data()},
+                vortex::sprites::DepthInput::NoNaN);
+            check(std::count(pixels.begin(),pixels.end(),0xff0000ff)>0,
+                  "Projectile or impact disappeared at the target depth");
+            if (frame>=2) {
+                check(!pixels[nearerPixel],"Impact drew over a closer object");
+                check(!pixels[nearerPixel-1],"Impact drew over a wall at equal depth");
+                check(pixels[nearerPixel-2] && depth[nearerPixel-2]==targetDepth,
+                      "Impact changed the depth of the sprite it overlays");
+            }
+        }
+    }
+    check(system.records()[0].health==3 && visualAmmo.ammunition()==499,
+          "Visual sequence altered damage or ammunition");
     auto outside=level; outside.enemies[0].x=420;
     system.load(outside,directory);
     player::WeaponFire culled; player::Inventory culledAmmo;
     culled.update({300,500,0},walls,culledAmmo,{true,true},true,0,&system);
-    culled.update({300,500,1.0471975511965976},walls,culledAmmo,{},true,0,&system);
+    culled.update({300,500,1.0471975511965976},walls,culledAmmo,{},true,1./60,&system);
     check(system.records()[0].health==4,"An out-of-view projectile applied damage after native culling");
     // Bits set in SPT explicitly reject impact.
     write(directory/("MONS"+std::to_string(bank)+".SPT"),std::vector<unsigned char>((bank==3?16:20)*8,255));
@@ -842,11 +990,11 @@ int main(int argc,char** argv)
     try {
         if (argc<2) return 1;
         if (argc==3 && std::string(argv[2])=="--objets") {
-            objetCollisions(argv[1]);
+            objetCollisions(argv[1]); objetSectorTransition(argv[1]);
             std::cout << "Enemy OBJET collision tests passed\n";
             return 0;
         }
-        sectorVisibility(argv[1]); placement(argv[1]); otherBanks(argv[1]); allBanks(argv[1],true); combat(argv[1]); combat(argv[1],3); mons3(argv[1]); deathEffects(); navigation(); sharedMovement(argv[1]); mons5(argv[1]); objetCollisions(argv[1]);
+        sectorVisibility(argv[1]); placement(argv[1]); skippedRecordMapping(argv[1]); otherBanks(argv[1]); allBanks(argv[1],true); combat(argv[1]); combat(argv[1],3); mons3(argv[1]); deathEffects(); navigation(); sharedMovement(argv[1]); mons5(argv[1]); objetCollisions(argv[1]); objetSectorTransition(argv[1]); doorClearance(argv[1]);
         if (argc>2) { originalMons5(argv[2]); original(argv[2]); allBanks(std::filesystem::path(argv[2]).parent_path()/"DATA",false); }
         std::cout<<"Enemy placement/resource tests passed\n";
         return 0;

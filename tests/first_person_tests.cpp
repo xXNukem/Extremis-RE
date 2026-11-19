@@ -1,5 +1,6 @@
-#include "first_person_view.h"
-#include "wall_material.h"
+#include "extremis/render/first_person/camera/camera_start.h"
+#include "extremis/render/first_person/presentation/first_person_view.h"
+#include "extremis/render/first_person/materials/wall_material.h"
 
 #include <SDL3/SDL.h>
 #include <cmath>

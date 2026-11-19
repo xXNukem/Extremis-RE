@@ -1,13 +1,27 @@
-// Access the production prepared caster and selector without exporting test APIs.
-#include "../src/first_person_view.cpp"
+#include "extremis/render/first_person/camera/camera_start.h"
+#include "extremis/render/first_person/presentation/first_person_view.h"
+#include "ray_scene.h"
 
+#include <SDL3/SDL.h>
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 namespace {
+using extremis::render_detail::CameraProjection;
+using extremis::render_detail::Point;
+using extremis::render_detail::StaticRayGrid;
+using extremis::render_detail::columnRay;
+using extremis::render_detail::fov;
+using extremis::render_detail::pi;
+using extremis::render_detail::prepareRayScene;
+using vortex::PreparedRayScene;
+using vortex::castPreparedSceneRay;
 using Clock = std::chrono::steady_clock;
 volatile double consumed = 0;
 
@@ -44,6 +58,32 @@ void checkRay(StaticRayGrid& grid, const PreparedRayScene& scene, const Camera& 
 
 void checkEdges()
 {
+    const Point origin{0,0};
+    const Point nearStart{512,-512}, nearEnd{512,512};
+    const auto nan = std::numeric_limits<double>::quiet_NaN();
+    const auto infinity = std::numeric_limits<double>::infinity();
+    const std::array<std::pair<Point,Point>,4> unsupported{{
+        {{1e100,-1},{1e100,1}}, {{nan,-1},{2048,1}}, {{2048,-1},{infinity,1}},
+        {{2048,-70000},{2048,70000}}
+    }};
+    for (const auto& segment : unsupported) {
+        const auto& start = segment.first;
+        const auto& end = segment.second;
+        vortex::StaticRayGrid unsupportedGrid([&](auto visit) {
+            visit(nearStart,nearEnd);
+            visit(start,end);
+        },true);
+        require(!unsupportedGrid.valid(),"Unsupported static geometry must disable indexing");
+        vortex::PreparedRayScene prepared;
+        prepared.walls.push_back(vortex::prepareRaySurface(nearStart,nearEnd,origin,1,1.0));
+        prepared.walls.push_back(vortex::prepareRaySurface(start,end,origin,2,1.0));
+        std::size_t tested = 0;
+        const auto fallback = unsupportedGrid.cast(prepared,origin,{1,0},
+            unsupportedGrid.backtrack(origin),nullptr,&tested);
+        require(tested == 2 && sameHit(fallback,castPreparedSceneRay(prepared,{1,0})),
+                "Unsupported static geometry must retain the prepared scan");
+    }
+
     game_lab::Level level;
     auto& sector = level.sectors.emplace_back();
     sector.vertices = {{512, 512}, {768, 768}, {512, 1024}, {1024, 512},
@@ -154,7 +194,7 @@ void checkFramebuffer()
     const wall_textures::PlaneBank planes{floor, floor};
     sprites::Scene sprites;
     sprites.bank.images.push_back({wall, 1, 1, {1, 1, 1, 1}});
-    sprites.objects.push_back({700, 580, 128, 90, 0, 0x4000, 0});
+    sprites.objects.push_back({700, 580, 128, 90, 0});
     for (const auto size : {SDL_Point{320, 240}, SDL_Point{853, 480}}) {
         std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> surface(
             SDL_CreateSurface(size.x, size.y, SDL_PIXELFORMAT_RGBA32), SDL_DestroySurface);
@@ -162,7 +202,8 @@ void checkFramebuffer()
         std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)> renderer(
             SDL_CreateSoftwareRenderer(surface.get()), SDL_DestroyRenderer);
         require(bool(renderer), SDL_GetError());
-        FirstPersonRenderer scan(renderer.get()), dda(renderer.get());
+        VideoRenderSettings video;
+        FirstPersonRenderer scan(renderer.get(), &video), dda(renderer.get(), &video);
         // Replace geometry in place between frames with the same level address
         // and wall count. The new wall must be found through the new cells.
         for (const auto y : {0, 1536, 0}) {
@@ -171,7 +212,7 @@ void checkFramebuffer()
             const Camera camera{100, double(y + 540), 0};
             dda.setRaycastLevel(level);
             for (const bool fisheye : {false, true}) {
-                portVideoFisheyeEnabled = fisheye;
+                video.preferences.fisheyeEnabled = fisheye;
                 const auto draw = [&](FirstPersonRenderer& view) {
                     require(view.draw(level, camera, &wall, nullptr, &doors, &planes, &sprites) &&
                             SDL_RenderPresent(renderer.get()), SDL_GetError());
@@ -185,7 +226,6 @@ void checkFramebuffer()
             }
         }
     }
-    portVideoFisheyeEnabled = false;
 }
 
 std::vector<Camera> viewpoints(const game_lab::Level& level)
@@ -244,11 +284,12 @@ double frameTime(StaticRayGrid& grid, const game_lab::Level& level, const Camera
 {
     const auto start = Clock::now();
     const auto scene = prepareRayScene(level, camera, &doors);
-    const double backtrack = indexed ? grid.backtrack(camera) : 0;
+    const Point origin{camera.x,camera.y};
+    const double backtrack = indexed ? grid.index.backtrack(origin) : 0;
     for (int x = 0; x < view.width; ++x) {
         const auto direction = columnRay(view, x);
         if constexpr (indexed)
-            hits[x] = grid.cast(scene, camera, direction, backtrack);
+            hits[x] = grid.index.cast(scene, origin, direction, backtrack);
         else
             hits[x] = castPreparedSceneRay(scene, direction);
     }
@@ -307,7 +348,7 @@ void benchmark(game_lab::Level& level, unsigned levelNumber)
             }
             if (frame >= 0) { scan.push_back(before); dda.push_back(after); }
         }
-        const auto doorTests = scene.doors.size() * width;
+        const auto doorTests = scene.dynamicSurfaces.size() * width;
         std::cout << levelNumber << ',' << phase << ',' << width << ',' << median(construction)
                   << ',' << grid.bytes() << ',' << double(cells) / width << ','
                   << double(candidates) / width << ',' << scene.walls.size() * width + doorTests

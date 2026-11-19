@@ -1,0 +1,16 @@
+add_executable(vortex_cpu_scene cpu_scene.cpp)
+target_link_libraries(vortex_cpu_scene PRIVATE Vortex::CPU)
+set_target_properties(vortex_cpu_scene PROPERTIES CXX_EXTENSIONS NO)
+add_test(NAME vortex_cpu_scene COMMAND vortex_cpu_scene)
+
+add_executable(vortex_audio_consumer audio_consumer.cpp)
+target_link_libraries(vortex_audio_consumer PRIVATE Vortex::Audio)
+set_target_properties(vortex_audio_consumer PROPERTIES CXX_EXTENSIONS NO)
+add_test(NAME vortex_audio_consumer COMMAND vortex_audio_consumer)
+
+if(TARGET Vortex::AudioSDL)
+    add_executable(vortex_audio_sdl_tests audio_sdl.cpp)
+    target_link_libraries(vortex_audio_sdl_tests PRIVATE Vortex::AudioSDL)
+    set_target_properties(vortex_audio_sdl_tests PROPERTIES CXX_EXTENSIONS NO)
+    add_test(NAME vortex_audio_sdl COMMAND vortex_audio_sdl_tests)
+endif()

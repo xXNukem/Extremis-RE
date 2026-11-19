@@ -8,7 +8,7 @@ The original world is arranged in sectors. The player has local coordinates with
 
 The verified new-game start is **level 1, sector 0, local `(300, 320)`, angle `180/720`**. With the sector's `(3200, 0)` origin, that gives `(3500, 320)` in world coordinates.
 
-The core movement logic is in [`player_control.cpp`](../../src/player_control.cpp); SDL keyboard and mouse capture belong in [`player_input.cpp`](../../src/player_input.cpp). Keeping them separate makes movement testable without starting a window.
+The core movement logic is in [`player_control.cpp`](../../src/extremis/gameplay/player/player_control.cpp); SDL keyboard and mouse capture belong in [`player_input.cpp`](../../src/platform/sdl/input/player_input.cpp). Keeping them separate makes movement testable without starting a window.
 
 ## Controls in the port
 
@@ -71,7 +71,7 @@ The original starting values are simple enough:
 | Oxygen | **288,000** | Consumed over time; a reserve **exchanges** values rather than simply adding them |
 | PIT clock | **~160 ticks/s** | Nominal timer rate, derived from divisor 7457 |
 
-In the port, [`player_vitals.cpp`](../../src/player_vitals.cpp) tracks this state separately from the HUD. Nominal oxygen consumption uses the 160 Hz clock, doubles for increased-use conditions, and pauses when gameplay simulation is inactive. Health and oxygen deaths are distinct causes. The UI merely displays what the simulation owns.
+In the port, [`player_vitals.cpp`](../../src/extremis/gameplay/player/player_vitals.cpp) tracks this state separately from the HUD. Nominal oxygen consumption uses the 160 Hz clock, doubles for increased-use conditions, and pauses when gameplay simulation is inactive. Health and oxygen deaths are distinct causes. The UI merely displays what the simulation owns.
 
 A diagnostic F5/F7 path exists for tests in Debug builds. It is **not** a player feature in Release. The current Release test fixture that assumes those diagnostic controls are available is documented as a test-configuration issue.
 

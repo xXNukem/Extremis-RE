@@ -1,6 +1,6 @@
-#include "self_destruction.h"
-#include "door_control.h"
-#include "game_messages.h"
+#include "extremis/gameplay/player/self_destruction.h"
+#include "extremis/world/door_control.h"
+#include "extremis/ui/game_messages.h"
 #include <iostream>
 #include <stdexcept>
 using namespace std::chrono_literals;

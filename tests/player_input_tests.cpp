@@ -1,8 +1,8 @@
-#include "player_input.h"
-#include "item_session.h"
-#include "survival_session.h"
-#include "game_audio.h"
-#include "map_session.h"
+#include "platform/sdl/input/player_input.h"
+#include "app/session/item_session.h"
+#include "extremis/gameplay/player/survival_session.h"
+#include "extremis/audio/game_audio.h"
+#include "app/session/map_session.h"
 
 #include <SDL3/SDL.h>
 #include <iostream>

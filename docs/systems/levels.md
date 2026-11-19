@@ -32,7 +32,7 @@ Each level begins with the IDs of four resource banks:
 | `+0x0E` | Offset | Access-code data |
 | `+0x12` | Word | Sector count, followed by the sector directory |
 
-These aren't separate files per level. They're **sections inside the same level record**, reached through offsets relative to its beginning. The parser validates those offsets before reading them. For the exact implementation, see [`src/game_lab.cpp`](../../src/game_lab.cpp) and [`include/game_lab.h`](../../include/game_lab.h).
+These aren't separate files per level. They're **sections inside the same level record**, reached through offsets relative to its beginning. The parser validates those offsets before reading them. For the exact implementation, see [`src/extremis/resources/game_lab.cpp`](../../src/extremis/resources/game_lab.cpp) and [`include/extremis/resources/game_lab.h`](../../include/extremis/resources/game_lab.h).
 
 ## Sectors: a room is more than four walls
 
@@ -124,7 +124,7 @@ The rule is simple: identify a strange byte sequence, check how DOS uses it, *th
 
 ## Where the reconstruction lives
 
-[`game_lab.cpp`](../../src/game_lab.cpp) handles strict data reading; [`door.cpp`](../../src/door.cpp) and [`enemy_navigation.cpp`](../../src/enemy_navigation.cpp) interpret some of those relationships; [`sprite_scene.cpp`](../../src/sprite_scene.cpp) builds decoration from level entities. The game still reads original assets at runtime — the repository doesn't ship them.
+[`game_lab.cpp`](../../src/extremis/resources/game_lab.cpp) handles strict data reading; [`door.cpp`](../../src/extremis/world/door.cpp) and [`enemy_navigation.cpp`](../../src/extremis/gameplay/enemies/enemy_navigation.cpp) interpret some of those relationships; [`sprite_scene.cpp`](../../src/extremis/render/first_person/sprites/sprite_scene.cpp) builds decoration from level entities. The game still reads original assets at runtime — the repository doesn't ship them.
 
 **Original evidence:** sector and bank loading near EXE `0x11335`; sector traversal `0x114ba–0x1185c`; original player new-game template at file `0x1d8a0`. The most useful cross-reference is the parsed type definitions in `game_lab.h`.
 

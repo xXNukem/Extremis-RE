@@ -1,5 +1,5 @@
-#include "footstep_cadence.h"
-#include "player_control.h"
+#include "extremis/audio/footstep_cadence.h"
+#include "extremis/gameplay/player/player_control.h"
 
 #include <cmath>
 #include <iostream>

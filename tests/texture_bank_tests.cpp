@@ -1,5 +1,5 @@
-#include "texture_bank.h"
-#include "texture_preview.h"
+#include "extremis/resources/texture_bank.h"
+#include "extremis/render/first_person/materials/texture_preview.h"
 
 #include <fstream>
 #include <iostream>

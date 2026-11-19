@@ -1,5 +1,5 @@
-#include "wall_animation.h"
-#include "texture_preview.h"
+#include "extremis/render/first_person/materials/wall_animation.h"
+#include "extremis/render/first_person/materials/texture_preview.h"
 
 #include <cmath>
 #include <fstream>

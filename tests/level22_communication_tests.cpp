@@ -1,7 +1,7 @@
-#include "level22_communication.h"
-#include "door_control.h"
-#include "item_session.h"
-#include "survival_session.h"
+#include "extremis/cinematics/level22_communication.h"
+#include "extremis/world/door_control.h"
+#include "app/session/item_session.h"
+#include "extremis/gameplay/player/survival_session.h"
 #include <cmath>
 #include <iostream>
 #include <limits>

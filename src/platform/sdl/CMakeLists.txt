@@ -1,0 +1,17 @@
+add_library(sdl_audio STATIC audio/audio_player.cpp audio/cinematic_voice_stream.cpp)
+target_link_libraries(sdl_audio PUBLIC audio_data Vortex::AudioSDL)
+target_compile_features(sdl_audio PUBLIC cxx_std_17)
+set_target_properties(sdl_audio PROPERTIES CXX_EXTENSIONS NO)
+
+add_library(sdl_video STATIC video/frame_texture.cpp video/frame_profiler.cpp video/render_state.cpp)
+target_include_directories(sdl_video PUBLIC "${PROJECT_SOURCE_DIR}/include")
+target_link_libraries(sdl_video PUBLIC SDL3::SDL3)
+target_compile_features(sdl_video PUBLIC cxx_std_17)
+set_target_properties(sdl_video PROPERTIES CXX_EXTENSIONS NO)
+
+add_library(sdl_input STATIC input/player_input.cpp input/startup_skip.cpp input/survival_input.cpp)
+target_compile_definitions(sdl_input PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
+target_include_directories(sdl_input PUBLIC "${PROJECT_SOURCE_DIR}/include")
+target_link_libraries(sdl_input PUBLIC SDL3::SDL3 PRIVATE player_control door_control)
+target_compile_features(sdl_input PUBLIC cxx_std_17)
+set_target_properties(sdl_input PROPERTIES CXX_EXTENSIONS NO)

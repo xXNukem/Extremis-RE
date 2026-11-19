@@ -1,4 +1,4 @@
-#include "anm_format.h"
+#include "extremis/resources/anm_format.h"
 #include <algorithm>
 #include <iostream>
 #include <stdexcept>

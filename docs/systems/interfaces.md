@@ -8,7 +8,7 @@ The classic presentation is **320×200**. The first-person viewport takes the up
 
 The lower panel carries the essentials: health/energy, oxygen, equipped weapon and ammunition, body/status graphics, messages, and the motion detector when powered.
 
-The HUD reads **real simulation state**. It shouldn't silently invent a resource level because a graphic looks better full. The corresponding code is in [`original_hud.cpp`](../../src/original_hud.cpp) and [`survival_session.cpp`](../../src/survival_session.cpp).
+The HUD reads **real simulation state**. It shouldn't silently invent a resource level because a graphic looks better full. The corresponding code is in [`original_hud.cpp`](../../src/extremis/ui/original_hud.cpp) and [`survival_session.cpp`](../../src/extremis/gameplay/survival_session.cpp).
 
 ## The map isn't free
 
@@ -18,7 +18,7 @@ In level 1, the identified panel is at **sector 1, wall 6**, a `0x3606` type sur
 
 The map's block condition uses the original sector-connection traversal, not a line-of-sight ray. So that alien can be behind you and still ruin your cartographic plans.
 
-[`original_map.cpp`](../../src/original_map.cpp) renders the original maps and marker. In the port, **M** is a convenient map key and the physical original map scancode is also accepted. The developer-only TAB menu is a separate feature in Debug builds.
+[`original_map.cpp`](../../src/extremis/ui/original_map.cpp) renders the original maps and marker. In the port, **M** is a convenient map key and the physical original map scancode is also accepted. The developer-only TAB menu is a separate feature in Debug builds.
 
 ## Modals have their own world rules
 
@@ -36,7 +36,16 @@ The original resources supply a range of surprisingly elaborate sequences: a pan
 | Elevator | Choose an available destination and travel |
 | Inventory | Inspect fixed slots and use/reorganize carried items |
 
-The presentation logic is spread across [`original_interactions.cpp`](../../src/original_interactions.cpp), [`interaction_animation.cpp`](../../src/interaction_animation.cpp) and the stateful [`item_session.cpp`](../../src/item_session.cpp). They share resources, but they must not accidentally duplicate the inventory or door state.
+The presentation logic is spread across [`original_interactions.cpp`](../../src/extremis/ui/original_interactions.cpp), [`interaction_animation.cpp`](../../src/extremis/ui/interaction_animation.cpp) and the stateful [`item_session.cpp`](../../src/app/session/item_session.cpp). They share resources, but they must not accidentally duplicate the inventory or door state.
+
+`ItemSession` advances its panel phases in [`item_animation.cpp`](../../src/app/session/item_animation.cpp).
+The SDL event routing for those panels lives in [`item_input.cpp`](../../src/app/session/item_input.cpp).
+
+### Pickup movie presentation
+
+When a locker closes after a successful pickup, `ItemSession` runs `MovieIn`, `Movie` and `MovieOut`. All three phases of `A_ARME.ANM` replace the entire logical 320×200 DOS frame, including the 50 HUD rows. The first-person presenter uploads that frame at its logical size and fits it to a centred 4:3 rectangle in the current SDL drawable. World rendering resumes at the selected aspect and internal scale when the movie ends.
+
+**Port-tested, 2026-11-19.** The pre-refactor revision `48d7f48` already sent the opaque movie through the world/HUD compositor. The panoramic path introduced in `9cb4c25` retained the world at the sides, remapped the movie's corner pixels and extended the HUD panel behind it. The higher-resolution compositor also used colour equality to decide which pixels belonged to a transparent HUD overlay. The original-resource probe in `hud_tests DATA` compares the final SDL pixels against the standalone 4:3 presentation across all four aspect settings, scales 1×–6× and MAX, including drawable changes during playback. The local `A_ARME.ANM` had SHA-256 `93a8793214db7dbf4eac449cc530042e1da3b83e78a9fa3bef14c752800b59a8`. This result covers SDL software rendering.
 
 ## One button, several meanings
 

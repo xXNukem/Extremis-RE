@@ -1,5 +1,5 @@
-#include "player_death.h"
-#include "victory_session.h"
+#include "extremis/cinematics/player_death.h"
+#include "app/session/victory_session.h"
 #include <SDL3/SDL.h>
 #include <iostream>
 #include <stdexcept>

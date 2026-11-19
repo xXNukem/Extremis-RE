@@ -8,16 +8,16 @@ All multibyte integer fields shown here are **little-endian**. Unless noted, ind
 
 | File/resource | Contents | Reconstruction entry point |
 | --- | --- | --- |
-| `GAME.LAB` | 30 level records, sector tables, enemies, objects, routes, codes | [`game_lab.cpp`](../../src/game_lab.cpp) |
-| `PAL<n>.PAL` | VGA palette, 256 × RGB 6-bit | [`texture_bank.cpp`](../../src/texture_bank.cpp) |
-| `DALLE<n>.DAL` | 60×74 indexed wall materials | [`texture_bank.cpp`](../../src/texture_bank.cpp) |
-| `SOL<n>.DAS` | Floor and ceiling, two 128×128 indexed planes | [`texture_bank.cpp`](../../src/texture_bank.cpp) |
-| `OBJET<n>.SPR` | Decorative sprites and animation source images | [`spr_format.cpp`](../../src/spr_format.cpp) |
-| `MONS<n>.SPR` | Enemy sprite images | [`sprite_bank.cpp`](../../src/sprite_bank.cpp) |
-| `MONS<n>.SPT` | Per-image 8×8 hit masks | [`enemy_system.cpp`](../../src/enemy_system.cpp) |
-| `ADALLE.SPR` | Wall-animation source patches | [`wall_animation.cpp`](../../src/wall_animation.cpp) |
-| `*.DSS` / sound bank | Audio sample data and loops | [`audio_data.cpp`](../../src/audio_data.cpp) |
-| `*.ANM` | Full-screen/delta video animation | [`anm_format.cpp`](../../src/anm_format.cpp) |
+| `GAME.LAB` | 30 level records, sector tables, enemies, objects, routes, codes | [`game_lab.cpp`](../../src/extremis/resources/game_lab.cpp) |
+| `PAL<n>.PAL` | VGA palette, 256 × RGB 6-bit | [`texture_bank.cpp`](../../src/extremis/resources/texture_bank.cpp) |
+| `DALLE<n>.DAL` | 60×74 indexed wall materials | [`texture_bank.cpp`](../../src/extremis/resources/texture_bank.cpp) |
+| `SOL<n>.DAS` | Floor and ceiling, two 128×128 indexed planes | [`texture_bank.cpp`](../../src/extremis/resources/texture_bank.cpp) |
+| `OBJET<n>.SPR` | Decorative sprites and animation source images | [`spr_format.cpp`](../../src/extremis/resources/spr_format.cpp) |
+| `MONS<n>.SPR` | Enemy sprite images | [`sprite_bank.cpp`](../../src/extremis/resources/sprite_bank.cpp) |
+| `MONS<n>.SPT` | Per-image 8×8 hit masks | [`enemy_system.cpp`](../../src/extremis/gameplay/enemies/enemy_system.cpp) |
+| `ADALLE.SPR` | Wall-animation source patches | [`wall_animation.cpp`](../../src/extremis/render/first_person/materials/wall_animation.cpp) |
+| `*.DSS` / sound bank | Audio sample data and loops | [`audio_data.cpp`](../../src/extremis/resources/audio_data.cpp) |
+| `*.ANM` | Full-screen/delta video animation | [`anm_format.cpp`](../../src/extremis/resources/anm_format.cpp) |
 
 ## GAME.LAB: directory, then levels
 
@@ -48,7 +48,7 @@ image record:
     uint8  pixels[width * height]
 ```
 
-Image pixel bytes are palette indices. For regular sprite drawing, index **0 is transparent**; do not turn every RGB-black pixel transparent. The parser validates that each image's dimensions agree with its remaining bytes. See [`src/spr_format.cpp`](../../src/spr_format.cpp).
+Image pixel bytes are palette indices. For regular sprite drawing, index **0 is transparent**; do not turn every RGB-black pixel transparent. The parser validates that each image's dimensions agree with its remaining bytes. See [`src/extremis/resources/spr_format.cpp`](../../src/extremis/resources/spr_format.cpp).
 
 Some banks contain images that aren't independent objects. They're **patch sources** for animation; others include entire multi-frame sequences. The first image's presence doesn't tell you which images the level actually places.
 
@@ -100,7 +100,7 @@ A sound bank wraps repeated entries with volume, continuous and priority metadat
 
 `ANM1` begins with a four-byte signature, frame count and a VGA palette; the decoded frame is **320×200 (64,000 indexed pixels)**. The first frame is full; later frames may apply delta updates. Image data uses a 4 KiB LZSS dictionary and the reader enforces record boundaries.
 
-The parser is [`src/anm_format.cpp`](../../src/anm_format.cpp). You don't need a modern video codec to reconstruct these little sequences, but you do need to respect their delta table and palette.
+The parser is [`src/extremis/resources/anm_format.cpp`](../../src/extremis/resources/anm_format.cpp). You don't need a modern video codec to reconstruct these little sequences, but you do need to respect their delta table and palette.
 
 ## One very important limitation
 

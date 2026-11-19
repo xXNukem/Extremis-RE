@@ -1,21 +1,32 @@
+#include "extremis/render/first_person/camera/camera_start.h"
 #include "render_benchmark.h"
-#include "player_debug.h"
-#include "plane_material.h"
+#include "app/diagnostics/player_debug.h"
+#include "vortex/render/first_person/planes/plane_material.h"
 
-// Diagnostic TU only: call the real internal raster functions without exporting them
-// from the application or copying their algorithms. Do not link first_person_view.cpp again.
-#include "../src/first_person_view.cpp"
+#include "extremis/render/first_person/presentation/first_person_view.h"
+#include "vortex/render/first_person/planes/plane_renderer.h"
+#include "ray_scene.h"
+#include "wall_columns.h"
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
+#include <stdexcept>
 #include <string>
 
 namespace render_benchmark {
 namespace {
+using extremis::render_detail::CameraProjection;
+using extremis::render_detail::columnRay;
+using extremis::render_detail::fillBackground;
+using extremis::render_detail::fov;
+using extremis::render_detail::rasterizeWallColumn;
+using extremis::render_detail::selectWallTexture;
+using extremis::render_detail::wallHeight;
 using Clock = std::chrono::steady_clock;
 volatile double consumed = 0;
 std::atomic<std::uint64_t> allocations{0};
@@ -55,8 +66,8 @@ Timings stagedFrame(Target& target, const game_lab::Level& level, const Camera& 
     result[Background] = since(start);
     const double plane = std::tan(fov * 0.5), focal = target.width / (2 * plane);
     const CameraProjection projection{target.width, target.height, std::cos(camera.angle),
-                                      std::sin(camera.angle), plane, focal};
-    if (planes) planes::render(pixels, camera, {target.width, target.height, focal, eyeHeight, wallHeight}, *planes);
+                                      std::sin(camera.angle), plane, focal, camera.viewHeight()};
+    if (planes) vortex::planes::render(pixels, camera.renderPose(), {target.width, target.height, focal, projection.eyeHeight, wallHeight}, *planes, wall_textures::solRepeatPeriod);
     result[Planes] = since(start);
     for (int x = 0; x < target.width; ++x) {
         const auto direction = columnRay(projection, x);
@@ -67,7 +78,8 @@ Timings stagedFrame(Target& target, const game_lab::Level& level, const Camera& 
         if (!std::isfinite(hits[x].distance)) continue;
         const auto* texture = selectWallTexture(hits[x], &bank, nullptr);
         rasterizeWallColumn(pixels, target.width, target.height, x, hits[x],
-                            projectWall(projection, hits[x].distance), texture);
+                            vortex::projectWall(projection.height, projection.focal,
+                                   projection.eyeHeight, wallHeight, hits[x].distance), texture);
     }
     result[Walls] = since(start);
     require(SDL_UpdateTexture(target.texture.get(), nullptr, pixels.data(), target.width * 4));
@@ -174,7 +186,7 @@ void surfaceMicrobench(int width, int height, const Camera& camera, const game_l
 {
     const auto doors = doors::closedDoors(level);
     const CameraProjection p{width, height, std::cos(camera.angle), std::sin(camera.angle),
-                             std::tan(fov * 0.5), width / (2 * std::tan(fov * 0.5))};
+                             std::tan(fov * 0.5), width / (2 * std::tan(fov * 0.5)), camera.viewHeight()};
     std::array<std::vector<int>, 2> columns;
     std::vector<WallHit> hits(width);
     for (int x = 0; x < width; ++x) {
@@ -188,7 +200,8 @@ void surfaceMicrobench(int width, int height, const Camera& camera, const game_l
         auto start = Clock::now();
         for (int frame = 0; frame < 100; ++frame) for (const int x : columns[kind]) {
             if (!std::isfinite(hits[x].distance)) continue;
-            rasterizeWallColumn(pixels, width, height, x, hits[x], projectWall(p, hits[x].distance),
+            rasterizeWallColumn(pixels, width, height, x, hits[x], vortex::projectWall(p.height, p.focal,
+                                   p.eyeHeight, wallHeight, hits[x].distance),
                                  selectWallTexture(hits[x], &bank, nullptr));
         }
         std::cerr << "surface," << width << ',' << height << ",door," << kind << ",columns,"
@@ -208,19 +221,20 @@ void surfaceMicrobench(int width, int height, const Camera& camera, const game_l
 
 void microbench(int width, int height, const Camera& camera, const game_lab::Level& level)
 {
-    const planes::Projection projection{width, height, width / (2 * std::tan(fov * 0.5)), eyeHeight, wallHeight};
+    const vortex::planes::Projection projection{width, height, width / (2 * std::tan(fov * 0.5)), camera.viewHeight(), wallHeight};
+    const auto pose=camera.renderPose();
     double checksum = 0;
     auto start = Clock::now();
     for (int i = 0; i < 100; ++i) for (int y = 0; y < height; ++y) {
-        const auto row = planes::projectRow(camera, projection, y);
+        const auto row = vortex::planes::projectRow(pose, projection, y);
         if (row) checksum += row->x + row->y;
     }
     const double rows = since(start) / 100;
     for (int i = 0; i < 20; ++i) for (int y = 0; y < height; ++y) {
-        const auto row = planes::projectRow(camera, projection, y);
+        const auto row = vortex::planes::projectRow(pose, projection, y);
         if (!row) continue;
         for (int x = 0; x < width; ++x) {
-            const auto uv = plane_material::coordinates(row->x + x * row->stepX, row->y + x * row->stepY, 128, 128);
+            const auto uv = vortex::plane_material::coordinates(row->x + x * row->stepX, row->y + x * row->stepY, 128, 128, wall_textures::solRepeatPeriod);
             checksum += uv.x + uv.y;
         }
     }

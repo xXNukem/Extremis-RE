@@ -1,7 +1,7 @@
-#include "game_lab.h"
-#include "texture_bank.h"
-#include "sprite_bank.h"
-#include "enemy_system.h"
+#include "extremis/resources/game_lab.h"
+#include "extremis/resources/texture_bank.h"
+#include "extremis/resources/sprite_bank.h"
+#include "extremis/gameplay/enemies/enemy_system.h"
 #include <iostream>
 #include <set>
 #include <stdexcept>

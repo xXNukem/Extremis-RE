@@ -1,7 +1,8 @@
-#include "audio_data.h"
-#include "audio_mixer.h"
-#include "audio_player.h"
-#include "game_audio.h"
+#include "extremis/resources/audio_data.h"
+#include "extremis/audio/audio_mixer.h"
+#include "platform/sdl/audio/audio_player.h"
+#include "extremis/audio/game_audio.h"
+#include "extremis/world/door.h"
 
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -85,7 +86,8 @@ void decoding()
 void mixing()
 {
     auto bank = audio::decodeBank(bankBytes());
-    audio::Mixer mixer(bank);
+    vortex::audio::Mixer mixer(audio::mixerConfig);
+    mixer.setSamples(audio::mixerSamples(bank));
     float frames[512]{};
     check(!mixer.play(99),"Invalid sound ID accepted");
     for (int i=0;i<4;++i) check(mixer.play(0),"Simultaneous voice rejected");
@@ -97,7 +99,7 @@ void mixing()
           "Mixer clipped/distorted");
     mixer.render(frames,16);
     check(std::all_of(frames,frames+16,[](float x){return x==0;}),"Finished effect not silent");
-    check(mixer.play(1,true),"Continuous request failed");
+    check(mixer.play(1,audio::playbackOptions(true,audio::Playback::Native)),"Continuous request failed");
     mixer.render(frames,512);
     check(mixer.active()==1,"Continuous effect ended");
     mixer.stop(1); mixer.render(frames,32);
@@ -105,6 +107,7 @@ void mixing()
     bank[0].sample.loopFlag=65535;
     bank[0].sample.loopBegin=16; bank[0].sample.loopEnd=64;
     for (std::size_t i=0;i<128;++i) bank[0].sample.pcm[i]=float(i)/128;
+    mixer.setSamples(audio::mixerSamples(bank));
     mixer.play(0); mixer.render(frames,256);
     check(std::abs(frames[128]-0.6f/4*16/128)<1e-6 &&
           std::abs(frames[176]-frames[128])<1e-6,"Original loop end/start semantics failed");
@@ -121,7 +124,7 @@ audio::Effect effect(std::size_t frames)
     return effect;
 }
 
-std::vector<float> capture(audio::Mixer& mixer, std::size_t frames)
+std::vector<float> capture(vortex::audio::Mixer& mixer, std::size_t frames)
 {
     std::vector<float> output(frames);
     const std::array<std::size_t,5> sizes{1,31,2,128,513};
@@ -138,7 +141,8 @@ void exactCompletion()
 {
     for (std::size_t length : {1,2,31,32,33,127,128,129,511,512,513,3700,5001}) {
         const audio::Bank bank{effect(length)};
-        audio::Mixer mixer(bank);
+        vortex::audio::Mixer mixer(audio::mixerConfig);
+        mixer.setSamples(audio::mixerSamples(bank));
         check(mixer.play(0), "One-shot rejected");
         const auto first = capture(mixer, length + 97);
         for (std::size_t i = 0; i < first.size(); ++i) {
@@ -162,7 +166,8 @@ void exactCompletion()
 void simultaneousEffects()
 {
     const audio::Bank bank{effect(33), effect(513)};
-    audio::Mixer mixed(bank), a(bank), b(bank);
+    vortex::audio::Mixer mixed(audio::mixerConfig), a(audio::mixerConfig), b(audio::mixerConfig);
+    for (auto* mixer : {&mixed, &a, &b}) mixer->setSamples(audio::mixerSamples(bank));
     mixed.play(0); mixed.play(1); a.play(0); b.play(1);
     const auto together = capture(mixed, 700), first = capture(a, 700), second = capture(b, 700);
     for (std::size_t i = 0; i < together.size(); ++i)
@@ -180,7 +185,8 @@ void loopLifecycle()
     ambient.sample.loopBegin = 17;
     ambient.sample.loopEnd = 65;
     const audio::Bank bank{ambient, effect(33)};
-    audio::Mixer mixer(bank);
+    vortex::audio::Mixer mixer(audio::mixerConfig);
+    mixer.setSamples(audio::mixerSamples(bank));
     check(mixer.play(0), "DSS loop rejected");
     capture(mixer,128);
     check(mixer.statistics(0)->wraps == 1, "Loop skipped full initial payload");
@@ -205,7 +211,8 @@ void loopLifecycle()
           mixer.statistics(0)->sourceFrames == idleFrames, "Stopped loop consumed more PCM");
     mixer.play(0);
     const auto restarted = capture(mixer,128);
-    audio::Mixer fresh(bank);
+    vortex::audio::Mixer fresh(audio::mixerConfig);
+    fresh.setSamples(audio::mixerSamples(bank));
     fresh.play(0);
     check(restarted == capture(fresh,128), "Restarted loop retained old cursor/envelope");
     mixer.clear();
@@ -235,7 +242,8 @@ std::vector<float> converted(const std::vector<float>& input, bool chunks)
 void formatConversion()
 {
     const audio::Bank bank{effect(3700)};
-    audio::Mixer mixer(bank);
+    vortex::audio::Mixer mixer(audio::mixerConfig);
+    mixer.setSamples(audio::mixerSamples(bank));
     mixer.play(0);
     const auto native = capture(mixer,5000);
     const auto whole = converted(native,false), chunks = converted(native,true);
@@ -364,7 +372,8 @@ void footstepEvents(const std::filesystem::path& directory)
 void noOverlappingSteps()
 {
     const audio::Bank bank{effect(3700),effect(5001)};
-    audio::Mixer mixer(bank);
+    vortex::audio::Mixer mixer(audio::mixerConfig);
+    mixer.setSamples(audio::mixerSamples(bank));
     check(!mixer.playing(0), "Idle voice reported active");
     mixer.play(0);
     capture(mixer,100);
@@ -417,9 +426,11 @@ void playback(const std::filesystem::path& directory)
 }
 void boundedInterface(const audio::Bank& bank, std::size_t id)
 {
-    audio::Mixer native(bank), bounded(bank);
+    vortex::audio::Mixer native(audio::mixerConfig), bounded(audio::mixerConfig);
+    native.setSamples(audio::mixerSamples(bank));
+    bounded.setSamples(audio::mixerSamples(bank));
     check(bank[id].sample.loopFlag!=0,"Looping motor fixture lost native DSS loop");
-    native.play(id); bounded.play(id,false,audio::Playback::Once);
+    native.play(id); bounded.play(id,audio::playbackOptions(false,audio::Playback::Once));
     const auto count=bank[id].sample.pcm.size();
     capture(native,count*4); const auto output=capture(bounded,count*4);
     check(native.playing(id) && native.statistics(id)->wraps>0,"Native loop was globally disabled");
@@ -428,15 +439,17 @@ void boundedInterface(const audio::Bank& bank, std::size_t id)
           "Bounded interface effect remains active after full payload");
     check(std::all_of(output.begin()+count,output.end(),[](float value){return value==0;}),
           "Interface motor has a trailing loop");
-    for(int i=0;i<20;++i) bounded.play(id,false,audio::Playback::Once);
+    for(int i=0;i<20;++i) bounded.play(id,audio::playbackOptions(false,audio::Playback::Once));
     check(bounded.active()==1,"Repeated interface requests stacked voices");
     capture(bounded,count+32);
     check(bounded.active()==0,"Repeated open/close left motor running");
 }
 void originalDoorTail(const audio::Bank& bank)
 {
-    audio::Mixer before(bank), after(bank);
-    before.play(27,true); after.play(27);
+    vortex::audio::Mixer before(audio::mixerConfig), after(audio::mixerConfig);
+    before.setSamples(audio::mixerSamples(bank));
+    after.setSamples(audio::mixerSamples(bank));
+    before.play(27,audio::playbackOptions(true,audio::Playback::Native)); after.play(27);
     const auto repeated = capture(before,5000), corrected = capture(after,5000);
     before.stop(27);
     capture(before,32);
@@ -480,7 +493,9 @@ void originals(const std::filesystem::path& directory)
     }
     check(standalone==14,"Original standalone count changed");
     originalDoorTail(bank); boundedInterface(bank,11);
-    audio::Mixer shared(bank);shared.play(26);shared.play(11,false,audio::Playback::Once);
+    vortex::audio::Mixer shared(audio::mixerConfig);
+    shared.setSamples(audio::mixerSamples(bank));
+    shared.play(26);shared.play(11,audio::playbackOptions(false,audio::Playback::Once));
     capture(shared,12000);
     check(!shared.playing(11) && shared.playing(26) && shared.statistics(26)->stopped==0,
           "Motor completion silenced native death loop");

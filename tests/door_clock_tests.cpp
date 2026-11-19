@@ -1,5 +1,5 @@
-#include "door.h"
-#include "door_clock.h"
+#include "extremis/world/door.h"
+#include "extremis/world/door_clock.h"
 
 #include <iostream>
 #include <stdexcept>

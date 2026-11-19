@@ -1,7 +1,7 @@
-#include "motion_detector.h"
-#include "player_inventory.h"
-#include "game_lab.h"
-#include "../src/motion_detector_tables.h"
+#include "extremis/gameplay/enemies/motion_detector.h"
+#include "extremis/gameplay/player/player_inventory.h"
+#include "extremis/resources/game_lab.h"
+#include "extremis/world/original_angle_tables.h"
 #include <fstream>
 #include <iostream>
 #include <stdexcept>

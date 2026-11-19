@@ -49,7 +49,7 @@ its full-screen composer is **`0xd96d–0xda44`**.
 `0xdacf + 54*[0x5204]`. Its first four records are four bytes each:
 `exists, destinationSector, destinationZone, destinationFloor`; local arrival
 X/Y/angle are words at +16/+18/+20. UI row maps to `(~row)&3`.
-The existing [original_travel.h](../../../include/original_travel.h) already
+The existing [original_travel.h](../../../include/extremis/world/original_travel.h) already
 contains all 25 descriptors, 55 extant destinations and card permission lists.
 No replacement destination table is needed.
 
@@ -624,12 +624,12 @@ is implemented independently above.
 
 **Historical code inspection, not current implementation status:**
 
-- [ItemSession::confirm](../../../src/item_session.cpp), Elevator case,
+- [ItemSession::confirm](../../../src/app/session/item_session.cpp), Elevator case,
   validates the existing route/card and constructs `Travel{zone,arrival}`,
   then resets the modal/clears input. `Travel` in
-  [item_session.h](../../../include/item_session.h) currently carries **neither
+  [item_session.h](../../../include/app/session/item_session.h) currently carries **neither
   floor nor lift/cause**. The original route already has the floor byte.
-- [main.cpp](../../../src/main.cpp), `items.takeTravel()` block: restart and
+- [main.cpp](../../../src/app/main.cpp), `items.takeTravel()` block: restart and
   Debug requests share the transport container. Same-zone transfers replace
   the camera without loading the world, invalidate input, reset door timing
   and `previousTicks`. Other transfers stage all destination resources,
@@ -678,8 +678,8 @@ Original integration requirements (status updated above):
 indexed 320×200 canvases, DSS `audio::loadSample` / `audio::Mixer`, palette
 conversion, and SDL texture/window lifecycle. Both current cinematic presenters
 are **scene-specific**, not generic public ANM renderers:
-[original_intro.cpp](../../../src/original_intro.cpp) has internal scaled
-sprites, text, stars and palette operations; [original_ending.cpp](../../../src/original_ending.cpp)
+[original_intro.cpp](../../../src/extremis/cinematics/original_intro.cpp) has internal scaled
+sprites, text, stars and palette operations; [original_ending.cpp](../../../src/extremis/cinematics/original_ending.cpp)
 has strict tick/retrace `step` semantics and no-skip policy. Their presenter
 and audio classes are privately coupled to PSEQ/FSEQ scenes. Reuse decoder
 APIs and established arithmetic, or narrowly share helpers in a later approved

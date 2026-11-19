@@ -1,6 +1,6 @@
-#include "original_elevator_player.h"
-#include "original_elevator.h"
-#include "game_audio.h"
+#include "extremis/cinematics/original_elevator_player.h"
+#include "extremis/cinematics/original_elevator.h"
+#include "extremis/audio/game_audio.h"
 #include <SDL3/SDL.h>
 #include <iostream>
 #include <string_view>

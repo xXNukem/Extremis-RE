@@ -1,0 +1,7 @@
+add_subdirectory(resources)
+add_subdirectory(world)
+add_subdirectory(audio)
+add_subdirectory(gameplay)
+add_subdirectory(ui)
+add_subdirectory(cinematics)
+add_subdirectory(render)

@@ -1,7 +1,8 @@
-#include "survival_session.h"
-#include "game_audio.h"
-#include "player_input.h"
-#include "item_session.h"
+#include "extremis/gameplay/player/survival_session.h"
+#include "platform/sdl/input/survival_input.h"
+#include "extremis/audio/game_audio.h"
+#include "platform/sdl/input/player_input.h"
+#include "app/session/item_session.h"
 
 #include <SDL3/SDL.h>
 #include <filesystem>
@@ -48,7 +49,7 @@ void normalSession(GameAudio& audio)
     SurvivalSession session;
     for (auto scancode : {SDL_SCANCODE_F5,SDL_SCANCODE_F6,SDL_SCANCODE_F7,
                           SDL_SCANCODE_F8,SDL_SCANCODE_F9,SDL_SCANCODE_F10,SDL_SCANCODE_F11})
-        session.handleEvent(key(scancode),17);
+        session.handleInput(platform::sdl::survivalInput(key(scancode),17));
     check(session.hudState().health == 1000 && session.hudState().oxygen == 288000,
           "Diagnostics enabled in normal game");
     check(session.inventory().batteryCharge()==-1 && !session.inventory().detectorEnabled(),"Diagnostic battery leaked into normal gameplay");
@@ -62,30 +63,38 @@ void normalSession(GameAudio& audio)
     SDL_Event focus{};
     focus.type = SDL_EVENT_WINDOW_FOCUS_LOST;
     focus.window.windowID = 17;
-    session.handleEvent(focus,17);
+    session.handleInput(platform::sdl::survivalInput(focus,17));
     focus.type = SDL_EVENT_WINDOW_FOCUS_GAINED;
-    session.handleEvent(focus,17);
+    session.handleInput(platform::sdl::survivalInput(focus,17));
     session.update(100,true,audio);
     check(session.hudState().oxygen == 287840,"Focus cycle within one pump consumed suspended time");
+    auto tab = key(SDL_SCANCODE_TAB);
+    session.handleInput(platform::sdl::survivalInput(tab,17));
+    session.update(1,true,audio);
+    check(session.hudState().oxygen == 287680,"Physical Tab without its logical key suspended time");
+    tab.key.scancode = SDL_SCANCODE_UNKNOWN; tab.key.key = SDLK_TAB;
+    session.handleInput(platform::sdl::survivalInput(tab,17));
+    session.update(100,true,audio);
+    check(session.hudState().oxygen == 287680,"Logical Tab did not discard the suspended interval");
 }
 
 void deathSession(GameAudio& audio)
 {
     SurvivalSession session(true);
     auto wrongWindow = key(SDL_SCANCODE_F8); wrongWindow.key.windowID = 18;
-    session.handleEvent(wrongWindow,17);
+    session.handleInput(platform::sdl::survivalInput(wrongWindow,17));
     auto repeat = key(SDL_SCANCODE_F8); repeat.key.repeat = true;
-    session.handleEvent(repeat,17);
+    session.handleInput(platform::sdl::survivalInput(repeat,17));
     check(session.alive(),"Foreign/repeated diagnostic event accepted");
-    session.handleEvent(key(SDL_SCANCODE_F11),17);
+    session.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F11),17));
     check(session.inventory().batteryCharge()==144000 && session.inventory().detectorEnabled(),
           "Explicit diagnostic battery/radar did not activate");
 
-    session.handleEvent(key(SDL_SCANCODE_F5),17);
+    session.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F5),17));
     check(session.hudState().health == 750,"Diagnostic damage not reflected in HUD");
-    session.handleEvent(key(SDL_SCANCODE_F6),17);
+    session.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F6),17));
     check(session.hudState().health == 1000,"Verified health recovery not reflected in HUD");
-    session.handleEvent(key(SDL_SCANCODE_F8),17);
+    session.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F8),17));
     check(!session.alive() && session.hudState().oxygen == 0,"Oxygen death failed");
     check(session.update(1,true,audio),"Death transition not reported");
     for (int i = 0; i < 100; ++i) session.update(1,true,audio);
@@ -94,15 +103,15 @@ void deathSession(GameAudio& audio)
     check(audio.effectStatistics(26)->requests == 1 && audio.effectStatistics(26)->started == 1,
           "Oxygen death loop restarted every frame");
     check(audio.effectStatistics(26)->wraps > 0,"Native oxygen death loop was not preserved");
-    session.handleEvent(key(SDL_SCANCODE_F9),17);
+    session.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F9),17));
     check(!session.alive(),"Bottle revived dead player");
-    session.handleEvent(key(SDL_SCANCODE_F10),17);
+    session.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F10),17));
     session.update(1,true,audio);
     const auto until = SDL_GetTicks()+1500;
     while (!audio.effectStatistics(26)->stopped && SDL_GetTicks() < until) SDL_Delay(5);
     check(session.alive() && audio.effectStatistics(26)->stopped == 1,
           "Reset failed to stop original oxygen loop");
-    for (int i = 0; i < 4; ++i) session.handleEvent(key(SDL_SCANCODE_F5),17);
+    for (int i = 0; i < 4; ++i) session.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F5),17));
     session.update(1,true,audio);
     check(!session.alive() && audio.effectStatistics(25)->requests == 1,
           "Health death did not select original BANK[25]");
@@ -114,7 +123,7 @@ void deathSession(GameAudio& audio)
           "Death status missing");
     const auto requests=audio.effectStatistics(26)->requests;
     SurvivalSession presented(true);
-    presented.handleEvent(key(SDL_SCANCODE_F8),17);
+    presented.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F8),17));
     check(presented.update(0,true,audio,false,true),"Presented death transition missing");
     check(!presented.update(0,true,audio,false,true) && audio.effectStatistics(26)->requests==requests,
           "Presentation must own delayed sound and death must be announced once");
@@ -128,9 +137,9 @@ void deathSession(GameAudio& audio)
 void silentResourceLoss(GameAudio& audio)
 {
     SurvivalSession session(true);
-    session.handleEvent(key(SDL_SCANCODE_F5),17);
+    session.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F5),17));
     // 29 nominal minutes: low oxygen, but still alive. No invented breathing cue.
-    for (int i = 0; i < 29; ++i) session.handleEvent(key(SDL_SCANCODE_F7),17);
+    for (int i = 0; i < 29; ++i) session.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F7),17));
     session.update(0,false,audio);
     check(session.alive() && session.hudState().health == 750 && session.hudState().oxygen == 9600,
           "Nonfatal resource-loss fixture failed");
@@ -235,7 +244,7 @@ void itemSession(GameAudio& audio)
     { auto release=key(SDL_SCANCODE_E); release.type=SDL_EVENT_KEY_UP; items.handleEvent(release,17); }
     items.update(&camera,true,obstacles,player,audio);
     check(audio.effectStatistics(12)->requests == requests+1,"Empty panel repeated confirmation sound");
-    player.handleEvent(key(SDL_SCANCODE_F5),17);
+    player.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F5),17));
     items.handleEvent(key(SDL_SCANCODE_Z),17);
     items.update(&camera,true,obstacles,player,audio);
     check(player.hudState().health == 1000 && player.inventory().injectors()[0] == 0 &&
@@ -244,7 +253,7 @@ void itemSession(GameAudio& audio)
     items.update(&camera,true,obstacles,player,audio);
     check(player.alive() && !player.hudState().oxygenBottle,"Absent bottle invented oxygen or caused death");
     items.load(level);
-    player.handleEvent(key(SDL_SCANCODE_F8),17);
+    player.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F8),17));
     items.handleEvent(key(SDL_SCANCODE_E),17);
     { auto release=key(SDL_SCANCODE_E); release.type=SDL_EVENT_KEY_UP; items.handleEvent(release,17); }
     items.update(&camera,true,obstacles,player,audio);
@@ -349,7 +358,7 @@ int main(int argc, char* argv[])
         messageQueue(); runningOxygen(audio); readerSession(audio);
         GameAudio unavailable;
         SurvivalSession withoutAudio(true);
-        withoutAudio.handleEvent(key(SDL_SCANCODE_F8),17);
+        withoutAudio.handleInput(platform::sdl::survivalInput(key(SDL_SCANCODE_F8),17));
         withoutAudio.update(1,true,unavailable);
         check(!withoutAudio.alive(),"Absent audio prevented logical death");
         std::cout << "Survival/HUD, diagnostic isolation, input gating and death audio passed.\n";

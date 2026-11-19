@@ -19,11 +19,12 @@ On level 1, paired `0x1000` connection faces and `0x2000` side pieces build the 
 
 ## A door has more than one meaning of “open”
 
-There are at least three questions to answer:
+Each query reads a different part of the same connection state.
 
 1. **Is it unlocked?** That involves the `0x0400` state bit and access-control logic.
-2. **Can it be passed physically?** That depends on the moving door geometry and collision.
-3. **Do sectors count as connected?** DOS tests `(state & 0x01ff) != 0`.
+2. **Can an actor cross it?** The connection branch requires the opening bit and phase above 60, then applies actor and position rules.
+3. **Can a projectile pass?** Its ray uses the visible span of the camera-facing leaf. An invisible leaf can still block an actor while the connection is descending.
+4. **Do sectors count as connected?** DOS tests `(state & 0x01ff) != 0`.
 
 The last question matters for enemy activation and map restrictions. It is **not** equivalent to `progress > 0`.
 
@@ -35,7 +36,7 @@ The last question matters for enemy activation and map restrictions. It is **not
 | Closing with progress remaining | On |
 | Fully closed again | Off |
 
-The original program sets the opening bit at `0x10a3c–0x10a40`, advances progress at `0x11498–0x114b2`, and checks the mask at `0x1184f`. Unlocking alone changes only the lock bit. The port's [`doors::connectionEnabled`](../../src/door.cpp) gives the connection query a single owner.
+The original program sets the opening bit at `0x10a3c–0x10a40`, advances progress at `0x11498–0x114b2`, and checks the mask at `0x1184f`. Unlocking alone changes only the lock bit. The port's [`doors::connectionEnabled`](../../src/extremis/world/door.cpp) gives the connection query a single owner.
 
 ## “Visible sector” does not mean “on screen”
 
@@ -66,4 +67,4 @@ The port distinguishes static wall segments, dynamic door faces, and (in the act
 
 Do not replace all three with a universal circular collision test and expect original movement. A flag or an extra word can determine whether a seemingly solid-looking object is actually passable.
 
-**Where to look:** [`door.cpp`](../../src/door.cpp), [`door_control.cpp`](../../src/door_control.cpp), [`player_collision.cpp`](../../src/player_collision.cpp), [`game_lab.cpp`](../../src/game_lab.cpp). For render projection and wall material selection see [Rendering](rendering.md).
+**Where to look:** [`door.cpp`](../../src/extremis/world/door.cpp), [`door_control.cpp`](../../src/extremis/world/door_control.cpp), [`player_collision.cpp`](../../src/extremis/world/player_collision.cpp), [`game_lab.cpp`](../../src/extremis/resources/game_lab.cpp). For render projection and wall material selection see [Rendering](rendering.md).

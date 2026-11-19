@@ -1,9 +1,10 @@
-#include "original_hud.h"
-#include "weapon_fire.h"
-#include "enemy_system.h"
-#include "first_person_view.h"
-#include "sprite_scene.h"
-#include "player_vitals.h"
+#include "extremis/render/first_person/camera/camera_start.h"
+#include "extremis/ui/original_hud.h"
+#include "extremis/gameplay/player/weapon_fire.h"
+#include "extremis/gameplay/enemies/enemy_system.h"
+#include "extremis/render/first_person/presentation/first_person_view.h"
+#include "extremis/render/first_person/sprites/sprite_scene.h"
+#include "extremis/gameplay/player/player_vitals.h"
 
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -279,6 +280,99 @@ std::vector<std::uint8_t> bytes(const std::filesystem::path& path)
     return {std::istreambuf_iterator<char>(file),std::istreambuf_iterator<char>()};
 }
 
+void pickupPresentation(const std::filesystem::path& directory)
+{
+    SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy");
+    check(SDL_InitSubSystem(SDL_INIT_VIDEO),"Pickup video initialization failed");
+    std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> window(
+        SDL_CreateWindow("Pickup presentation",640,480,SDL_WINDOW_HIDDEN),SDL_DestroyWindow);
+    check(bool(window),"Pickup window creation failed");
+    std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)> renderer(
+        SDL_CreateRenderer(window.get(),"software"),SDL_DestroyRenderer);
+    check(bool(renderer),"Pickup renderer creation failed");
+    const hud::Renderer visor(hud::load(directory));
+    const interaction::Renderer interfaces(interaction::load(directory));
+    VideoRenderSettings video;
+    video.preferences.fisheyeEnabled=true;
+    FirstPersonRenderer view(renderer.get(),&video), reference(renderer.get());
+    const game_lab::Level level{};
+    const auto clear=[&] {
+        check(SDL_SetRenderDrawColor(renderer.get(),0,0,0,255) &&
+              SDL_RenderClear(renderer.get()),"Pickup clear failed");
+    };
+    const auto capture=[&] {
+        auto* image=SDL_RenderReadPixels(renderer.get(),nullptr);
+        check(image!=nullptr,"Pickup capture failed");
+        return std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)>(image,SDL_DestroySurface);
+    };
+    const auto equal=[](const SDL_Surface& a,const SDL_Surface& b) {
+        if(a.w!=b.w || a.h!=b.h || a.format!=b.format) return false;
+        const int bytes=a.w*SDL_BYTESPERPIXEL(a.format);
+        for(int y=0;y<a.h;++y) {
+            const auto* row=static_cast<const unsigned char*>(a.pixels)+y*a.pitch;
+            const auto* other=static_cast<const unsigned char*>(b.pixels)+y*b.pitch;
+            if(!std::equal(row,row+bytes,other)) return false;
+        }
+        return true;
+    };
+    const auto draw=[&](const interaction::State* state) {
+        clear();
+        check(view.draw(level,{},nullptr,nullptr,nullptr,nullptr,nullptr,&visor,{},&interfaces,state),
+              "Pickup view draw failed");
+        return capture();
+    };
+    const auto referenceFrame=[&](const interaction::State& state) {
+        std::vector<std::uint32_t> logical(64000,0x123456ff);
+        check(interfaces.draw(logical,state),"Pickup logical frame draw failed");
+        clear();
+        check(reference.drawFrame(logical),"Pickup reference draw failed");
+        return capture();
+    };
+    const std::filesystem::path captures="build/pickup-captures";
+    std::filesystem::create_directories(captures);
+    unsigned mismatches=0;
+    for(const auto size:{SDL_Point{640,480},SDL_Point{960,540},SDL_Point{1260,540}}) {
+        check(SDL_SetWindowSize(window.get(),size.x,size.y),"Pickup window resize failed");
+        SDL_PumpEvents();
+        for(unsigned aspect=0;aspect<4;++aspect) for(int scale:{1,2,3,4,5,6,0}) {
+            video.preferences.aspectChoice=aspect;
+            video.mode={std::max(1,scale),scale==0,size.x,size.y,{}};
+            auto normal=draw(nullptr);
+            check(normal->w==size.x && normal->h==size.y,"Pickup drawable size did not change");
+            for(auto phase:{interaction::Phase::MovieIn,interaction::Phase::Movie,interaction::Phase::MovieOut}) {
+                interaction::State state;
+                state.phase=phase;
+                state.frame=phase==interaction::Phase::MovieIn?0:11;
+                state.movieSeconds=3*33.0/160;
+                auto actual=draw(&state);
+                auto expected=referenceFrame(state);
+                if(!equal(*actual,*expected)) ++mismatches;
+                if(aspect==3 && (scale==1 || scale==0) && phase==interaction::Phase::Movie) {
+                    const auto name=std::to_string(size.x)+"x"+std::to_string(size.y)+"-"+std::to_string(scale);
+                    check(SDL_SaveBMP(actual.get(),(captures/(name+".bmp")).string().c_str()) &&
+                          SDL_SaveBMP(expected.get(),(captures/(name+"-reference.bmp")).string().c_str()) &&
+                          SDL_SaveBMP(normal.get(),(captures/(name+"-hud.bmp")).string().c_str()),
+                          "Pickup capture save failed");
+                }
+            }
+            check(equal(*normal,*draw(nullptr)),"Returning from pickup altered gameplay presentation");
+        }
+    }
+    interaction::State playing;
+    playing.phase=interaction::Phase::Movie;
+    for(const auto size:{SDL_Point{960,540},SDL_Point{640,480},SDL_Point{1260,540}}) {
+        check(SDL_SetWindowSize(window.get(),size.x,size.y),"Resize during pickup failed");
+        SDL_PumpEvents();
+        video.mode={2,size.x==1260,size.x,size.y,{}};
+        auto actual=draw(&playing);
+        check(actual->w==size.x && actual->h==size.y,"Pickup retained the old drawable size");
+        if(!equal(*actual,*referenceFrame(playing))) ++mismatches;
+        playing.movieSeconds+=33.0/160;
+    }
+    if(mismatches) std::cerr<<mismatches<<" pickup frames differ from the opaque 4:3 reference\n";
+    check(mismatches==0,"Pickup presentation differs from the opaque 4:3 reference");
+}
+
 void originals(const std::filesystem::path& directory)
 {
     const auto resources = hud::load(directory);
@@ -326,7 +420,7 @@ void originals(const std::filesystem::path& directory)
     // Exercise the new projectile Scene through the existing depth/sprite renderer.
     player::WeaponFire fire; fire.loadGraphics(directory,1);
     player::Inventory ammo; auto contents=std::uint16_t(0x400a); ammo.exchangeWeapon(contents);
-    fire.update({}, {},ammo,{true,true},true,0); fire.update({}, {},ammo,{},true,0);
+    fire.update({}, {},ammo,{true,true},true,0); fire.update({}, {},ammo,{},true,1./60);
     preview.weapon=4; preview.firing=false;
     const game_lab::Level empty{};
     const Camera lookingAside{0,0,0.25};
@@ -384,7 +478,7 @@ void originals(const std::filesystem::path& directory)
     player::WeaponFire muzzle; muzzle.loadGraphics(directory,1); player::Inventory muzzleAmmo;
     const collision::World target{{{800,-1000},{800,1000}}};
     for(unsigned stage=0;stage<6;++stage) {
-        muzzle.update({},target,muzzleAmmo,stage==0?player::FireTrigger{true,true}:player::FireTrigger{},true,0);
+        muzzle.update({},target,muzzleAmmo,stage==0?player::FireTrigger{true,true}:player::FireTrigger{},true,stage==0?0:1./60);
         preview.firing=muzzle.firing(); preview.barrelPhase=muzzle.barrelPhase();
         preview.ammunition=muzzleAmmo.ammunition();
         check(view.draw(empty,{},nullptr,nullptr,nullptr,&planes,nullptr,&hudRenderer,preview,
@@ -409,7 +503,7 @@ int main(int argc, char* argv[])
 {
     try {
         validation(); composition(); radarComposition(); slimeComposition(); weaponViews(); firingComposition(); realVitalsBars(); presentation(); integration();
-        if (argc == 2) originals(argv[1]);
+        if (argc == 2) { pickupPresentation(argv[1]); originals(argv[1]); }
         std::cout << "Original HUD layout, limits, glyphs and software presentation passed.\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

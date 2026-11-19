@@ -4,7 +4,7 @@ The original *In Extremis* inventory is wonderfully unforgiving. You don't carry
 
 ## What the player actually carries
 
-The reconstructed [`Inventory`](../../include/player_inventory.h) uses fixed storage rather than an endlessly growing list:
+The reconstructed [`Inventory`](../../include/extremis/gameplay/player/player_inventory.h) uses fixed storage rather than an endlessly growing list:
 
 | Slot group | Capacity | Original-style behaviour |
 | --- | ---: | --- |
@@ -15,7 +15,7 @@ The reconstructed [`Inventory`](../../include/player_inventory.h) uses fixed sto
 | Battery | **1** | Supplies the detector or optical equipment system |
 | Equipped weapon | **1** | Current weapon plus ammunition |
 
-These are the port's explicit fields; some original replacement rules remain incomplete in the public build. [`player_inventory.cpp`](../../src/player_inventory.cpp) owns transfer and use operations, and [`item_session.cpp`](../../src/item_session.cpp) handles the interaction with the original panel screens.
+These are the port's explicit fields; some original replacement rules remain incomplete in the public build. [`player_inventory.cpp`](../../src/extremis/gameplay/player/player_inventory.cpp) owns transfer and use operations, and [`item_session.cpp`](../../src/app/session/item_session.cpp) handles the interaction with the original panel screens.
 
 ## A bottle that swaps instead of filling
 
@@ -63,4 +63,4 @@ The detector shows up to ten enemy contacts in its own HUD area. It doesn't requ
 
 Inventory-full replacement cases, mine placement and explosion, some special reader sequences and a few endgame interactions are still under investigation. The existence of a mine item or a possible alien nest is **not proof** that every guessed explosion rule is correct.
 
-**Where to look:** [`player_inventory.h`](../../include/player_inventory.h), [`level_items.cpp`](../../src/level_items.cpp), [`item_session.cpp`](../../src/item_session.cpp), [`original_interactions.cpp`](../../src/original_interactions.cpp). Original case studies include the C001/door-7 flow and the map-transfer panel; they are not templates for every panel in the game.
+**Where to look:** [`player_inventory.h`](../../include/extremis/gameplay/player/player_inventory.h), [`level_items.cpp`](../../src/extremis/gameplay/items/level_items.cpp), [`item_session.cpp`](../../src/app/session/item_session.cpp), [`original_interactions.cpp`](../../src/extremis/ui/original_interactions.cpp). Original case studies include the C001/door-7 flow and the map-transfer panel; they are not templates for every panel in the game.

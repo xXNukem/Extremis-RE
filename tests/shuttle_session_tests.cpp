@@ -1,8 +1,10 @@
-#include "shuttle_session.h"
+#include "app/session/shuttle_session.h"
+#include "app/startup/startup_credits.h"
+#include "extremis/gameplay/player/player_inventory.h"
 #include <iostream>
-#include "door_control.h"
-#include "door_clock.h"
-#include "original_travel.h"
+#include "extremis/world/door_control.h"
+#include "extremis/world/door_clock.h"
+#include "extremis/world/original_travel.h"
 #include <SDL3/SDL.h>
 #include <thread>
 #include <atomic>

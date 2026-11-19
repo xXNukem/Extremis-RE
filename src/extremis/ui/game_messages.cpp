@@ -1,0 +1,64 @@
+#include "extremis/ui/game_messages.h"
+#include <algorithm>
+#include <cmath>
+
+namespace messages {
+std::string_view text(Id id)
+{
+    switch (id) {
+    case Id::PortalLocked: return "ATTENTION:\r\n  IMPOSSIBLE TO OPEN PORTAL!\r\n  DISABLE THE SECURITY  ";
+    case Id::DoorUnlocked: return "VALID CARD..... DOOR UNLOCKING!";
+    case Id::CardRejected: return "IMPOSSIBLE TO UNLOCK THIS DOOR...";
+    case Id::AlreadyDisabled: return "THE SECURITY IS ALREADY DISABLE";
+    // English localization of EXE file 0x2193f; original wording is documented.
+    // Verbatim original strings at EXE file 0x21972 and 0x21990.
+    case Id::MapBlocked: return "ATTENTION: AN ALIEN IS NEAR!!";
+    case Id::MapUnavailable: return "ATTENTION:\r\n  ACCESS NOT POSSIBLE WITH CARD!!";
+    case Id::SelfDestruction: return "ATTENTION:\r\n0M 00S UNTIL EXPLOSION!";
+    case Id::EmptyPanel: return "THIS COMPARTMENT IS EMPTY!";
+    }
+    return {};
+}
+void Queue::post(Id id)
+{
+    post(id,text(id));
+}
+void Queue::postDestruction(std::int32_t remaining)
+{
+    std::string value(text(Id::SelfDestruction));
+    remaining=std::clamp(remaining,0,48000);
+    value[12]=char('0'+remaining/9600);
+    value[15]=char('0'+(remaining%9600)/1600);
+    value[16]=char('0'+(remaining%1600)/160);
+    post(Id::SelfDestruction,value);
+}
+void Queue::post(Id id,std::string_view value)
+{
+    if (value.empty()) return;
+    for (unsigned i = 0; i < size_; ++i) if (entries_[i].id == id) {
+        if(id==Id::SelfDestruction) entries_[i].text=value;
+        return;
+    }
+    if (size_ == entries_.size()) {
+        std::move(entries_.begin()+1,entries_.end(),entries_.begin());
+        --size_;
+    }
+    entries_[size_++] = {id,std::string(value),0};
+}
+void Queue::clear() { entries_={}; size_=0; }
+void Queue::update(double seconds, bool active)
+{
+    if (!active || !std::isfinite(seconds) || seconds <= 0) return;
+    for (unsigned i = 0; i < size_; ++i) entries_[i].age += std::min(seconds,5.0)*160;
+    while (size_ && entries_[0].age >= 800-1e-8) {
+        std::move(entries_.begin()+1,entries_.end(),entries_.begin());
+        entries_[--size_] = {};
+    }
+}
+std::array<std::string_view,5> Queue::visible() const
+{
+    std::array<std::string_view,5> result{};
+    for (unsigned i = 0; i < size_; ++i) result[i] = entries_[i].text;
+    return result;
+}
+}

@@ -6,7 +6,13 @@ The original game has a proper sound system. It's not a collection of WAV files 
 
 The current audio reconstruction identifies **30 original effects**, played as **5,000 Hz mono** data through a **four-voice** mixer. The engine reads the original resources at runtime and converts/mixes them into the output expected by SDL3.
 
-The interesting code lives in [`audio_data.cpp`](../../src/audio_data.cpp), [`audio_mixer.cpp`](../../src/audio_mixer.cpp), [`audio_player.cpp`](../../src/audio_player.cpp) and [`game_audio.cpp`](../../src/game_audio.cpp).
+The interesting code lives in [`audio_data.cpp`](../../src/extremis/resources/audio_data.cpp), [`audio_mixer.cpp`](../../src/extremis/audio/audio_mixer.cpp), [`audio_player.cpp`](../../src/platform/sdl/audio/audio_player.cpp) and [`game_audio.cpp`](../../src/extremis/audio/game_audio.cpp).
+
+Each game session owns a `GameAudio` that maps gameplay events to bank IDs and
+tracks which requests must be sustained or deduplicated. Its private SDL player
+owns the device stream, decoded bank and mixer. The mixer references the bank
+while producing PCM, and the player stops the callback before releasing the
+bank.
 
 | Sound/effect | Known reference | Note |
 | --- | --- | --- |

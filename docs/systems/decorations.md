@@ -77,7 +77,7 @@ The original draws animations directly into mutable bank images. Think of an old
 
 The patch source images live in the same bank, often **after the range of normal placed-object images**. Source index zero pixels are copied too — they're not filtered away as transparent in this operation. Column rotation is **cumulative**, applied once per relevant tick, and alternates processed columns by counter parity. Skipping intermediate ticks or composing once per visible object produces different pixels.
 
-[`src/sprite_scene.cpp`](../../src/sprite_scene.cpp) contains the original patch and rotation descriptors. The active local development work connects that compositor to a shared 16-bit step counter; see [Known differences](../reference/known-differences.md) before assuming those local changes are already in `main`.
+[`src/extremis/render/first_person/sprites/sprite_scene.cpp`](../../src/extremis/render/first_person/sprites/sprite_scene.cpp) contains the original patch and rotation descriptors. The active local development work connects that compositor to a shared 16-bit step counter; see [Known differences](../reference/known-differences.md) before assuming those local changes are already in `main`.
 
 ## OBJET6 and the clock that isn't 18 Hz
 
@@ -98,6 +98,8 @@ The original collision routine (`0x10db7–0x10ff6`) does **not** inspect sprite
 - Position is corrected against its previous position. Enemies also turn by **±80 original angular units** when the collision response applies.
 
 For example, an OBJET1 image 2 lamp can have radius 200 yet remain walk-through if its instance type is `0x4002` instead of a blocking `0x5xxx` form. **A size in the table does not automatically mean it's solid.** The eleven falling sprites all have zero half-extent.
+
+The player checks the source sector before resolving walls. Enemies resolve walls first and check the destination sector, retaining the previous local XY words from the actor record when selecting the collision face. The port now preserves this distinction. The campaign inventory and exact caller evidence are listed in [OBJET collision and enemy sector transitions](../reference/exe/objet-collision.md).
 
 ### Original collision half-extents
 
@@ -120,7 +122,7 @@ The data came from the original executable tables; it doesn't authorize guessing
 
 ## Reconstruction status and places to check
 
-The published core includes [`sprite_scene.cpp`](../../src/sprite_scene.cpp), [`sprite_bank.cpp`](../../src/sprite_bank.cpp) and [`sprite_renderer.cpp`](../../src/sprite_renderer.cpp). Player and enemy OBJET collision are implemented in `objet_collision.cpp`; `enemy_system.cpp` applies it to normal and MONS5 movement, with angular correction covered by `enemy_tests::objetCollisions`. OBJET6 visibility eligibility and exact animation cadence remain open.
+The published core includes [`sprite_scene.cpp`](../../src/extremis/render/first_person/sprites/sprite_scene.cpp), [`sprite_bank.cpp`](../../src/extremis/resources/sprite_bank.cpp) and [`sprite_renderer.cpp`](../../src/vortex/render/raster/sprite_renderer.cpp). Player and enemy OBJET collision are implemented in `objet_collision.cpp`; `enemy_system.cpp` applies it to normal and MONS5 movement, with angular correction covered by `enemy_tests::objetCollisions`. OBJET6 visibility eligibility and exact animation cadence remain open.
 
 **Original references:** OBJET bank dispatch `0x7d00–0x7db4`, height table reads near `0x11f83`, vertical projection `0x11ff2–0x12007`, patch/column routines around `0x14d1f–0x1517e`, collision `0x10db7–0x11028`, individual OBJET6 update `0x11e79–0x11ea5`.
 

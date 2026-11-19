@@ -1,0 +1,29 @@
+add_library(original_intro STATIC original_intro.cpp original_presentation.cpp)
+target_link_libraries(original_intro PUBLIC original_hud)
+target_compile_features(original_intro PUBLIC cxx_std_17)
+set_target_properties(original_intro PROPERTIES CXX_EXTENSIONS NO)
+
+add_library(original_ending STATIC original_ending.cpp)
+target_link_libraries(original_ending PUBLIC original_hud)
+target_compile_features(original_ending PUBLIC cxx_std_17)
+set_target_properties(original_ending PROPERTIES CXX_EXTENSIONS NO)
+
+add_library(original_ending_player STATIC original_ending_player.cpp)
+target_link_libraries(original_ending_player PUBLIC original_ending SDL3::SDL3 PRIVATE sdl_video sdl_audio)
+target_compile_features(original_ending_player PUBLIC cxx_std_17)
+set_target_properties(original_ending_player PROPERTIES CXX_EXTENSIONS NO)
+
+add_library(original_elevator STATIC original_elevator.cpp original_elevator_player.cpp)
+target_link_libraries(original_elevator PUBLIC original_hud game_audio SDL3::SDL3)
+target_compile_features(original_elevator PUBLIC cxx_std_17)
+set_target_properties(original_elevator PROPERTIES CXX_EXTENSIONS NO)
+
+# Standalone shuttle presentation has no campaign dependency or dispatch.
+add_library(original_shuttle STATIC original_shuttle.cpp original_shuttle_player.cpp)
+target_link_libraries(original_shuttle PUBLIC original_hud audio_data SDL3::SDL3 PRIVATE sdl_video)
+target_compile_features(original_shuttle PUBLIC cxx_std_17)
+set_target_properties(original_shuttle PROPERTIES CXX_EXTENSIONS NO)
+
+add_library(level22_communication STATIC level22_communication.cpp level22_communication_player.cpp)
+target_link_libraries(level22_communication PUBLIC original_hud game_lab SDL3::SDL3)
+target_compile_features(level22_communication PUBLIC cxx_std_17)

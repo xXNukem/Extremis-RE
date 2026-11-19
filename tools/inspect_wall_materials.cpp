@@ -1,4 +1,4 @@
-#include "game_lab.h"
+#include "extremis/resources/game_lab.h"
 
 #include <iomanip>
 #include <iostream>

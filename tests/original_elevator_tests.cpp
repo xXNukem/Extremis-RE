@@ -1,7 +1,7 @@
-#include "original_elevator.h"
-#include "original_elevator_player.h"
-#include "game_audio.h"
-#include "audio_mixer.h"
+#include "extremis/cinematics/original_elevator.h"
+#include "extremis/cinematics/original_elevator_player.h"
+#include "extremis/audio/game_audio.h"
+#include "extremis/audio/audio_mixer.h"
 #include <SDL3/SDL.h>
 #include <iostream>
 #include <stdexcept>
@@ -54,7 +54,8 @@ void composition() {
 void originals(const char* directory) {
     auto r=loadResources(directory);
     for(int d:{1,3,-1,-3}) {Presentation p(r,d);for(int i=0;i<1000 && p.phase()!=Phase::Done;++i)p.step();check(p.phase()==Phase::Done,"Real resources failed");}
-    auto bank=audio::loadBank(std::filesystem::path(directory)/"BANK.DSS");audio::Mixer mixer(bank);
+    vortex::audio::Mixer mixer(audio::mixerConfig);
+    mixer.setSamples(audio::mixerSamples(audio::loadBank(std::filesystem::path(directory)/"BANK.DSS")));
     check(mixer.play(11),"Motor play failed");std::vector<float> pcm(20000);mixer.render(pcm.data(),pcm.size());
     check(mixer.playing(11) && mixer.statistics(11)->wraps>0,"BANK11 must loop natively");mixer.clear();
     check(!mixer.playing(11),"Motor failed to stop");

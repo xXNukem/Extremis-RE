@@ -1,5 +1,5 @@
-#include "weapon_fire.h"
-#include "sprite_renderer.h"
+#include "extremis/gameplay/player/weapon_fire.h"
+#include "vortex/render/first_person/sprites/sprite_renderer.h"
 #include <cmath>
 #include <fstream>
 #include <iostream>
@@ -26,7 +26,7 @@ void triggersAndAmmo()
         }
         check(weaponDefinitions[id].automatic?count>1:count==1,"Semi/automatic held-button rule differs");
         check(inventory.ammunition()==100-int(count),"Held fire duplicated or skipped ammo consumption");
-        fire.update({0,0,3.141592653589793},{},inventory,{},true,0); // Retire prior shots, not a full-pool re-press.
+        fire.update({0,0,3.141592653589793},{},inventory,{},true,1./60); // Retire prior shots, not a full-pool re-press.
         for (int i=0;i<100;++i) fire.update(camera,{},inventory,{},true,0);
         check(fire.update(camera,{},inventory,{true,true},true,0)==FireResult::Fired,"Release/repress failed");
     }
@@ -67,7 +67,7 @@ void projectileLifecycle()
     for(int i=0;i<4 && result!=FireResult::Full;++i)
         result=fire.update({}, {},inventory,{true,false},true,0);
     check(result==FireResult::Full && inventory.ammunition()==80,"Full pool consumed ammo or admitted a 21st projectile");
-    fire.update({0,0,3.141592653589793}, {},inventory,{},true,0);
+    fire.update({0,0,3.141592653589793}, {},inventory,{},true,1./60);
     check(fire.activeProjectiles()==0,"Turning away did not release offscreen/behind projectiles");
     check(fire.update({}, {},inventory,{true,true},true,0)==FireResult::Fired,"Released slot could not be reused");
 
@@ -79,16 +79,84 @@ void projectileLifecycle()
         for(unsigned phase=1;phase<=5;++phase) {
             check(impact.scene().objects.size()==1 &&
                   impact.scene().objects[0].image==id*4+weaponDefinitions[id].stages[phase],"Wrong original BALLE impact frame");
-            if(phase<5) impact.update({},wall,ammo,{},true,0);
+            if(phase<5) impact.update({},wall,ammo,{},true,1./60);
         }
         check(impact.activeProjectiles()==0,"Impact left an immortal occupied slot");
-        impact.update({},wall,ammo,{},true,0);
+        impact.update({},wall,ammo,{},true,1./60);
         check(impact.scene().objects.empty(),"Finished effect remained in sprite scene");
     }
     WeaponFire outbound; Inventory ammo;
     outbound.update({}, {},ammo,{true,true},true,0);
-    for(int i=0;i<500;++i) outbound.update({}, {},ammo,{},true,0);
+    for(int i=0;i<500;++i) outbound.update({}, {},ammo,{},true,1./60);
     check(outbound.activeProjectiles()==0,"Unbounded map flight never released its word-range slot");
+}
+void elapsedShotCadence()
+{
+    const collision::World wall{{{200,-1000},{200,1000}}};
+    for (int fps:{30,60,120,144,2400}) {
+        Inventory ammo;
+        WeaponFire fire;
+        fire.update({},wall,ammo,{true,true},true,0);
+        const auto sample=[&](double seconds) {
+            const auto& objects=fire.scene().objects;
+            const auto step=unsigned(seconds*60+1e-8);
+            check(fire.firing()==(step==0),"Flash did not last one simulation step");
+            if (step>=7) {
+                check(objects.empty(),"Impact outlasted five simulation steps");
+                return;
+            }
+            check(objects.size()==1,"Timed shot lost its sprite");
+            const auto& object=objects.front();
+            const auto phase=step<2 ? 0 : step-1;
+            check(object.image==weaponDefinitions[0].stages[phase],"Wrong impact phase at elapsed time");
+            const double expectedX=step<2 ? 80.*(step+1) : 200.-collision::Settings{}.skin;
+            check(std::abs(object.x-expectedX)<1e-8,"Swept projectile moved or collided at the wrong time");
+        };
+        for (int frame=0;frame<=fps/5;++frame) {
+            if (frame) fire.update({},wall,ammo,{},true,1./fps);
+            for (int duplicate=0;duplicate<3;++duplicate) fire.update({},wall,ammo,{},true,0);
+            sample(double(frame)/fps);
+        }
+        check(ammo.ammunition()==499,"Timing updates changed ammunition");
+    }
+
+    Inventory ammo;
+    WeaponFire paused;
+    paused.update({},wall,ammo,{true,true},true,0);
+    paused.update({},wall,ammo,{},true,1./120);
+    paused.update({},wall,ammo,{},false,10);
+    paused.update({},wall,ammo,{},true,10);
+    check(paused.firing() && paused.scene().objects.front().x==80,"Resume consumed paused time");
+    paused.update({},wall,ammo,{},true,1./120);
+    check(!paused.firing() && paused.scene().objects.front().x==160,"Resume lost fractional active time");
+    paused.update({},wall,ammo,{},true,1./60);
+    check(paused.scene().objects.front().wallImpact,"Expected wall impact on third swept step");
+    paused.update({},wall,ammo,{},true,1./120);
+    paused.update({},wall,ammo,{},false,10);
+    paused.update({},wall,ammo,{},true,10);
+    check(paused.scene().objects.front().image==1,"Paused impact advanced");
+    paused.update({},wall,ammo,{},true,1./120);
+    check(paused.scene().objects.front().image==2,"Resumed impact lost its cadence");
+
+    WeaponFire stalled;
+    Inventory stalledAmmo;
+    stalled.update({}, {},stalledAmmo,{true,true},true,0);
+    stalled.update({}, {},stalledAmmo,{},true,10);
+    check(stalled.scene().objects.front().x==9*80,"Long stall exceeded eight catch-up steps");
+    stalled.update({}, {},stalledAmmo,{},true,0);
+    check(stalled.scene().objects.front().x==9*80,"Long stall left a backlog for a zero delta");
+
+    WeaponFire burst;
+    Inventory burstAmmo;
+    equip(burstAmmo,5,10);
+    burst.update({}, {},burstAmmo,{true,true},true,0);
+    while (burst.cooldown()) burst.update({}, {},burstAmmo,{true,false},true,0);
+    check(burst.update({}, {},burstAmmo,{true,false},true,0)==FireResult::Fired &&
+          burst.activeProjectiles()==2 && burst.scene().objects.size()==1,
+          "A concurrent shot advanced before the next simulation tick");
+    burst.update({}, {},burstAmmo,{},true,1./60);
+    check(burst.scene().objects.size()==2 && burst.scene().objects[0].x==200 &&
+          burst.scene().objects[1].x==100,"Shared tick did not advance each projectile once");
 }
 void exchangeAndBlocking()
 {
@@ -123,7 +191,7 @@ void muzzleAndImpactProjection()
         const auto offset=d.muzzle[d.alternating?1:0];
         check(fire.scene().objects.size()==1,"Missing muzzle projectile");
         const auto& point=fire.scene().objects[0];
-        const auto rect=sprites::project(point,image,camera,{320,150,160/std::tan(35*pi/180),camera.viewHeight()});
+        const auto rect=vortex::sprites::project(point,image,camera.renderPose(),{320,150,160/std::tan(35*pi/180),camera.viewHeight()});
         check(rect && std::abs(rect->left+rect->width/5*2-(d.gunX+offset[0]+flashWidth[id]*.5))<1e-8 &&
               std::abs(rect->top+rect->height/9*3-(d.gunY+5+offset[1]+flashHeight[id]*.5))<1e-8,
               "Projectile does not originate at original firing muzzle");
@@ -132,10 +200,10 @@ void muzzleAndImpactProjection()
         const collision::Point center{camera.x+dx*200,camera.y+dy*200};
         const collision::World wall{{{center.x-dy*100,center.y+dx*100},{center.x+dy*100,center.y-dx*100}}};
         impact.update(camera,wall,ammo,{true,true},true,0);
-        for(int step=0;step<5;++step) impact.update(camera,wall,ammo,{},true,0);
+        for(int step=0;step<5;++step) impact.update(camera,wall,ammo,{},true,1./60);
         check(!impact.scene().objects.empty(),"Impact projection test has no visible impact");
         for(const auto& point:impact.scene().objects) {
-            const auto rect=sprites::project(point,image,camera,{320,150,200,camera.viewHeight()});
+            const auto rect=vortex::sprites::project(point,image,camera.renderPose(),{320,150,200,camera.viewHeight()});
             check(rect && std::abs(rect->top+rect->height/9*3-75)<1e-8 &&
                   std::abs(rect->left+rect->width/5*2-160)<1e-8,"Impact projection does not align with reticle");
         }
@@ -170,7 +238,7 @@ void originals(const std::filesystem::path& directory)
 int main(int argc,char** argv)
 {
     try {
-        triggersAndAmmo();clockAndCooldown();projectileLifecycle();exchangeAndBlocking();muzzleAndImpactProjection();
+        elapsedShotCadence();triggersAndAmmo();clockAndCooldown();projectileLifecycle();exchangeAndBlocking();muzzleAndImpactProjection();
         if(argc==2) originals(argv[1]);
         std::cout<<"Equipped weapon fire, original clock, 20-slot lifecycle, gating and exchange passed.\n";
     } catch(const std::exception& error) {std::cerr<<error.what()<<'\n';return 1;}

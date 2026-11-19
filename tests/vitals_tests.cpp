@@ -1,4 +1,4 @@
-#include "player_vitals.h"
+#include "extremis/gameplay/player/player_vitals.h"
 
 #include <climits>
 #include <cmath>

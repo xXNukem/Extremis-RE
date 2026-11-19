@@ -1,9 +1,9 @@
-#include "original_interactions.h"
-#include "original_travel.h"
-#include "item_session.h"
-#include "survival_session.h"
-#include "game_audio.h"
-#include "door_control.h"
+#include "extremis/ui/original_interactions.h"
+#include "extremis/world/original_travel.h"
+#include "app/session/item_session.h"
+#include "extremis/gameplay/player/survival_session.h"
+#include "extremis/audio/game_audio.h"
+#include "extremis/world/door_control.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <cmath>
@@ -504,6 +504,12 @@ void allPanelsLab(const char* path)
             s.control.resetLevel();
             s.obstacles=s.control.movementWorld();
             check(world.target(s.camera,s.obstacles)==index,"Original panel occluded or unreachable");
+            auto away=s.camera;
+            away.angle+=std::acos(-1.);
+            check(world.target(away,s.obstacles)!=index,"Original panel accepted a backward heading");
+            away.x-=100*dy/length;
+            away.y+=100*dx/length;
+            check(world.target(away,s.obstacles)!=index,"Original panel accepted its unmarked reverse face");
             for(const auto& wall:s.obstacles)
                 check(!collision::overlaps(wall,{s.camera.x,s.camera.y},30),"Panel test pose inside collision");
             const auto before=s.player.inventory().cards();

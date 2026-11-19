@@ -30,7 +30,7 @@ This makes the optimization target obvious: **moving the final texture to a GPU 
 
 ## Where to go next
 
-The current code uses a software plane path in [`plane_renderer.cpp`](../../src/plane_renderer.cpp) and scene composition in [`first_person_view.cpp`](../../src/first_person_view.cpp). Possible future work includes reducing redundant plane sampling, better scaling and evaluating a GPU-backed plane implementation. None should be adopted without a before/after picture comparison and a reproducible benchmark.
+The current code uses a software plane path in [`plane_renderer.cpp`](../../src/vortex/render/first_person/planes/plane_renderer.cpp) and scene composition in [`frame_composition.cpp`](../../src/extremis/ui/frame_composition.cpp). Possible future work includes reducing redundant plane sampling, better scaling and evaluating a GPU-backed plane implementation. None should be adopted without a before/after picture comparison and a reproducible benchmark.
 
 The original raw CSV measurements are preserved in [`data/`](data/) for anyone who wants to check the numbers. Debug logging and other transient run logs have not been included in the live documentation set.
 

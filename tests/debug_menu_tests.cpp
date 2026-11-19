@@ -1,5 +1,5 @@
-#include "debug_menu.h"
-#include "original_travel.h"
+#include "app/diagnostics/debug_menu.h"
+#include "extremis/world/original_travel.h"
 #include <iostream>
 #include <stdexcept>
 #include <set>

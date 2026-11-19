@@ -1,6 +1,6 @@
-#include "original_shuttle.h"
-#include "audio_data.h"
-#include "original_shuttle_player.h"
+#include "extremis/cinematics/original_shuttle.h"
+#include "extremis/resources/audio_data.h"
+#include "extremis/cinematics/original_shuttle_player.h"
 #include <SDL3/SDL.h>
 #include <iostream>
 #include <stdexcept>

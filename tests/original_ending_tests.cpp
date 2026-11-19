@@ -1,9 +1,9 @@
-#include "original_ending.h"
-#include "victory_session.h"
-#include "player_death.h"
-#include "audio_data.h"
+#include "extremis/cinematics/original_ending.h"
+#include "app/session/victory_session.h"
+#include "extremis/cinematics/player_death.h"
+#include "extremis/resources/audio_data.h"
 #ifdef EXTREMIS_ENDING_PREVIEW
-#include "original_ending_player.h"
+#include "extremis/cinematics/original_ending_player.h"
 #include <SDL3/SDL.h>
 #endif
 #include <algorithm>

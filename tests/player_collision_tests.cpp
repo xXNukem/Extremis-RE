@@ -1,5 +1,5 @@
-#include "player_control.h"
-#include "objet_collision.h"
+#include "extremis/gameplay/player/player_control.h"
+#include "extremis/world/objet_collision.h"
 
 #include <algorithm>
 #include <cmath>
@@ -142,6 +142,17 @@ void testObjets()
     check(resolve({1500,2600},{1500,2500}).y == 2580,"OBJET north collision failed");
     const auto corner = resolve({1400,2400},{1500,2500});
     check(corner.x == 1500 && corner.y == 2420,"OBJET corner did not prioritize Y");
+    const auto fractionalContact=resolve({1400,2499.25},{1420.25,2500.75});
+    check(fractionalContact.x==1420 && fractionalContact.y==2500.75,
+          "OBJET clamped the fractional tangential component");
+    const auto tangent=resolve({1420,2550.25},{1420,2551.75});
+    check(tangent.x==1420 && tangent.y==2551.75,"OBJET stopped tangential movement");
+    level.sectors[0].vertices.push_back({500,350});
+    level.sectors[0].entitiesA.push_back({1,0x5004,0,0});
+    const auto multiple=resolve({1500,2200},{1500.25,2500});
+    check(multiple.x==1500.25 && multiple.y==2270,
+          "Second OBJET did not read the corrected candidate in record order");
+    level.sectors[0]=sector;
     check(resolve({1400,2500},{1580,2500}).x == 1580,"Upper X bound not excluded");
     check(resolve({1600,2500},{1420,2500}).x == 1580,"Lower X bound not included");
     check(resolve({1500,2400},{1500,2580}).y == 2580,"Upper Y bound not excluded");
@@ -157,10 +168,11 @@ void testObjets()
     level.sectors[0] = sector;
     sprites::Scene scene;
     scene.objetBank = 1;
-    scene.objects.push_back({1500,2500,256,255,21,0x5004,42,0,0});
+    scene.objects.push_back({1500,2500,256,255,21});
+    scene.placements.push_back({0,0,0x5004,42});
     check(collision::constrainObjets(level,0,{1300,2500},{1400,2500},&scene).x == 1350,
           "OBJET collision ignored live image extent");
-    scene.objects[0].sourceSector = 1;
+    scene.placements[0].sourceSector = 1;
     check(collision::constrainObjets(level,0,{1300,2500},{1400,2500},&scene).x == 1400,
           "OBJET live image matched wrong sector");
     for (unsigned bank = 1; bank <= 10; ++bank)
@@ -188,6 +200,12 @@ void testObjets()
         player::update(moving,input,0.5,{},nullptr,true,{},constraint);
         check(moving.x == 1420 && moving.postureHeight == 100,"OBJET broke running/crouching");
     }
+    for (double dt : {0.001,0.004,0.016,0.033}) {
+        Camera sliding{1420,2480.25,0};
+        player::update(sliding,{1,-1},dt,{},nullptr,true,{},constraint);
+        check(sliding.x==1420 && std::abs(sliding.y-(2480.25+300*dt/std::sqrt(2.0)))<1e-9,
+              "OBJET collision lost fractional sliding at an alternate timestep");
+    }
     Camera recoil{1590,2500,0};
     player::recoil(recoil,{},body,constraint);
     check(recoil.x == 1580 && recoil.y == 2500 && recoil.angle == 0,
@@ -197,21 +215,57 @@ void testObjets()
 void originalObjets(const std::filesystem::path& path)
 {
     const auto banks = game_lab::loadBankTable(path);
-    std::size_t total = 0;
+    std::size_t total = 0, placements = 0;
     for (const auto& entry : banks) {
         const auto level = game_lab::loadLevel(path,entry.zoneIndex).level;
         std::vector<unsigned> indices(256);
         for (const auto& sector : level.sectors) for (const auto& entity : sector.entitiesA) {
-            if ((entity.type & 0x2000) || !(entity.type & 0x1000) ||
-                !collision::objetExtent(level.objetBank,entity.type&255)) continue;
-            ++indices[entity.type&255]; ++total;
+            ++placements;
+            const auto extent=collision::objetExtent(level.objetBank,entity.type&255);
+            const bool solid=(entity.type&0x3000)==0x1000 && extent>0;
+            game_lab::Level isolated{};
+            isolated.objetBank=level.objetBank;
+            isolated.sectors.resize(1);
+            auto& objectSector=isolated.sectors.front();
+            objectSector.gx=sector.gx; objectSector.gy=sector.gy;
+            objectSector.vertices={sector.vertices[entity.vertex]};
+            objectSector.entitiesA={{0,entity.type,entity.param1,entity.param2}};
+            const Point center{double(sector.gx)+objectSector.vertices[0].x,
+                               double(sector.gy)+objectSector.vertices[0].y};
+            const Point before{center.x-extent-1,center.y};
+            const Point expected{solid?center.x-extent:center.x,center.y};
+            const auto player=collision::constrainObjets(isolated,0,before,center);
+            game_lab::EnemyRecord enemy{};
+            // Use the other side to keep the local coordinate within unsigned range.
+            enemy.x=std::uint16_t(objectSector.vertices[0].x+extent+1);
+            enemy.y=objectSector.vertices[0].y;
+            enemy.angle=360;
+            const auto moved=collision::constrainEnemyObjets(isolated,0,enemy,center,nullptr);
+            check(player.x==expected.x && player.y==expected.y &&
+                  moved.x==(solid?center.x+extent:center.x) && moved.y==center.y &&
+                  enemy.angle==(solid?440:360),"Original OBJET placement collision differs from flags and extent");
+            if (solid) { ++indices[entity.type&255]; ++total; }
         }
         std::cout << "Level " << entry.zoneIndex+1 << " OBJET" << level.objetBank << " solid index:count";
         for (unsigned i = 0; i < indices.size(); ++i) if (indices[i]) std::cout << ' ' << i << ':' << indices[i];
         std::cout << '\n';
     }
-    check(total > 0,"No effective original OBJET obstacles found");
-    std::cout << "Effective OBJET obstacles: " << total << '\n';
+    check(banks.size()==30 && placements==971 && total==732,"Original OBJET inventory changed");
+    std::cout << "Effective OBJET obstacles: " << total << " / " << placements << '\n';
+
+    const auto level22=game_lab::loadLevel(path,21).level;
+    const Point start{11250,2090};
+    const auto source=collision::locate(level22,start,10);
+    const auto candidate=collision::move(collision::staticWorld(level22),start,{0,30});
+    const auto destination=collision::locate(level22,candidate,10);
+    check(source && source->sector==10 && destination && destination->sector==11 &&
+          candidate.x==11250 && candidate.y==2120,"Level 22 open-portal fixture changed");
+    game_lab::EnemyRecord enemy{};
+    enemy.sector=10;
+    enemy.x=450; enemy.y=1090; enemy.angle=180;
+    const auto corrected=collision::constrainEnemyObjets(level22,destination->sector,enemy,candidate,nullptr);
+    check(corrected.x==11250 && corrected.y==2500 && enemy.angle==260,
+          "Level 22 OBJET selected the wrong face after the sector change");
 }
 } // namespace
 

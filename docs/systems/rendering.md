@@ -27,7 +27,29 @@ GAME.LAB sector walls + door state
 
 The important bit is that SDL3 is mainly the **modern presentation and input layer**. Calculating the scene remains CPU-side, and that has implications for performance. See [Performance](../reference/performance.md).
 
+## Video settings and applied mode
+
+The application owns the video state for the lifetime of its menu and first-person renderer. The menu retains the aspect, fisheye option and selected mode across openings. It derives the render scale, MAX dimensions and requested selector size from the current list of display modes. A failed SDL mode change leaves the last published render mode in place, while an aspect change still updates the retained preference.
+
+`FirstPersonRenderer` borrows only the published render settings. The requested selector size is reported in the resize diagnostic alongside the actual SDL drawable size and the internal 3D size. The renderer can also use immutable defaults when a caller has no video menu.
+
+The renderer owns the world, logical HUD and extended composition buffers. The CPU composition code selects the upload buffer, extends the HUD using the selected scaling mode and supplies the display aspect. The SDL video module owns the streaming texture operations and fits the composed image to the drawable. Neither path requires an extra framebuffer copy.
+
+## Vortex CPU raster modules
+
+The `Vortex::CPU` target builds wall, plane and sprite rasterizers without SDL or Extremis dependencies. The port supplies the camera pose and effective eye height, prepared texture banks, instances, and the existing color, depth and coverage buffers. Animation and resource decoding stay in Extremis. The [sprite renderer](../../src/vortex/render/first_person/sprites/sprite_renderer.cpp) receives contiguous instances with pose, image index, explicit horizontal and vertical flips, and a wall-impact flag. The Extremis adapter decodes OBJET and MONS flags. OBJET placement metadata stays aligned with the render objects in the game scene so collision can find the current animated image. The enemy system owns its render-slot-to-record mapping for targeting and collision.
+
+The SOL resource adapter supplies a 400-unit repeat period to the [plane renderer](../../src/vortex/render/first_person/planes/plane_renderer.cpp). Plane sampling configures its 128×128 fast paths once per render. Both paths use the original limit of 320,000 texels from the origin. Smaller repeat periods and coordinates outside that range use modulo sampling. Extremis configures Vortex postprocessing with a VGA pixel aspect of `5/6` and distortion strength of `0.20`. The effect implementation reuses its lookup and destination buffer.
+
+The [wall raster](../../src/vortex/render/first_person/walls/wall_raster.cpp) accepts a projected column, a resolved texture column and a fallback color. The returned half-open row range gives the plane pass the exact coverage produced by half-pixel clipping. Vortex retains the 74-row shade cache. The [wall adapter](../../src/extremis/render/first_person/materials/wall_columns.cpp) selects the original materials and limits DALLE frames to half their width. Extremis also keeps its SDL line fallback.
+
 ## Static wall raycasting in the port
+
+Vortex exposes the prepared geometry and grid contracts in `include/vortex/render/first_person/raycast/`. The implementation in [`raycast.cpp`](../../src/vortex/render/first_person/raycast/raycast.cpp) keeps intersection, DDA, hit selection and the linear fallback in one translation unit so they can inline together. The indexed path keeps its determinant and endpoint checks in the candidate loop. An attempted shared intersector increased stack spills and slowed both paths in Debug, so the two call shapes retain their existing implementations and use the same tolerance constants. Only the grid constructor adapter is a template. It accepts arbitrary caller enumerators synchronously through a short-lived visitor, with no staging copy of the segment list or callback during traversal.
+
+The Vortex grid indexes start and end points supplied in order by the port. Per-frame prepared walls use that same order and origin. Vortex replays accepted hits by index before checking the caller's filtered dynamic surfaces. Extremis owns the level identity, world-coordinate conversion, portal filtering, door phase and facing rules, and field of view. The ordered geometry must be reindexed on replacement, even when the level object keeps its address.
+
+The port prepares geometry and owns the level-aware index in [`ray_scene.cpp`](../../src/extremis/render/first_person/scene/ray_scene.cpp). Spawn selection and the unprepared queries live in [`camera_start.cpp`](../../src/extremis/render/first_person/camera/camera_start.cpp) and [`ray_queries.cpp`](../../src/extremis/render/first_person/scene/ray_queries.cpp). The benchmarks use the same private projection and wall-column headers as production and link the render implementation without the in-game Debug profiler.
 
 The renderer builds a 512-unit grid at level load for levels with at least 64 static walls. Padded segment bounds cover cell edges, corners and the endpoint tolerance of the prepared intersector. DDA intersects each static ID once, on first encounter, and can stop once both next grid crossings are beyond a conservative bound derived from a static impact. Accepted intersections are replayed in original sector/wall order, preserving the distance and facing tie rules. A ray without a static hit continues to the grid exit. The prepared scan remains available for small scenes and unsupported grid inputs. Doors retain their independent prepared scan after static selection, using the current animation phase. The index is rebuilt when the active geometry is replaced.
 
@@ -145,7 +167,7 @@ A normal modern row-major image buffer wants `y * width + x`, so the loader tran
 
 The visible material index is based on `wall.type & 0x00ff`. The original drawing API has a one-based interface internally, but it cancels that adjustment before final DALLE addressing. Don't “fix” the zero-based texture selection because it looks unusual.
 
-The loader is [`src/texture_bank.cpp`](../../src/texture_bank.cpp); wall selection and projection pass through [`wall_material.cpp`](../../src/wall_material.cpp) and [`first_person_view.cpp`](../../src/first_person_view.cpp).
+The loader is [`src/extremis/resources/texture_bank.cpp`](../../src/extremis/resources/texture_bank.cpp); wall selection and projection pass through [`wall_material.cpp`](../../src/extremis/render/first_person/materials/wall_material.cpp) and [`first_person_view.cpp`](../../src/extremis/render/first_person/presentation/first_person_view.cpp).
 
 ## PAL: six-bit VGA colours
 
@@ -262,7 +284,7 @@ The verification compared pre-distortion colour, Z bytes, post-distortion colour
 
 The original ADALLE bank has **20 images**, which are copied into particular DALLE textures as patches. Recovered animated examples in DALLE1 include materials **11, 12 and 13**. The animation does **not** mean cycling through neighbouring full wall textures; it updates regions of the material in memory.
 
-The port's step timing for those materials is an adaptation, not a calibrated reproduction of DOS wall-animation seconds. The implementation is in [`wall_animation.cpp`](../../src/wall_animation.cpp).
+The port's step timing for those materials is an adaptation, not a calibrated reproduction of DOS wall-animation seconds. The implementation is in [`wall_animation.cpp`](../../src/extremis/render/first_person/materials/wall_animation.cpp).
 
 ## Why doors are a special case
 

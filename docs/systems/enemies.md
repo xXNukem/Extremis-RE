@@ -44,11 +44,13 @@ The DOS *connected-sector* list is **not a raycast visibility check**. It is a t
 
 A closed door can prevent activation. Start opening it and the connection becomes active immediately, before the visible door has moved. A mode-2 enemy behind you may then wake up. That's original behaviour, not cheating.
 
-The same sector set also determines whether an **unremoved alien blocks the map**, producing `ATTENTION: AN ALIEN IS NEAR!!`. The port's shared implementation is in [`door.cpp`](../../src/door.cpp), used by [`enemy_system.cpp`](../../src/enemy_system.cpp).
+The same sector set also determines whether an **unremoved alien blocks the map**, producing `ATTENTION: AN ALIEN IS NEAR!!`. The port's shared implementation is in [`door.cpp`](../../src/extremis/world/door.cpp), used by [`enemy_system.cpp`](../../src/extremis/gameplay/enemies/enemy_system.cpp).
 
 ## Navigation: use the links you're given
 
 Enemies traverse the sector/polygon network in `GAME.LAB`. The port uses the original route links and checks dynamic doors. In recorded tests, modes 3/4 could not cross a closed passage, crossed after it opened, and didn't invent a route where there wasn't one.
+
+Normal enemies and MONS5 now apply the traced door clearance before resolving destination-sector decorations. This keeps approaching sprites away from the door plane even when viewed obliquely. [Door clearance instructions and overlap reproduction](../reference/exe/doors.md#enemy-clearance-and-the-sprite-plane).
 
 Mode 1 has a very different loop: chase locally, then work back toward home. This is why doorway combat can feel strange if you're used to newer FPS enemies. **Fidelity sometimes means keeping the odd bits.**
 
@@ -77,7 +79,7 @@ MONS images are not a simple flipbook you advance from frame zero to the end. Fo
 
 Another lovely quirk: a horizontally flipped sprite does **not** necessarily have its SPT bits flipped again. Tests compared the original mask interpretation across multiple frames, directions and camera heights rather than replacing it with an approximate rectangle.
 
-In the port, [`enemy_system.cpp`](../../src/enemy_system.cpp) owns enemy state and damage, [`enemy_navigation.cpp`](../../src/enemy_navigation.cpp) handles route movement, and [`enemy_effects.cpp`](../../src/enemy_effects.cpp) handles the special death/fragment effects.
+In the port, [`enemy_system.cpp`](../../src/extremis/gameplay/enemies/enemy_system.cpp) owns enemy state and damage, [`enemy_navigation.cpp`](../../src/extremis/gameplay/enemies/enemy_navigation.cpp) handles route movement, and [`enemy_effects.cpp`](../../src/extremis/gameplay/enemies/enemy_effects.cpp) handles the special death/fragment effects.
 
 ## When an alien hits back
 
