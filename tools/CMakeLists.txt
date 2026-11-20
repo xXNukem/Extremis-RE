@@ -33,3 +33,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_executable(shuttle_preview shuttle_preview.cpp)
     target_link_libraries(shuttle_preview PRIVATE original_shuttle)
 endif()
+
+add_executable(level_render_benchmark EXCLUDE_FROM_ALL level_render_benchmark.cpp)
+target_include_directories(level_render_benchmark PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/extremis/render/first_person/presentation
+    ${PROJECT_SOURCE_DIR}/src/extremis/render/first_person/scene)
+target_compile_definitions(level_render_benchmark PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
+target_link_libraries(level_render_benchmark PRIVATE extremis_render enemies)

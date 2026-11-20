@@ -8,7 +8,7 @@ The original world is arranged in sectors. The player has local coordinates with
 
 The verified new-game start is **level 1, sector 0, local `(300, 320)`, angle `180/720`**. With the sector's `(3200, 0)` origin, that gives `(3500, 320)` in world coordinates.
 
-The core movement logic is in [`player_control.cpp`](../../src/extremis/gameplay/player/player_control.cpp); SDL keyboard and mouse capture belong in [`player_input.cpp`](../../src/platform/sdl/input/player_input.cpp). Keeping them separate makes movement testable without starting a window.
+[`player_control.cpp`](../../src/extremis/gameplay/player/player_control.cpp) implements movement independently of SDL. Vortex reads the keyboard and mouse and manages relative capture through `Vortex::InputSDL`. [`player_input.cpp`](../../src/platform/sdl/input/player_input.cpp) maps those device states to movement and firing, and the session decides when gameplay receives input.
 
 ## Controls in the port
 

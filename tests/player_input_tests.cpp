@@ -6,6 +6,7 @@
 
 #include <SDL3/SDL.h>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 
 namespace {
@@ -98,6 +99,80 @@ void testMapOwnsQueuedActions()
     items.update(&camera,true,walls,player,audio,&control);
     check(items.modal() && !map.modal(),"Map opened over pending inventory");
 }
+void testPlayerDeviceTransitions()
+{
+    const std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> window(
+        SDL_CreateWindow("PlayerInput test", 64, 64, 0), SDL_DestroyWindow);
+    check(window != nullptr, "Cannot create input test window");
+    SDL_PumpEvents();
+    check(SDL_GetKeyboardFocus() == window.get(), "Input test window has no keyboard focus");
+
+    const collision::World walls;
+    const std::vector<doors::Door> doors;
+    game_lab::Level level;
+    DoorControl control(walls, doors, level);
+    Camera camera{};
+    constexpr double tick = 1.0 / 18;
+    {
+        PlayerInput input(window.get(), control);
+        SDL_Event mouse{};
+        mouse.button.windowID = SDL_GetWindowID(window.get());
+        mouse.button.button = SDL_BUTTON_LEFT;
+        check(input.update(&camera, true, tick, true) && !input.fireReady(), "Capture must wait one frame");
+        check(input.update(&camera, true, tick, true) && input.fireReady(), "Capture did not become ready");
+
+        mouse.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+        input.handleEvent(mouse, true);
+        auto trigger = input.takeFireTrigger();
+        check(trigger.held && trigger.pressed, "First gameplay click did not arm firing");
+        trigger = input.takeFireTrigger();
+        check(trigger.held && !trigger.pressed, "Held click repeated its initial edge");
+
+        mouse.type = SDL_EVENT_MOUSE_BUTTON_UP;
+        input.handleEvent(mouse, false);
+        trigger = input.takeFireTrigger();
+        check(!trigger.held && !trigger.pressed, "Modal release did not clear firing");
+        mouse.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+        input.handleEvent(mouse, false);
+        input.handleEvent(mouse, true);
+        trigger = input.takeFireTrigger();
+        check(!trigger.held && !trigger.pressed, "Modal click leaked into gameplay");
+
+        int moves = 0;
+        const player::MovementConstraint countMove = [&](const Camera&, Camera&) { ++moves; };
+        input.move(camera, tick, false, countMove);
+        check(moves == 1, "Ready input did not reach movement");
+        input.releaseRelativeMouse();
+        check(!SDL_GetWindowRelativeMouseMode(window.get()), "Pause did not release the cursor");
+        input.invalidateContext();
+        input.move(camera, tick, false, countMove);
+        check(moves == 1 && !input.fireReady(), "Invalidation left movement enabled");
+        check(input.update(&camera, false, tick, true) && !input.fireReady(), "Modal frame enabled input");
+        check(input.update(&camera, true, tick, true) && !input.fireReady(), "Resuming skipped the capture guard");
+        check(input.update(&camera, true, tick, true) && input.fireReady(), "Input did not resume");
+        input.move(camera, tick, false, countMove);
+        check(moves == 2 && camera.x == 0 && camera.y == 0, "Idle resume moved the player");
+
+        input.handleEvent(mouse, true);
+        trigger = input.takeFireTrigger();
+        check(trigger.held && trigger.pressed, "Fresh click after recapture did not arm firing");
+
+        auto tab = keyEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_TAB);
+        tab.key.windowID = mouse.button.windowID;
+        tab.key.key = SDLK_TAB;
+        input.handleEvent(tab, true);
+        input.handleEvent(tab, true);
+        check(input.fireReady(), "TAB invalidated readiness before the update");
+        check(input.update(&camera, true, tick, true), "Update after TAB failed");
+#ifdef EXTREMIS_DEBUG_MENU
+        check(!input.fireReady(), "Same-pump Debug TABs did not force the capture guard");
+        check(input.update(&camera, true, tick, true) && input.fireReady(), "Debug TAB left input blocked");
+#else
+        check(input.fireReady(), "Release TAB unexpectedly reset capture");
+#endif
+    }
+    check(!SDL_GetWindowRelativeMouseMode(window.get()), "PlayerInput destruction left the cursor captured");
+}
 } // namespace
 
 int main()
@@ -105,8 +180,12 @@ int main()
     try {
         check(SDL_Init(SDL_INIT_EVENTS), "SDL event initialization failed");
         testQueuedEventsToDoorState(); testModalMouseOwnership(); testMapOwnsQueuedActions();
+        check(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE),
+              "Cannot select dummy video driver");
+        check(SDL_InitSubSystem(SDL_INIT_VIDEO), "SDL video initialization failed");
+        testPlayerDeviceTransitions();
         SDL_Quit();
-        std::cout << "Modal input ownership and E exclusion from ordinary doors passed.\n";
+        std::cout << "Modal ownership, gameplay device transitions and E exclusion from ordinary doors passed.\n";
     } catch (const std::exception& error) {
         SDL_Quit();
         std::cerr << error.what() << '\n';

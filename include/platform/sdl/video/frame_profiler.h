@@ -8,7 +8,7 @@
 #include <cstdint>
 
 namespace platform::sdl::video_profiling {
-enum Stage : std::size_t { Rays, Walls, Planes, Sprites, Hud, Composition, Present, Count };
+enum Stage : std::size_t { Rays, Walls, Planes, Sprites, Hud, Composition, Present, Geometry, Queue, WorkerWorld, Count };
 
 struct Snapshot {
     std::array<double, Count> ms{};
@@ -19,6 +19,7 @@ struct Snapshot {
 class FrameProfiler {
 public:
     const Snapshot& snapshot() const;
+    const auto& frameSamplesNs() const { return frameNs; }
 
     void beginFrame();
 

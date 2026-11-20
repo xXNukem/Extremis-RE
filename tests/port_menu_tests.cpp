@@ -1,4 +1,8 @@
 #include "app/startup/port_menu_state.h"
+#include <SDL3/SDL.h>
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <string>
 
@@ -31,9 +35,9 @@ int main()
     assert(start.label(2)=="CONTROLS" && start.label(3)=="LANGUAGE");
     assert(start.label(4)=="BACK");
 
-    // Six VIDEO rows: the effect is independent of resolution and aspect.
+    // Seven VIDEO rows: the effect is independent of resolution and aspect.
     assert(start.pointerClick(320.f,131.f)==PortMenuChoice::None);
-    assert(start.page()==PortMenuPage::Video && start.rowCount()==6);
+    assert(start.page()==PortMenuPage::Video && start.rowCount()==7);
     assert(start.label(0)=="ASPECT RATIO : AUTO (16:9)");
     assert(start.videoDimensions()==std::make_pair(320,200));
     assert(start.label(1)=="RESOLUTION : 320 X 200 (ORIGINAL)");
@@ -54,11 +58,14 @@ int main()
     assert(start.label(2)=="FISHEYE EFFECT : OFF");
     start.key(SDL_SCANCODE_RETURN);
     assert(start.label(2)=="FISHEYE EFFECT : ON");
-    assert(start.pointerClick(320.f,240.f)==PortMenuChoice::None);
+    assert(start.pointerClick(320.f,220.f)==PortMenuChoice::None);
     assert(start.label(3)=="FLOOR AND CEILING : OFF");
-    assert(start.pointerClick(320.f,283.f)==PortMenuChoice::None);
+    assert(start.pointerClick(320.f,255.f)==PortMenuChoice::None);
     assert(start.label(4)=="COLORED LIGHTS : ON");
-    assert(start.pointerClick(320.f,326.f)==PortMenuChoice::None);
+    assert(start.label(5)=="VSYNC : UNAVAILABLE");
+    assert(start.pointerClick(320.f,298.f)==PortMenuChoice::None);
+    assert(start.selection()==5 && start.label(5)=="VSYNC : UNAVAILABLE");
+    assert(start.pointerClick(320.f,338.f)==PortMenuChoice::None);
     assert(start.page()==PortMenuPage::Options);
 
     choose(start,1);
@@ -176,4 +183,60 @@ int main()
     assert(game.key(SDL_SCANCODE_ESCAPE)==PortMenuChoice::Resume);
     assert(!game.pointerMove(600.f,300.f));
     assert(game.key(SDL_SCANCODE_DOWN,true)==PortMenuChoice::None);
+
+    auto* surface=SDL_CreateSurface(640,400,SDL_PIXELFORMAT_RGBA8888);
+    assert(surface);
+    auto* renderer=SDL_CreateSoftwareRenderer(surface);
+    assert(renderer);
+    const auto openVideo=[](PortMenuState& menu) {
+        choose(menu,3);
+        choose(menu,0);
+        assert(menu.page()==PortMenuPage::Video);
+    };
+    PortMenuState unsupported(true,renderer);
+    openVideo(unsupported);
+    assert(unsupported.pointerClick(320.f,294.f)==PortMenuChoice::None);
+    assert(unsupported.label(5)=="VSYNC : OFF" && unsupported.vsyncChangeFailed());
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroySurface(surface);
+
+    assert(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER,"dummy",SDL_HINT_OVERRIDE));
+    assert(SDL_Init(SDL_INIT_VIDEO));
+    auto* window=SDL_CreateWindow("Video test",640,400,0);
+    assert(window);
+    assert(SDL_SetWindowFullscreen(window,true));
+    renderer=SDL_CreateRenderer(window,"software");
+    assert(renderer);
+    assert(SDL_SetRenderVSync(renderer,0));
+    int outputWidth=0, outputHeight=0;
+    assert(SDL_GetRenderOutputSize(renderer,&outputWidth,&outputHeight));
+    PortMenuState sync(true,renderer);
+    openVideo(sync);
+    int interval=-99;
+    assert(SDL_GetRenderVSync(renderer,&interval));
+    assert(sync.label(5)==(interval?"VSYNC : ON":"VSYNC : OFF"));
+    assert(sync.pointerMove(320.f,294.f) && sync.selection()==5);
+    assert(!sync.pointerMove(320.f,313.f)); // Gap before BACK.
+    sync.key(SDL_SCANCODE_RIGHT);
+    assert(SDL_GetRenderVSync(renderer,&interval) && interval==1);
+    assert(sync.label(5)=="VSYNC : ON");
+    assert(sync.key(SDL_SCANCODE_ESCAPE)==PortMenuChoice::None);
+    assert(sync.key(SDL_SCANCODE_ESCAPE)==PortMenuChoice::None);
+    assert(sync.key(SDL_SCANCODE_ESCAPE)==PortMenuChoice::Resume);
+    PortMenuState reopened(true,renderer);
+    openVideo(reopened);
+    assert(reopened.label(5)=="VSYNC : ON");
+    assert(reopened.pointerClick(320.f,294.f)==PortMenuChoice::None);
+    assert(SDL_GetRenderVSync(renderer,&interval) && interval==0);
+    assert(reopened.label(5)=="VSYNC : OFF");
+    assert(reopened.label(2)=="FISHEYE EFFECT : OFF");
+    assert(reopened.label(3)=="FLOOR AND CEILING : ON");
+    assert(reopened.videoDimensions()==std::make_pair(320,200));
+    int width=0, height=0;
+    assert(SDL_GetRenderOutputSize(renderer,&width,&height));
+    assert((SDL_GetWindowFlags(window)&SDL_WINDOW_FULLSCREEN)!=0);
+    assert(width==outputWidth && height==outputHeight);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 }

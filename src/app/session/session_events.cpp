@@ -45,7 +45,7 @@ AppSession::EventBatch AppSession::pollEvents(SDL_Window* window, SDL_Renderer* 
             event.key.windowID==SDL_GetWindowID(window) &&
             event.key.scancode==SDL_SCANCODE_ESCAPE) {
             gameAudio.pause(true);
-            SDL_SetWindowRelativeMouseMode(window,false);
+            playerInput.releaseRelativeMouse();
             const auto choice=showPortMenu(window,renderer,dataDirectory,true,video);
             gameAudio.pause(false);
             items.clearInput();mapSession.clearInput();playerInput.invalidateContext();

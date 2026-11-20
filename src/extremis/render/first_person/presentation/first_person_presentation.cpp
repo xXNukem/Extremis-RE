@@ -45,12 +45,17 @@ bool FirstPersonRenderer::presentFrame(bool withHud, int outputWidth, int output
                                        const hud::Renderer* hudRenderer)
 {
 #ifdef EXTREMIS_DEBUG_MENU
-    platform::sdl::video_profiling::FrameProfiler::Scope compositionTimer(profiler_,platform::sdl::video_profiling::Composition);
+    const auto compositionStart=SDL_GetTicksNS();
 #endif
 
     const auto frame=extremis::composeFrame(pixels_,composed_,wideComposed_,
         width_,height_,withHud,nativeComposed_,hudRenderer);
     if (frame.error) return SDL_SetError("%s",frame.error);
+#ifdef EXTREMIS_DEBUG_MENU
+    using namespace platform::sdl::video_profiling;
+    FrameProfiler::addSample(profiler_,Composition,SDL_GetTicksNS()-compositionStart);
+    FrameProfiler::Scope queueTimer(profiler_,Queue);
+#endif
     return platform::sdl::queueFrameTexture(renderer_,uploadTexture_.get(),frame.pixels,
                                           width_,outputWidth,outputHeight,frame.displayAspect);
 }

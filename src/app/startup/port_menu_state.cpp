@@ -3,6 +3,9 @@
 
 #include "port_menu_layout.h"
 
+#include <SDL3/SDL_render.h>
+#include <SDL3/SDL_log.h>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -89,7 +92,7 @@ unsigned PortMenuState::rowCount() const
     switch(page_) {
     case PortMenuPage::Main: return inGame_?5:4;
     case PortMenuPage::Options: return 5;
-    case PortMenuPage::Video: return 6;
+    case PortMenuPage::Video: return 7;
     case PortMenuPage::Audio: case PortMenuPage::Controls: return 2;
     case PortMenuPage::Language: return 4;
     }
@@ -128,6 +131,9 @@ std::string PortMenuState::label(unsigned row) const
         case 2: return std::string("FISHEYE EFFECT : ")+(fisheye_?"ON":"OFF");
         case 3: return std::string("FLOOR AND CEILING : ")+(planes_?"ON":"OFF");
         case 4: return std::string("COLORED LIGHTS : ")+(coloredLights_?"ON":"OFF");
+        case 5:
+            if (!vsyncInterval_) return "VSYNC : UNAVAILABLE";
+            return *vsyncInterval_ == SDL_RENDERER_VSYNC_DISABLED ? "VSYNC : OFF" : "VSYNC : ON";
         default: return "BACK";
         }
     case PortMenuPage::Audio:
@@ -160,6 +166,17 @@ void PortMenuState::changeValue(int delta)
         case 2: fisheye_=!fisheye_; break;
         case 3: planes_=!planes_; break;
         case 4: coloredLights_=!coloredLights_; break;
+        case 5:
+            refreshVSync();
+            if (vsyncInterval_) {
+                const int requested = *vsyncInterval_ == SDL_RENDERER_VSYNC_DISABLED
+                    ? 1 : SDL_RENDERER_VSYNC_DISABLED;
+                const bool applied = SDL_SetRenderVSync(renderer_, requested);
+                if (!applied) SDL_Log("VIDEO: VSync switch failed: %s", SDL_GetError());
+                refreshVSync();
+                vsyncChangeFailed_ = !applied || vsyncInterval_ != requested;
+            }
+            break;
         }
         break;
     case PortMenuPage::Audio:
@@ -186,10 +203,17 @@ PortMenuChoice PortMenuState::activate()
         break; // LOAD GAME is visible and selectable, not operational.
     case PortMenuPage::Options:
         if(selection_==4) back();
-        else {page_=static_cast<PortMenuPage>(int(PortMenuPage::Video)+int(selection_));selection_=0;}
+        else {
+            page_=static_cast<PortMenuPage>(int(PortMenuPage::Video)+int(selection_));
+            selection_=0;
+            if (page_==PortMenuPage::Video) {
+                vsyncChangeFailed_=false;
+                refreshVSync();
+            }
+        }
         break;
     case PortMenuPage::Video:
-        if(selection_==5) back(); else changeValue(1);
+        if(selection_==6) back(); else changeValue(1);
         break;
     case PortMenuPage::Audio: case PortMenuPage::Controls:
         if(selection_==1) back(); else changeValue(1);
@@ -296,15 +320,23 @@ void PortMenuState::setFisheyeEnabled(bool enabled)
     fisheye_ = enabled;
 }
 
-PortMenuState::PortMenuState(bool inGame) : inGame_(inGame)
+void PortMenuState::refreshVSync()
+{
+    int interval = 0;
+    if (renderer_ && SDL_GetRenderVSync(renderer_, &interval)) vsyncInterval_ = interval;
+    else vsyncInterval_.reset();
+}
+
+PortMenuState::PortMenuState(bool inGame, SDL_Renderer* renderer)
+    : inGame_(inGame), renderer_(renderer)
 {}
 
 namespace app::menu_detail {
 
 float rowTop(unsigned row,unsigned count,bool submenu)
 {
-    // Six VIDEO rows fit above the status line; all other pages are unchanged.
-    if (submenu && count==6) return 96.f+float(row)*43.f;
+    // Seven VIDEO rows fit above the status line; all other pages are unchanged.
+    if (submenu && count==7) return 88.f+float(row)*38.f;
     if (submenu)
         return submenuFirstRow+(5.f-float(count))*submenuRowSpacing*.5f+
                float(row)*submenuRowSpacing;

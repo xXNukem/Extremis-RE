@@ -2,96 +2,51 @@
 
 #include <SDL3/SDL.h>
 #include <cmath>
-#include <utility>
-
-namespace {
-constexpr std::array<SDL_Scancode,10> movementKeys{SDL_SCANCODE_W,SDL_SCANCODE_S,
-    SDL_SCANCODE_D,SDL_SCANCODE_A,SDL_SCANCODE_LEFT,SDL_SCANCODE_RIGHT,
-    SDL_SCANCODE_LSHIFT,SDL_SCANCODE_RSHIFT,SDL_SCANCODE_LALT,SDL_SCANCODE_RALT};
-}
 
 PlayerInput::PlayerInput(SDL_Window* window, DoorControl& doors)
-    : window_(window), doors_(doors) {}
-
-PlayerInput::~PlayerInput()
-{
-    if (active_) SDL_SetWindowRelativeMouseMode(window_, false);
-}
+    : devices_(window, {SDL_SCANCODE_W, SDL_SCANCODE_S, SDL_SCANCODE_D, SDL_SCANCODE_A,
+          SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_LSHIFT, SDL_SCANCODE_RSHIFT,
+          SDL_SCANCODE_LALT, SDL_SCANCODE_RALT}, SDL_BUTTON_LEFT),
+      doors_(doors) {}
 
 void PlayerInput::handleEvent(const SDL_Event& event, bool gameplay)
 {
-    if ((event.type==SDL_EVENT_MOUSE_BUTTON_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_UP) &&
-        event.button.windowID==SDL_GetWindowID(window_) && event.button.button==SDL_BUTTON_LEFT) {
-        if (event.type==SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            if (!gameplay || !active_ || reset_) { fireSuppressed_=true; firePressed_=false; }
-            else if (!fireHeld_ && !fireSuppressed_) firePressed_=true;
-            fireHeld_=true;
-        } else { fireHeld_=false; fireSuppressed_=false; }
-    }
-    if (event.type==SDL_EVENT_KEY_UP && event.key.windowID==SDL_GetWindowID(window_))
-        for (unsigned i=0;i<movementKeys.size();++i)
-            if (event.key.scancode==movementKeys[i]) blockedKeys_[i]=false;
-    if ((event.type == SDL_EVENT_WINDOW_FOCUS_GAINED ||
-         event.type == SDL_EVENT_WINDOW_FOCUS_LOST) &&
-        event.window.windowID == SDL_GetWindowID(window_)) {
-        reset_=true; firePressed_=false; fireReady_=false;
-    }
+    devices_.handleEvent(event, gameplay);
 #ifdef EXTREMIS_DEBUG_MENU
     // Even multiple TAB toggles in one event pump must discard accumulated motion.
-    if (event.type == SDL_EVENT_KEY_DOWN && event.key.windowID == SDL_GetWindowID(window_) &&
-        event.key.key == SDLK_TAB && !event.key.repeat) reset_ = true;
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.windowID == devices_.windowId() &&
+        event.key.key == SDLK_TAB && !event.key.repeat)
+        devices_.requestCaptureReset();
 #endif
-}
-
-PlayerInput::CaptureStatus PlayerInput::updateCapture(bool desired)
-{
-    if (desired != active_ || reset_) {
-        if (!SDL_SetWindowRelativeMouseMode(window_, desired)) return CaptureStatus::Failed;
-        active_ = desired;
-        firePressed_=false;
-        const auto buttons=SDL_GetMouseState(nullptr,nullptr)|SDL_GetGlobalMouseState(nullptr,nullptr);
-        fireHeld_=(buttons&SDL_BUTTON_LMASK)!=0;
-        fireSuppressed_=fireHeld_;
-        const bool* keys=SDL_GetKeyboardState(nullptr);
-        for (unsigned i=0;i<movementKeys.size();++i) blockedKeys_[i]=desired && keys[movementKeys[i]];
-        reset_ = false;
-        SDL_GetRelativeMouseState(nullptr, nullptr);
-        return CaptureStatus::Waiting; // Discard capture/context transitions and require held modal keys to be released.
-    }
-    if (!active_) {
-        SDL_GetRelativeMouseState(nullptr, nullptr);
-        return CaptureStatus::Waiting;
-    }
-    return CaptureStatus::Ready;
 }
 
 bool PlayerInput::update(Camera* camera, bool view3D, double seconds, bool deferMovement)
 {
     footsteps_ = 0;
-    movementDistance_ = 0; running_=false; fireReady_=false;
+    movementDistance_ = 0;
+    running_ = false;
 
-    const bool desired = camera && view3D && SDL_GetKeyboardFocus() == window_;
-    const auto capture = updateCapture(desired);
-    if (capture != CaptureStatus::Ready) { firePressed_=false; return capture != CaptureStatus::Failed; }
-    fireReady_=true;
+    using CaptureStatus = vortex::input::SDLInput::CaptureStatus;
+    const auto capture = devices_.updateCapture(camera && view3D);
+    if (capture != CaptureStatus::Ready) return capture != CaptureStatus::Failed;
+
     float mouseX = 0;
-    SDL_GetRelativeMouseState(&mouseX, nullptr);
-    const bool* keys = SDL_GetKeyboardState(nullptr);
-    std::array<bool,10> pressed{};
-    for (unsigned i=0;i<movementKeys.size();++i) {
-        if (!keys[movementKeys[i]]) blockedKeys_[i]=false;
-        pressed[i]=keys[movementKeys[i]] && !blockedKeys_[i];
-    }
-    input_={
-        double(pressed[0])-double(pressed[1]), double(pressed[2])-double(pressed[3]),
-        double(pressed[4])-double(pressed[5]),mouseX,pressed[6] || pressed[7],pressed[8] || pressed[9]};
+    devices_.takeRelativeMouse(&mouseX, nullptr);
+    devices_.sampleKeyboard();
+    input_ = {
+        double(devices_.keyDown(SDL_SCANCODE_W)) - double(devices_.keyDown(SDL_SCANCODE_S)),
+        double(devices_.keyDown(SDL_SCANCODE_D)) - double(devices_.keyDown(SDL_SCANCODE_A)),
+        double(devices_.keyDown(SDL_SCANCODE_LEFT)) - double(devices_.keyDown(SDL_SCANCODE_RIGHT)),
+        mouseX,
+        devices_.keyDown(SDL_SCANCODE_LSHIFT) || devices_.keyDown(SDL_SCANCODE_RSHIFT),
+        devices_.keyDown(SDL_SCANCODE_LALT) || devices_.keyDown(SDL_SCANCODE_RALT)};
     if (!deferMovement) move(*camera,seconds,false);
     return true;
 }
 
 void PlayerInput::move(Camera& camera, double seconds, bool blocked, const player::MovementConstraint& constrain)
 {
-    if (!fireReady_) return; // Capture, modal and focus gates still own input.
+    if (!devices_.ready()) return; // Capture, modal and focus gates still own input.
     input_.blockMovement=blocked;
     const double beforeX=camera.x, beforeY=camera.y;
     footsteps_ += player::update(camera,input_,seconds,settings_,&doors_.staticWorld(),audioEnabled_,constrain,objectConstraint_);
@@ -113,15 +68,18 @@ bool PlayerInput::running() const { return running_; }
 
 player::FireTrigger PlayerInput::takeFireTrigger()
 {
-    const bool pressed=std::exchange(firePressed_,false);
-    return {fireReady_ && !fireSuppressed_ && fireHeld_,fireReady_ && !fireSuppressed_ && pressed};
+    const auto button = devices_.takeButton();
+    return {button.held, button.pressed};
 }
 
 void PlayerInput::invalidateContext()
 {
-    reset_=true;
-    firePressed_=false;
-    fireReady_=false;
+    devices_.invalidateContext();
+}
+
+void PlayerInput::releaseRelativeMouse()
+{
+    devices_.releaseRelativeMouse();
 }
 
 void PlayerInput::setAudioEnabled(bool enabled)
@@ -141,5 +99,5 @@ unsigned PlayerInput::footsteps() const
 
 bool PlayerInput::fireReady() const
 {
-    return fireReady_;
+    return devices_.ready();
 }

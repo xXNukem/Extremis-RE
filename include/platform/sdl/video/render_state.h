@@ -4,6 +4,10 @@
 
 namespace platform::sdl {
 
+#ifdef SDL_PLATFORM_MACOS
+void configureMetalFullscreenPresentation(SDL_Renderer* renderer);
+#endif
+
 class RenderState {
 public:
     explicit RenderState(SDL_Renderer* renderer);

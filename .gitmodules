@@ -1,0 +1,3 @@
+[submodule "external/Vortex-Engine"]
+	path = external/Vortex-Engine
+	url = https://github.com/xXNukem/Vortex-Engine.git

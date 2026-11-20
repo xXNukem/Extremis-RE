@@ -3,16 +3,19 @@
 #include "app/startup/port_menu_types.h"
 
 #include <SDL3/SDL_scancode.h>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
+
+struct SDL_Renderer;
 
 class PortMenuState {
 public:
     // Resolution 0 is native DOS. Other entries are scaled 3D presets and MAX.
     static constexpr unsigned automaticResolution=0;
 
-    explicit PortMenuState(bool inGame);
+    explicit PortMenuState(bool inGame, SDL_Renderer* renderer = nullptr);
     unsigned selection() const;
     PortMenuPage page() const;
     unsigned rowCount() const;
@@ -29,6 +32,7 @@ public:
     void setAppliedVideoSize(int physicalWidth,int physicalHeight);
     void setVideoModeAvailable(bool available);
     bool videoModeAvailable() const;
+    bool vsyncChangeFailed() const { return vsyncChangeFailed_; }
     unsigned aspectChoice() const;
     unsigned resolutionChoice() const;
     bool fisheyeEnabled() const;
@@ -36,6 +40,10 @@ public:
     std::pair<int,int> videoDimensions() const;
 private:
     bool inGame_;
+    SDL_Renderer* renderer_;
+    std::optional<int> vsyncInterval_;
+    bool vsyncChangeFailed_ = false;
+    void refreshVSync();
     PortMenuPage page_ = PortMenuPage::Main;
     unsigned selection_ = 0;
     unsigned aspect_ = 3, resolution_ = 0, volume_ = 80, language_ = 1;

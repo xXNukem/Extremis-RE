@@ -93,6 +93,7 @@ add_executable(plane_tests plane_tests.cpp ${PROJECT_SOURCE_DIR}/src/extremis/re
 target_link_libraries(plane_tests PRIVATE extremis_render_diagnostics Vortex::CPU wall_material doors sprites original_hud SDL3::SDL3)
 add_test(NAME floor_ceiling COMMAND plane_tests "${PROJECT_BINARY_DIR}/plane-test-data")
 add_executable(player_input_tests player_input_tests.cpp)
+target_compile_definitions(player_input_tests PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
 target_link_libraries(player_input_tests PRIVATE player_control session_interfaces sdl_input)
 add_test(NAME player_input_events COMMAND player_input_tests)
 add_executable(door_control_tests door_control_tests.cpp)

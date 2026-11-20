@@ -7,11 +7,15 @@
 #include "view_layout.h"
 #include "../scene/ray_scene.h"
 #include "../materials/wall_columns.h"
-#include "vortex/render/first_person/scene_renderer.h"
+#include "vortex/render/first_person/render_workers.h"
 #include <SDL3/SDL.h>
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <new>
+#include <string_view>
+#include <system_error>
+#include <thread>
 
 namespace {
 namespace cpu = vortex::first_person;
@@ -79,7 +83,12 @@ vortex::PreparedRayScene prepareProfiledScene(const game_lab::Level& level, cons
 {
     const auto start = timing.now ? timing.now() : 0;
     auto scene = prepareRayScene(level, camera, doors);
-    if (timing.now) timing.sample(timing.context, cpu::Stage::Rays, timing.now() - start);
+#ifdef EXTREMIS_DEBUG_MENU
+    if (timing.now) profiling::FrameProfiler::addSample(
+        static_cast<profiling::FrameProfiler*>(timing.context), profiling::Geometry, timing.now() - start);
+#else
+    (void)start;
+#endif
     return scene;
 }
 
@@ -126,6 +135,27 @@ FirstPersonRenderer::FirstPersonRenderer(SDL_Renderer* renderer,
                                          profiling::FrameProfiler* profiler)
     : renderer_(renderer), video_(video ? *video : defaultVideoSettings), profiler_(profiler) {}
 FirstPersonRenderer::~FirstPersonRenderer() = default;
+
+void FirstPersonRenderer::enableRenderWorkers()
+{
+    const char* setting = SDL_getenv("EXTREMIS_RENDER_WORKERS");
+    if (!setting || std::string_view(setting) != "1") {
+        try {
+            renderWorkers_ = std::make_unique<cpu::RenderWorkers>(0);
+        } catch (const std::system_error& error) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "VORTEX RenderWorkers: %s", error.what());
+        } catch (const std::bad_alloc&) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "VORTEX RenderWorkers: allocation failed");
+        }
+    }
+    if (renderWorkers_) {
+        // The public API does not expose a count. Report its documented auto policy.
+        const auto threads = std::clamp(std::thread::hardware_concurrency(), 1u, 8u);
+        SDL_Log("VORTEX RenderWorkers: auto, %u render threads including the caller", threads);
+    } else {
+        SDL_Log("VORTEX CPU: serial, 1 render thread");
+    }
+}
 
 void FirstPersonRenderer::setRaycastLevel(const game_lab::Level& level)
 {
@@ -241,7 +271,16 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
         style.layerContext = &capture;
     }
     if (video_.preferences.fisheyeEnabled) style.fisheye = &fisheye_;
-    if (!cpu::render(view, style, pixels_, worldBuffers_, timing))
+    bool rendered;
+    if (renderWorkers_) {
+#ifdef EXTREMIS_DEBUG_MENU
+        profiling::FrameProfiler::Scope worldTimer(profiler_, profiling::WorkerWorld);
+#endif
+        rendered = renderWorkers_->render(view, style, pixels_, worldBuffers_);
+    } else {
+        rendered = cpu::render(view, style, pixels_, worldBuffers_, timing);
+    }
+    if (!rendered)
         return SDL_SetError("Invalid fisheye world framebuffer");
 
     auto& withoutShots = capture.pixels;

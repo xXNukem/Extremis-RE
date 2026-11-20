@@ -42,12 +42,15 @@ bool drawGameplayFps(SDL_Renderer* renderer, double gameplayFps, const profiling
         SDL_SetRenderDrawColor(renderer,255,230,70,255) &&
         SDL_RenderDebugTextFormat(renderer,14.f,16.f,"FPS: %.1f",gameplayFps) &&
         SDL_RenderDebugTextFormat(renderer,14.f,32.f,"FRAME: %.1f ms",perf.totalMs) &&
-        SDL_RenderDebugTextFormat(renderer,14.f,48.f,"RAY: %.1f ms",perf.ms[profiling::Rays]) &&
-        SDL_RenderDebugTextFormat(renderer,14.f,64.f,"WALL: %.1f ms",perf.ms[profiling::Walls]) &&
-        SDL_RenderDebugTextFormat(renderer,14.f,80.f,"PLANES: %.1f ms",perf.ms[profiling::Planes]) &&
-        SDL_RenderDebugTextFormat(renderer,14.f,96.f,"SPRITES: %.1f ms",perf.ms[profiling::Sprites]) &&
+        (perf.ms[profiling::WorkerWorld] > 0
+        ? SDL_RenderDebugTextFormat(renderer,14.f,48.f,"GEOMETRY: %.1f ms",perf.ms[profiling::Geometry]) &&
+          SDL_RenderDebugTextFormat(renderer,14.f,64.f,"WORLD: %.1f ms",perf.ms[profiling::WorkerWorld])
+        : SDL_RenderDebugTextFormat(renderer,14.f,48.f,"RAY: %.1f ms",perf.ms[profiling::Rays]+perf.ms[profiling::Geometry]) &&
+          SDL_RenderDebugTextFormat(renderer,14.f,64.f,"WALL: %.1f ms",perf.ms[profiling::Walls]) &&
+          SDL_RenderDebugTextFormat(renderer,14.f,80.f,"PLANES: %.1f ms",perf.ms[profiling::Planes]) &&
+          SDL_RenderDebugTextFormat(renderer,14.f,96.f,"SPRITES: %.1f ms",perf.ms[profiling::Sprites])) &&
         SDL_RenderDebugTextFormat(renderer,14.f,112.f,"HUD: %.1f ms",perf.ms[profiling::Hud]) &&
-        SDL_RenderDebugTextFormat(renderer,14.f,128.f,"COMP/SDL: %.1f ms",perf.ms[profiling::Composition]) &&
+        SDL_RenderDebugTextFormat(renderer,14.f,128.f,"COMP/SDL: %.1f ms",perf.ms[profiling::Composition]+perf.ms[profiling::Queue]) &&
         SDL_RenderDebugTextFormat(renderer,14.f,144.f,"PRESENT: %.1f ms",perf.ms[profiling::Present]) &&
         SDL_RenderDebugTextFormat(renderer,14.f,160.f,"OTHER: %.1f ms",perf.otherMs);
     const bool restored=SDL_SetRenderScale(renderer,previousScaleX,previousScaleY);

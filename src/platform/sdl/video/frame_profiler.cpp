@@ -70,10 +70,11 @@ void FrameProfiler::endFrame()
     displayed.totalMs=double(totalAccumulatedNs)*invFrames;
     displayed.otherMs=double(totalAccumulatedNs>measuredNs?totalAccumulatedNs-measuredNs:0)*invFrames;
     displayed.fps=double(samples)*1e9/double(interval);
-    SDL_Log("VORTEX PERF DEBUG: fps=%.1f frame=%.2fms ray=%.2fms wall=%.2fms planes=%.2fms sprites=%.2fms hud=%.2fms compose+SDL=%.2fms present=%.2fms other=%.2fms",
-        displayed.fps,displayed.totalMs,displayed.ms[Rays],displayed.ms[Walls],
+    SDL_Log("VORTEX PERF DEBUG: fps=%.1f frame=%.2fms ray=%.2fms wall=%.2fms planes=%.2fms sprites=%.2fms hud=%.2fms compose+SDL=%.2fms present=%.2fms other=%.2fms worker_world=%.2fms",
+        displayed.fps,displayed.totalMs,displayed.ms[Rays]+displayed.ms[Geometry],displayed.ms[Walls],
         displayed.ms[Planes],displayed.ms[Sprites],displayed.ms[Hud],
-        displayed.ms[Composition],displayed.ms[Present],displayed.otherMs);
+        displayed.ms[Composition]+displayed.ms[Queue],displayed.ms[Present],displayed.otherMs,
+        displayed.ms[WorkerWorld]);
     accumulatedNs.fill(0);
     intervalStartNs=now;
     totalAccumulatedNs=0;

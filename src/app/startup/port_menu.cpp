@@ -267,7 +267,7 @@ PortMenuChoice showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
     // Remember the exact logical mode/density, not an index that might
     // change if SDL3 enumerates modes in a different order next time.
     auto& preferences=video.render.preferences;
-    PortMenuState state(inGame);
+    PortMenuState state(inGame,renderer);
     state.setFisheyeEnabled(preferences.fisheyeEnabled);
     const auto [desktopWidth,desktopHeight]=activeDisplaySize(window);
     state.setDisplaySize(desktopWidth,desktopHeight);

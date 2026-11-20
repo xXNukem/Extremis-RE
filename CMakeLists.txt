@@ -6,11 +6,14 @@ option(VORTEX_CPU_ONLY "Build Vortex CPU without the SDL port" OFF)
 if(NOT VORTEX_CPU_ONLY)
     find_package(SDL3 3.2 REQUIRED CONFIG)
 endif()
-add_subdirectory(src/vortex)
+add_subdirectory(external/Vortex-Engine/src/vortex)
+
+# Public Vortex headers used throughout Extremis RE.
+include_directories("${PROJECT_SOURCE_DIR}/external/Vortex-Engine/include")
 
 include(CTest)
 if(BUILD_TESTING)
-    add_subdirectory(tests/vortex)
+    add_subdirectory(external/Vortex-Engine/tests/vortex)
 endif()
 
 if(VORTEX_CPU_ONLY)

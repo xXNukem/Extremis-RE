@@ -33,7 +33,10 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
 #else
     FirstPersonRenderer firstPerson(renderer,&video.render);
 #endif
-    if (data) firstPerson.setRaycastLevel(data->level);
+    if (data) {
+        firstPerson.enableRenderWorkers();
+        firstPerson.setRaycastLevel(data->level);
+    }
     game_lab::Level emptyLevel;
     DoorControl doorControl(collisionWorld, levelDoors, data ? data->level : emptyLevel);
     PlayerInput playerInput(window, doorControl);

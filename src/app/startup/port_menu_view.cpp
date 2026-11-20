@@ -292,7 +292,9 @@ bool drawOptions(SDL_Renderer* r,const original_font::Font* font,
         if (!textAt(r,font,label,x,textY,glyphScale,tint,selected?1.f:.80f)) return false;
     }
     if (state.page()==PortMenuPage::Video) {
-        const std::string_view notice = !state.videoModeAvailable()
+        const std::string_view notice = state.vsyncChangeFailed()
+            ? "VSYNC SWITCH FAILED"
+            : !state.videoModeAvailable()
             ? "DISPLAY MODE SWITCH FAILED"
             : state.aspectChoice()==0 ? "4:3 ORIGINAL DOS VIEW"
             : state.aspectChoice()==1 ? "16:9 EXPANDED GAME VIEW"

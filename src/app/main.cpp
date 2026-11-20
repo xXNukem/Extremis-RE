@@ -4,6 +4,7 @@
 #include "session/app_session.h"
 #include "startup/startup_sequence.h"
 #include "app/startup/port_menu.h"
+#include "platform/sdl/video/render_state.h"
 
 int main(int argc, char* argv[])
 {
@@ -33,6 +34,10 @@ int main(int argc, char* argv[])
         SDL_Quit();
         return 1;
     }
+
+#ifdef SDL_PLATFORM_MACOS
+    platform::sdl::configureMetalFullscreenPresentation(renderer);
+#endif
 
     int exitCode = 0;
     PortMenuVideoState video;

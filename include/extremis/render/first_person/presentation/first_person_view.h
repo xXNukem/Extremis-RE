@@ -20,6 +20,7 @@ struct SDL_Renderer;
 struct SDL_Texture;
 namespace extremis::render_detail { class StaticRayGrid; }
 namespace platform::sdl::video_profiling { class FrameProfiler; }
+namespace vortex::first_person { class RenderWorkers; }
 
 // Draws background and projected wall columns at the current output size.
 // Borrows the renderer; the caller owns clearing, presenting and SDL resources.
@@ -36,6 +37,7 @@ public:
                                  const VideoRenderSettings* video = nullptr,
                                  platform::sdl::video_profiling::FrameProfiler* profiler = nullptr);
     ~FirstPersonRenderer();
+    void enableRenderWorkers();
     // Call when replacing the active level or its static geometry.
     void setRaycastLevel(const game_lab::Level& level);
     const std::vector<std::uint32_t>& frame() const;
@@ -77,4 +79,5 @@ private:
     int width_ = 0, height_ = 0;
     bool withHud_ = false;
     bool nativeComposed_ = false; // Native device output vs integer DOS scaling.
+    std::unique_ptr<vortex::first_person::RenderWorkers> renderWorkers_;
 };
