@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <filesystem>
+#include <string>
+#include <utility>
 #include "platform/sdl/audio/audio_player.h"
 
 #include <exception>

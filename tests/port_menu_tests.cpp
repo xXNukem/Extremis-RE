@@ -1,4 +1,7 @@
 #undef NDEBUG
+#include <string_view>
+#include <cstddef>
+#include <filesystem>
 #include "app/startup/port_menu.h"
 #include <fstream>
 #include "app/startup/port_menu_state.h"

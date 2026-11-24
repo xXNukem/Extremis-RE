@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include "extremis/gameplay/player/camera.h"
 #include "extremis/world/door.h"
 #include "vortex/render/first_person/raycast/raycast_geometry.h"

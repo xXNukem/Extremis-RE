@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/gameplay/items/level_items.h"
 
 #include <cmath>

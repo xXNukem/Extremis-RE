@@ -1,3 +1,6 @@
+#include <string>
+#include <utility>
+#include <vector>
 #include "extremis/render/first_person/presentation/view_scale.h"
 #include "extremis/gameplay/player/continuation.h"
 #include "app/startup/port_menu_state.h"

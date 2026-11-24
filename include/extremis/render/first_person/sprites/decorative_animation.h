@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include "extremis/render/first_person/sprites/sprite_scene.h"
 
 namespace sprites {

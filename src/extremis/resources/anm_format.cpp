@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/resources/anm_format.h"
 #include "extremis/resources/vga_palette.h"
 #include <fstream>

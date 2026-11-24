@@ -1,3 +1,4 @@
+#include <cstddef>
 #include "extremis/world/player_collision.h"
 #include "extremis/resources/sector_coordinates.h"
 

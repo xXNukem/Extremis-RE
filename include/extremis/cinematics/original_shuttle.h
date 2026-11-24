@@ -1,4 +1,8 @@
 #pragma once
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/resources/anm_format.h"
 #include "extremis/resources/spr_format.h"
 #include <string>

@@ -1,3 +1,6 @@
+#include <cstdint>
+#include <filesystem>
+#include <string>
 #include "extremis/diagnostics/shot_trace.h"
 #include "app_session.h"
 
@@ -45,16 +48,16 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
     playerInput.setClassicControls(settings.classicControls);
     GameAudio gameAudio;
     gameAudio.setMasterGain(settings.audioGain());
-    if (data) gameAudio.load(std::filesystem::path(options.labPath).parent_path() / "DATA");
+    if (data) gameAudio.load(std::filesystem::u8path(options.labPath).parent_path() / "DATA");
     std::optional<player::DeathPresentation> deathPresentation;
     if(data && originalHud) {
-        try { deathPresentation.emplace(player::loadDeathResources(std::filesystem::path(options.labPath).parent_path()/"DATA")); }
+        try { deathPresentation.emplace(player::loadDeathResources(std::filesystem::u8path(options.labPath).parent_path()/"DATA")); }
         catch(const std::exception& error) { SDL_Log("Original death presentation unavailable: %s",error.what()); }
     }
 #ifdef EXTREMIS_DEBUG_MENU
     DebugMenu debugMenu;
     if (data) {
-        try { debugMenu.load(options.labPath); }
+        try { debugMenu.load(std::filesystem::u8path(options.labPath)); }
         catch (const std::exception& error) { SDL_Log("Debug catalog: %s",error.what()); }
     }
 #endif

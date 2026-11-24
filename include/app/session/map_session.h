@@ -1,4 +1,7 @@
 #pragma once
+#include <array>
+#include <cstdint>
+#include <optional>
 #include "extremis/ui/original_map.h"
 #include <SDL3/SDL_events.h>
 

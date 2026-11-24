@@ -1,3 +1,11 @@
+#include <string_view>
+#include <cstddef>
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <vector>
 #include "extremis/ui/original_hud.h"
 #include "extremis/ui/localization.h"
 #include "extremis/ui/utf8_glyph.h"

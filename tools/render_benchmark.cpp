@@ -1,3 +1,9 @@
+#include <cstddef>
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/render/first_person/camera/camera_start.h"
 #include "render_benchmark.h"
 #include "app/diagnostics/player_debug.h"

@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <string>
 #include "app/diagnostics/debug_menu.h"
 #include "extremis/world/original_travel.h"
 #include <iostream>

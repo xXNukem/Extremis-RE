@@ -1,3 +1,9 @@
+#include <cstddef>
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
 #include "extremis/world/pit_clock.h"
 #include "extremis/cinematics/original_presentation.h"
 #include "extremis/ui/localization.h"

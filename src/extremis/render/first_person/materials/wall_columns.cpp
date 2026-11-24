@@ -1,3 +1,6 @@
+#include <cstdint>
+#include <utility>
+#include <vector>
 #include "wall_columns.h"
 
 #include "extremis/render/first_person/materials/wall_material.h"

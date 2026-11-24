@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/render/first_person/materials/wall_animation.h"
 #include "extremis/render/first_person/materials/texture_preview.h"
 

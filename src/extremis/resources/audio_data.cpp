@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
 #include "extremis/resources/audio_data.h"
 
 #include <fstream>

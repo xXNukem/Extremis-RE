@@ -1,3 +1,10 @@
+#include <iterator>
+#include <string_view>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
 #include "extremis/resources/audio_data.h"
 #include "app/startup/port_menu.h"
 #include "extremis/audio/audio_mixer.h"

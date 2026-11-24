@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <functional>
+#include <filesystem>
+#include <optional>
+#include <utility>
 #include "extremis/render/first_person/presentation/view_scale.h"
 #include "app/startup/port_menu.h"
 #include "app/startup/port_menu_state.h"

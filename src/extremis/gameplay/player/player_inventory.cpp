@@ -1,3 +1,5 @@
+#include <array>
+#include <cstdint>
 #include "extremis/gameplay/player/player_inventory.h"
 #include <algorithm>
 

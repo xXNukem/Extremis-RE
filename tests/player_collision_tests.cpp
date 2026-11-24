@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
 #include "extremis/gameplay/player/player_control.h"
 #include "extremis/world/objet_collision.h"
 

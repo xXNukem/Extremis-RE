@@ -1,3 +1,5 @@
+#include <filesystem>
+#include <stdexcept>
 #include "extremis/cinematics/original_shuttle.h"
 #include "extremis/cinematics/original_shuttle_player.h"
 #include "extremis/resources/audio_data.h"

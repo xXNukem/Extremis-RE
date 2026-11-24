@@ -1,3 +1,7 @@
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/resources/sprite_bank.h"
 #include "extremis/resources/spr_format.h"
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include "extremis/audio/playback_stats.h"
 #include "extremis/resources/audio_data.h"
 #include "vortex/audio/mixer.h"

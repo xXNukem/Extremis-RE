@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "extremis/gameplay/player/self_destruction.h"
 
 std::int32_t SelfDestruction::remaining() const

@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <cstdint>
 #include "extremis/render/first_person/sprites/decorative_animation.h"
 
 #include <cmath>

@@ -1,3 +1,5 @@
+#include <string_view>
+#include <cstddef>
 #include "app/startup/port_menu_state.h"
 #include "extremis/gameplay/player/continuation.h"
 

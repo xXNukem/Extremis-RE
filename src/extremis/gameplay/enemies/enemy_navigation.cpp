@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <optional>
+#include <vector>
 #include "extremis/gameplay/enemies/enemy_navigation.h"
 #include <algorithm>
 #include <cmath>

@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <array>
+#include <cstdint>
 #include "extremis/render/first_person/materials/wall_animation.h"
 
 #include <algorithm>

@@ -1,3 +1,4 @@
+#include <vector>
 #include "extremis/render/first_person/scene/ray_queries.h"
 #include "extremis/resources/sector_coordinates.h"
 

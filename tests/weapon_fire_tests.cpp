@@ -1,3 +1,6 @@
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/gameplay/player/weapon_fire.h"
 #include "vortex/render/first_person/sprites/sprite_renderer.h"
 #include <cmath>

@@ -1,3 +1,5 @@
+#include <filesystem>
+#include <string>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
@@ -28,7 +30,7 @@ int main(int argc, char* argv[])
         }
     }
     std::string dataError;
-    if (!options->labPath || !app::validateOriginalData(options->labPath,dataError)) {
+    if (!options->labPath || !app::validateOriginalData(std::filesystem::u8path(options->labPath),dataError)) {
         const std::string message=options->labPath
             ? "The original In Extremis installation at:\n" + std::string(options->labPath) +
               "\nis invalid:\n" + dataError
@@ -49,7 +51,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    const auto labDirectory=options->labPath ? std::filesystem::path(options->labPath).parent_path()
+    const auto labDirectory=options->labPath ? std::filesystem::u8path(options->labPath).parent_path()
                                              : std::filesystem::path{};
     const auto settingsPath=userSettingsPath();
     auto settings=loadUserSettings(settingsPath,options->labPath ? labDirectory/"EXTREMIS.CFG"

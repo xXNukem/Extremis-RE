@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <filesystem>
 #include "extremis/cinematics/original_elevator_player.h"
 #include "extremis/cinematics/original_elevator.h"
 #include "extremis/audio/game_audio.h"

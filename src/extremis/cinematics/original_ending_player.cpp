@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <filesystem>
 #include "extremis/cinematics/original_ending_player.h"
 #include "platform/sdl/audio/cinematic_voice_stream.h"
 #include "platform/sdl/video/render_state.h"

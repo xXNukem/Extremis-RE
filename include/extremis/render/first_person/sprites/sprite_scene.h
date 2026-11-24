@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/resources/game_lab.h"
 #include "extremis/resources/sprite_bank.h"
 

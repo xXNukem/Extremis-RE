@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include "extremis/diagnostics/shot_trace.h"
 #include "app_session.h"
 

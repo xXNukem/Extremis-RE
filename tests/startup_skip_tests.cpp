@@ -1,3 +1,4 @@
+#include <filesystem>
 #include "app/startup/startup_credits.h"
 #include "extremis/cinematics/original_intro_player.h"
 #include "platform/sdl/input/startup_skip.h"

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include "extremis/audio/playback_stats.h"
 
 #include <filesystem>

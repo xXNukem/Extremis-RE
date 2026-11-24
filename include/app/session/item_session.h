@@ -1,4 +1,7 @@
 #pragma once
+#include <cstddef>
+#include <optional>
+#include <vector>
 #include "extremis/gameplay/items/level_items.h"
 #include "extremis/gameplay/player/self_destruction.h"
 #include "extremis/ui/original_interactions.h"

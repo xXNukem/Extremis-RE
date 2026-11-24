@@ -1,3 +1,6 @@
+#include <chrono>
+#include <cstdint>
+#include <vector>
 #include "extremis/world/door.h"
 #include "extremis/world/door_clock.h"
 

@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <vector>
 #include "extremis/world/door.h"
 #include "extremis/resources/sector_coordinates.h"
 

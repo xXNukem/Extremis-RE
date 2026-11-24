@@ -1,3 +1,5 @@
+#include <system_error>
+#include <filesystem>
 #include "app/startup/user_settings.h"
 
 #include <SDL3/SDL.h>

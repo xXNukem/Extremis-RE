@@ -1,3 +1,4 @@
+#include <vector>
 #include "extremis/gameplay/enemies/motion_detector.h"
 #include "vortex/core/math/constants.h"
 #include "extremis/world/original_angle_tables.h"

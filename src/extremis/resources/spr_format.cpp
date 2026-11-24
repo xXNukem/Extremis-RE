@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/resources/spr_format.h"
 
 #include <fstream>

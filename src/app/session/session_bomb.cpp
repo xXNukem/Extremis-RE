@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <utility>
 #include "app_session.h"
 #include "extremis/audio/game_audio.h"
 

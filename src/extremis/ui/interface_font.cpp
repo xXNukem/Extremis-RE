@@ -1,3 +1,8 @@
+#include <string_view>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/ui/interface_font.h"
 #include "extremis/ui/utf8_glyph.h"
 #include "extremis/ui/localization.h"

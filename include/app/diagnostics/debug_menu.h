@@ -1,5 +1,9 @@
 #pragma once
 #ifdef EXTREMIS_DEBUG_MENU
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <vector>
 #include "app/session/item_session.h"
 #include <SDL3/SDL.h>
 #include <array>

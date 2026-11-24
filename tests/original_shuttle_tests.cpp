@@ -1,3 +1,8 @@
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <utility>
+#include <vector>
 #include "extremis/cinematics/original_shuttle.h"
 #include "extremis/resources/audio_data.h"
 #include "extremis/cinematics/original_shuttle_player.h"

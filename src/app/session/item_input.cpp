@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "app/session/item_session.h"
 
 #include <SDL3/SDL_events.h>

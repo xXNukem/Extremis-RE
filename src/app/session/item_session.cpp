@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <string>
 #include "app/session/item_session.h"
 #include "extremis/world/original_travel.h"
 #include "extremis/gameplay/player/survival_session.h"

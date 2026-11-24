@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "extremis/gameplay/player/player_control.h"
 
 #include <cmath>

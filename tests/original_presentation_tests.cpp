@@ -1,3 +1,6 @@
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/cinematics/original_presentation.h"
 #include "extremis/ui/localization.h"
 #include <algorithm>

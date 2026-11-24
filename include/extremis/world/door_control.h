@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <optional>
+#include <vector>
 #include "extremis/gameplay/player/camera.h"
 #include "extremis/world/door.h"
 #include "extremis/world/door_clock.h"

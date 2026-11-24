@@ -1,3 +1,7 @@
+#include <chrono>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/world/door_control.h"
 #include "extremis/gameplay/player/player_control.h"
 #include "extremis/gameplay/player/weapon_fire.h"

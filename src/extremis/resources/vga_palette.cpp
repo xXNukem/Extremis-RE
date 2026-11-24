@@ -1,3 +1,5 @@
+#include <string_view>
+#include <cstdint>
 #include "extremis/resources/vga_palette.h"
 
 #include <stdexcept>

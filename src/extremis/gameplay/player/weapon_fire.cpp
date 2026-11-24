@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <array>
+#include <filesystem>
+#include <optional>
+#include <utility>
 #include "extremis/world/pit_clock.h"
 #include "extremis/diagnostics/shot_trace.h"
 #include "extremis/gameplay/player/weapon_fire.h"

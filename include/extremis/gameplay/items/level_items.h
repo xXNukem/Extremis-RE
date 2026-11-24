@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <vector>
 #include "extremis/gameplay/player/camera.h"
 #include "extremis/gameplay/player/player_inventory.h"
 #include "extremis/world/player_collision.h"

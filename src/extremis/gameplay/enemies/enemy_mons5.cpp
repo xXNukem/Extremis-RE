@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <vector>
 #include "extremis/gameplay/enemies/enemy_system.h"
 #include "extremis/world/door_control.h"
 #include "vortex/core/math/constants.h"

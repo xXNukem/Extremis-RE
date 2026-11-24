@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <utility>
 #include "../session/app_session.h"
 
 #include "extremis/render/first_person/camera/camera_start.h"
@@ -14,7 +18,7 @@ bool AppSession::loadInitialLevel(const LaunchOptions& options)
 {
     if (options.labPath) {
         try {
-            data = game_lab::loadLevel(options.labPath,(options.destructionDebug || options.shuttleDebug || options.communicationDebug)?21:0);
+            data = game_lab::loadLevel(std::filesystem::u8path(options.labPath),(options.destructionDebug || options.shuttleDebug || options.communicationDebug)?21:0);
             if(options.destructionDebug) data->level.playerStart=game_lab::PlayerStart{0,280,300,360};
             if(options.communicationDebug) {
                 data->level.playerStart=communication::returnPosition;
@@ -33,13 +37,13 @@ bool AppSession::loadInitialLevel(const LaunchOptions& options)
             }
 #endif
             try {
-                interactionRenderer.emplace(interaction::load(std::filesystem::path(options.labPath).parent_path()/"DATA"));
+                interactionRenderer.emplace(interaction::load(std::filesystem::u8path(options.labPath).parent_path()/"DATA"));
             } catch (const std::exception& error) {
                 items.setAvailable(false);
                 std::cerr << "Original interaction resources unavailable: " << error.what() << '\n';
             }
             try {
-                originalHud.emplace(hud::load(std::filesystem::path(options.labPath).parent_path() / "DATA",
+                originalHud.emplace(hud::load(std::filesystem::u8path(options.labPath).parent_path() / "DATA",
                                               level.palBank));
                 std::cout << "Player vitals: original initial health=1000, oxygen=288000; "
                              "160 nominal ticks/second during active 3D simulation.\n";
@@ -48,12 +52,12 @@ bool AppSession::loadInitialLevel(const LaunchOptions& options)
             }
             items.setAvailable(interactionRenderer.has_value() && originalHud.has_value());
             try {
-                originalMap.emplace(original_map::load(std::filesystem::path(options.labPath).parent_path()/"DATA"));
+                originalMap.emplace(original_map::load(std::filesystem::u8path(options.labPath).parent_path()/"DATA"));
             } catch (const std::exception& error) {
                 std::cerr << "Original map unavailable: " << error.what() << '\n';
             }
             try {
-                weaponFire.loadGraphics(std::filesystem::path(options.labPath).parent_path()/"DATA",level.palBank);
+                weaponFire.loadGraphics(std::filesystem::u8path(options.labPath).parent_path()/"DATA",level.palBank);
                 weaponGraphicsReady=true;
             } catch (const std::exception& error) {
                 std::cerr<<"Weapon graphics unavailable; firing disabled: "<<error.what()<<'\n';
@@ -61,12 +65,12 @@ bool AppSession::loadInitialLevel(const LaunchOptions& options)
             collisionWorld = collision::staticWorld(level);
             levelDoors = doors::closedDoors(level);
             std::cout << "Verified doors (initially closed): " << levelDoors.size() << '\n';
-            texturePreview.load(std::filesystem::path(options.labPath).parent_path() / "DATA",
+            texturePreview.load(std::filesystem::u8path(options.labPath).parent_path() / "DATA",
                                 level.dalleBank, level.palBank);
-            planeAppearance.load(std::filesystem::path(options.labPath).parent_path() / "DATA",
+            planeAppearance.load(std::filesystem::u8path(options.labPath).parent_path() / "DATA",
                                  level.dalleBank, level.palBank);
             try {
-                spriteScene = sprites::loadScene(level, std::filesystem::path(options.labPath).parent_path() / "DATA");
+                spriteScene = sprites::loadScene(level, std::filesystem::u8path(options.labPath).parent_path() / "DATA");
                 std::cout << "OBJET sprites: " << spriteScene->bank.images.size()
                           << " images, " << spriteScene->objects.size() << " instances, "
                           << spriteScene->skipped << " unsupported records.\n";
@@ -75,7 +79,7 @@ bool AppSession::loadInitialLevel(const LaunchOptions& options)
             }
             try {
                 enemies::System enemies;
-                enemies.load(level, std::filesystem::path(options.labPath).parent_path() / "DATA");
+                enemies.load(level, std::filesystem::u8path(options.labPath).parent_path() / "DATA");
                 enemySystem = std::move(enemies);
                 std::cout << "MONS1: " << enemySystem->records().size() << " original enemies.\n";
             } catch (const std::exception& error) {

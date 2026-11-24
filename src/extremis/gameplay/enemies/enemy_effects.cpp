@@ -1,3 +1,5 @@
+#include <optional>
+#include <vector>
 #include "extremis/gameplay/enemies/enemy_effects.h"
 #include "extremis/gameplay/enemies/enemy_profiles.h"
 #include <stdexcept>

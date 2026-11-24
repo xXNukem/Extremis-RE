@@ -1,3 +1,7 @@
+#include <functional>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/cinematics/level22_communication.h"
 #include <SDL3/SDL.h>
 #include <array>

@@ -1,3 +1,10 @@
+#include <string_view>
+#include <cstddef>
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
 #include "extremis/ui/original_interactions.h"
 #include "extremis/ui/localization.h"
 #include "extremis/ui/interface_font.h"

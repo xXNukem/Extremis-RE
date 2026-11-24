@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 namespace platform::sdl {
 
 template<class Cue>

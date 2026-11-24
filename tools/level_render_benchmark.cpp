@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/gameplay/enemies/enemy_system.h"
 #include "extremis/resources/sector_coordinates.h"
 #include "extremis/render/first_person/camera/camera_start.h"

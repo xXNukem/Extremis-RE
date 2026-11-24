@@ -1,4 +1,7 @@
 #pragma once
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/resources/anm_format.h"
 #include "extremis/resources/spr_format.h"
 #include "extremis/gameplay/player/player_vitals.h"

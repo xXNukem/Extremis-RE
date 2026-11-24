@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include "extremis/world/player_collision.h"
 
 namespace enemies {

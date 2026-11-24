@@ -1,3 +1,10 @@
+#include <string_view>
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
 #include "app/session/shuttle_session.h"
 #include "extremis/ui/localization.h"
 #include "extremis/ui/cinematic_text.h"

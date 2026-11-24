@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 #include "extremis/ui/cinematic_text.h"
 #include "extremis/ui/localization.h"
 #include <filesystem>

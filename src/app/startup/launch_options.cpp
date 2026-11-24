@@ -1,3 +1,4 @@
+#include <optional>
 #include "launch_options.h"
 
 #include <iostream>

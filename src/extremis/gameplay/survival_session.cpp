@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <string>
 #include "extremis/gameplay/player/survival_session.h"
 #include "extremis/audio/game_audio.h"
 

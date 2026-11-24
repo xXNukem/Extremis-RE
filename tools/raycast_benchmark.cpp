@@ -1,3 +1,10 @@
+#include <cstddef>
+#include <algorithm>
+#include <cstdint>
+#include <limits>
+#include <memory>
+#include <utility>
+#include <vector>
 #include "extremis/render/first_person/camera/camera_start.h"
 #include "extremis/render/first_person/presentation/first_person_view.h"
 #include "ray_scene.h"

@@ -1,3 +1,9 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <utility>
+#include <vector>
 #include "extremis/render/first_person/camera/camera_start.h"
 #include "extremis/ui/original_hud.h"
 #include "extremis/ui/localization.h"

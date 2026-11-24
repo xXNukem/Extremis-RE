@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <cstdint>
 #include "app/diagnostics/map_view.h"
 
 #include <SDL3/SDL.h>

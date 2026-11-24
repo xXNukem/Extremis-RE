@@ -1,3 +1,8 @@
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
 #include "extremis/cinematics/original_ending.h"
 #include "app/session/victory_session.h"
 #include "extremis/resources/audio_data.h"

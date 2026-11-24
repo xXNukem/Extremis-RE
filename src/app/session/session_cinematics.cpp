@@ -1,3 +1,8 @@
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <utility>
+#include <vector>
 #include "extremis/render/first_person/camera/camera_start.h"
 #include "app_session.h"
 
@@ -19,7 +24,7 @@ StartupCreditsResult AppSession::playCommunication(SDL_Window* window, SDL_Rende
 {
     gameAudio.stopEffects();items.clearInput();playerInput.invalidateContext();
     doorControl.beginFrame(false);doorControl.rebuildWorld();
-    const auto result=communication::show(window,std::filesystem::path(labPath).parent_path()/"DATA",
+    const auto result=communication::show(window,std::filesystem::u8path(labPath).parent_path()/"DATA",
         [&](const std::vector<std::uint32_t>& pixels) {
             return SDL_SetRenderDrawColor(renderer,0,0,0,255) && SDL_RenderClear(renderer) &&
                    firstPerson.drawFrame(pixels) && SDL_RenderPresent(renderer);
@@ -42,10 +47,10 @@ StartupCreditsResult AppSession::playShuttle(SDL_Window* window, SDL_Renderer* r
     gameAudio.stopEffects();items.clearInput();playerInput.invalidateContext();
     doorControl.beginFrame(false);doorControl.rebuildWorld();
     shuttle::Session boarding;
-    auto result=shuttle::prompt(window,renderer,std::filesystem::path(labPath).parent_path()/"DATA",
+    auto result=shuttle::prompt(window,renderer,std::filesystem::u8path(labPath).parent_path()/"DATA",
                                 boarding,survival.inventory(),items);
     if(result==StartupCreditsResult::Continue && boarding.step()==shuttle::Step::Flight) {
-        result=showOriginalShuttle(window,renderer,std::filesystem::path(labPath).parent_path()/"DATA",
+        result=showOriginalShuttle(window,renderer,std::filesystem::u8path(labPath).parent_path()/"DATA",
                                    false,gameAudio.outputGain());
         if(result==StartupCreditsResult::Continue) {
             shuttleTravel=boarding.complete(result,items);
@@ -73,6 +78,6 @@ StartupCreditsResult AppSession::playVictory(SDL_Window* window, SDL_Renderer* r
     original_ending::EntryImage entry;
     entry.rgba=firstPerson.frame();
     return showOriginalEnding(window,renderer,
-        std::filesystem::path(labPath).parent_path()/"DATA",std::move(entry),gameAudio.outputGain());
+        std::filesystem::u8path(labPath).parent_path()/"DATA",std::move(entry),gameAudio.outputGain());
 }
 }

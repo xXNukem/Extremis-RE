@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <vector>
 #include "extremis/resources/game_lab.h"
 
 #include <algorithm>

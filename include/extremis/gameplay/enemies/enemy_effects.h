@@ -1,4 +1,6 @@
 #pragma once
+#include <optional>
+#include <vector>
 #include "extremis/render/first_person/sprites/sprite_scene.h"
 #include "extremis/world/player_collision.h"
 #include "extremis/gameplay/player/camera.h"

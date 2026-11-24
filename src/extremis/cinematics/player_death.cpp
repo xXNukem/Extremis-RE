@@ -1,3 +1,11 @@
+#include <string_view>
+#include <cstddef>
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <utility>
+#include <vector>
 #include "extremis/world/pit_clock.h"
 #include "extremis/cinematics/player_death.h"
 #include "extremis/ui/localization.h"

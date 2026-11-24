@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "extremis/render/first_person/presentation/first_person_view.h"
 
 #include <SDL3/SDL.h>

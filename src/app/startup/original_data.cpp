@@ -1,3 +1,7 @@
+#include <system_error>
+#include <filesystem>
+#include <string>
+#include <utility>
 #include "original_data.h"
 
 #include "extremis/resources/game_lab.h"
@@ -155,7 +159,7 @@ std::filesystem::path findOriginalData(const std::filesystem::path& executableDi
                 std::vector<std::filesystem::path> children;
                 for (;!ec && it!=std::filesystem::directory_iterator{} && entries<256;it.increment(ec),++entries) {
                     const auto& entry=*it;
-                    if (entry.path().filename().string().front()=='.' || entry.is_symlink(ec)) continue;
+                    if (entry.path().filename().native().front()==std::filesystem::path::value_type('.') || entry.is_symlink(ec)) continue;
                     if (entry.is_directory(ec)) children.push_back(entry.path());
                 }
                 // If a directory exceeds the bound, skip its children entirely;

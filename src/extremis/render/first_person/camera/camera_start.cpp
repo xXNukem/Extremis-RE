@@ -1,3 +1,4 @@
+#include <cstddef>
 #include "extremis/render/first_person/camera/camera_start.h"
 #include "extremis/resources/sector_coordinates.h"
 #include "vortex/core/math/constants.h"

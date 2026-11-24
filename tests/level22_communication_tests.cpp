@@ -1,3 +1,9 @@
+#include <chrono>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <utility>
+#include <vector>
 #include "extremis/cinematics/level22_communication.h"
 #include "extremis/world/door_control.h"
 #include "app/session/item_session.h"

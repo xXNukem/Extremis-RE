@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include "extremis/render/first_person/materials/wall_material.h"
 
 #include <algorithm>

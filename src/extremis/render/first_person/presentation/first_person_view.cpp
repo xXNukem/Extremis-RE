@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
 #include "extremis/render/first_person/presentation/first_person_view.h"
 #ifdef EXTREMIS_DEBUG_MENU
 #include "platform/sdl/video/frame_profiler.h" // VORTEX_DEBUG_PROFILER_V1

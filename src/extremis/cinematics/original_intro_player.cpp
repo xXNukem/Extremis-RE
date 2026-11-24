@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <filesystem>
 #include "extremis/cinematics/original_intro_player.h"
 #include "platform/sdl/input/startup_skip.h"
 #include "extremis/cinematics/original_intro.h"

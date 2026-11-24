@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <optional>
+#include <vector>
 #include "extremis/gameplay/items/level_items.h"
 #include "extremis/resources/sector_coordinates.h"
 #include "vortex/core/math/constants.h"

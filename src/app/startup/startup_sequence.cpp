@@ -1,3 +1,4 @@
+#include <filesystem>
 #include "startup_sequence.h"
 
 #include "extremis/cinematics/original_intro_player.h"

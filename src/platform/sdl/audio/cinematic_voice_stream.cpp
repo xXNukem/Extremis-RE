@@ -1,3 +1,5 @@
+#include <array>
+#include <cstdint>
 #include "platform/sdl/audio/cinematic_voice_stream.h"
 
 #include <SDL3/SDL.h>

@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/world/pit_clock.h"
 #include "extremis/cinematics/original_ending.h"
 #include <algorithm>

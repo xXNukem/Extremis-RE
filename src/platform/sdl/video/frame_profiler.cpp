@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <cstdint>
 #include "platform/sdl/video/frame_profiler.h"
 
 #include <SDL3/SDL_log.h>

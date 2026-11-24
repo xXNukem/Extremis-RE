@@ -1,4 +1,6 @@
 #pragma once
+#include <cstddef>
+#include <cstdint>
 #include "extremis/resources/spr_format.h"
 #include "extremis/ui/utf8_glyph.h"
 #include <algorithm>

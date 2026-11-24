@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 #include "extremis/ui/frame_composition.h"
 
 #include "extremis/ui/original_hud.h"

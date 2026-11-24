@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <optional>
 #include "app/session/shuttle_session.h"
 
 #include "extremis/cinematics/playback_result.h"

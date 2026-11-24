@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <utility>
+#include <vector>
 #include "extremis/render/first_person/presentation/first_person_view.h"
 #include "vortex/render/first_person/sprites/sprite_renderer.h"
 #include "extremis/render/first_person/sprites/sprite_animation.h"

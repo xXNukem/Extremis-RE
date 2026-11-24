@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
 #include "extremis/resources/texture_bank.h"
 #include "extremis/render/first_person/materials/texture_preview.h"
 

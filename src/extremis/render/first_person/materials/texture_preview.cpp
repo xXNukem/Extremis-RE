@@ -1,3 +1,6 @@
+#include <cstdint>
+#include <filesystem>
+#include <string>
 #include "extremis/render/first_person/materials/texture_preview.h"
 
 #include <exception>

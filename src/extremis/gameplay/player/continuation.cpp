@@ -1,3 +1,4 @@
+#include <string_view>
 #include "extremis/gameplay/player/continuation.h"
 
 #include <algorithm>

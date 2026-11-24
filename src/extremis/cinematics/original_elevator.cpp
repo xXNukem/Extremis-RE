@@ -1,3 +1,7 @@
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/cinematics/original_elevator.h"
 #include <algorithm>
 #include <stdexcept>

@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
 #include "extremis/world/pit_clock.h"
 #include "extremis/cinematics/original_shuttle.h"
 #include "extremis/ui/localization.h"

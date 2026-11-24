@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <algorithm>
 #include "credits_audio.h"
 #include "credits_timeline.h"
 

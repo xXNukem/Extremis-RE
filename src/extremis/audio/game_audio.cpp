@@ -1,3 +1,9 @@
+#include <cstddef>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
 #include "extremis/audio/game_audio.h"
 #include "extremis/world/door.h"
 #include "platform/sdl/audio/audio_player.h"

@@ -13,7 +13,7 @@ DestinationLevel prepareDestination(const char* labPath, game_lab::Level1 levelD
     auto& level=levelData.level;
     level.playerStart=arrival;
     const auto camera=initialCamera(level);
-    const auto directory=std::filesystem::path(labPath).parent_path()/"DATA";
+    const auto directory=std::filesystem::u8path(labPath).parent_path()/"DATA";
     auto spriteScene=sprites::loadScene(level,directory);
     enemies::System enemySystem;
     enemySystem.load(level,directory);

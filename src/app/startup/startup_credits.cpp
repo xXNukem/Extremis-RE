@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <filesystem>
 #include "app/startup/startup_credits.h"
 #include "platform/sdl/input/startup_skip.h"
 #include "credits_audio.h"

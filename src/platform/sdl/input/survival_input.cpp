@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "platform/sdl/input/survival_input.h"
 
 #include <SDL3/SDL_events.h>

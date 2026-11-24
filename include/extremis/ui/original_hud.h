@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/resources/spr_format.h"
 #include "extremis/resources/texture_bank.h"
 #include "extremis/gameplay/enemies/motion_detector.h"

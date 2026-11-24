@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <cstdint>
 #include "extremis/world/objet_collision.h"
 #include "extremis/resources/sector_coordinates.h"
 #include <array>

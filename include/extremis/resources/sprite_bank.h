@@ -1,5 +1,9 @@
 #pragma once
 
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/resources/texture_bank.h"
 #include "vortex/render/first_person/sprites/sprite_types.h"
 

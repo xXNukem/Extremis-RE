@@ -1,3 +1,8 @@
+#include <algorithm>
+#include <cstdint>
+#include <filesystem>
+#include <utility>
+#include <vector>
 #include "extremis/cinematics/player_death.h"
 #include <SDL3/SDL.h>
 #include <iostream>

@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <cstdint>
+#include <utility>
+#include <vector>
 #include "extremis/render/first_person/presentation/first_person_view.h"
 #include "extremis/ui/frame_composition.h"
 #ifdef EXTREMIS_DEBUG_MENU

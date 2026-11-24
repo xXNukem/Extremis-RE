@@ -1,3 +1,7 @@
+#include <string_view>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 #include "extremis/ui/original_interactions.h"
 #include "extremis/ui/localization.h"
 #include <algorithm>

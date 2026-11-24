@@ -1,4 +1,7 @@
 #pragma once
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/gameplay/player/camera.h"
 #include "extremis/resources/spr_format.h"
 #include "extremis/resources/texture_bank.h"

@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 #include "ray_scene.h"
 #include "extremis/resources/sector_coordinates.h"
 

@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "extremis/world/door.h"
 
 #include <iostream>

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <filesystem>
 #include "extremis/gameplay/player/player_inventory.h"
 #include "extremis/gameplay/player/weapon_definitions.h"
 #include "extremis/gameplay/player/camera.h"

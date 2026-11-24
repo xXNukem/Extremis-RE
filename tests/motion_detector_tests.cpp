@@ -1,3 +1,6 @@
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/gameplay/enemies/motion_detector.h"
 #include "extremis/gameplay/enemies/enemy_system.h"
 #include "extremis/gameplay/player/player_inventory.h"

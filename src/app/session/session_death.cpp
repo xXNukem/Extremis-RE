@@ -1,3 +1,4 @@
+#include <filesystem>
 #include "app_session.h"
 
 #include "app/session/victory_session.h"
@@ -54,7 +55,7 @@ AppSession::DeathFrame AppSession::beginDeathPresentation(SDL_Renderer* renderer
     if(deathCause!=player::DeathCause::None && deathPresentation && !deathPresentation->active() && firstPerson.frame().size()==64000) {
         gameAudio.stopEffects();
         if(deathCause==player::DeathCause::SelfDestruction) {
-            try { deathPresentation->loadExplosion(std::filesystem::path(labPath).parent_path()/"DATA"); }
+            try { deathPresentation->loadExplosion(std::filesystem::u8path(labPath).parent_path()/"DATA"); }
             catch(const std::exception& error) {
                 SDL_Log("Ship explosion unavailable: %s",error.what());return DeathFrame::Error;
             }

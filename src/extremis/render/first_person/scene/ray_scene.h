@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <vector>
 #include "vortex/core/math/constants.h"
 #include "extremis/gameplay/player/camera.h"
 #include "extremis/resources/game_lab.h"

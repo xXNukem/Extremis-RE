@@ -1,4 +1,6 @@
 #pragma once
+#include <cstddef>
+#include <cstdint>
 #include "extremis/world/player_collision.h"
 #include "extremis/render/first_person/sprites/sprite_scene.h"
 

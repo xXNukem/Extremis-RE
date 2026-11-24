@@ -1,3 +1,9 @@
+#include <string_view>
+#include <cstddef>
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <filesystem>
 #include "credits_view.h"
 #include "credits_timeline.h"
 #include "extremis/resources/spr_format.h"

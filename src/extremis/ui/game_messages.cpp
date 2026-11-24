@@ -1,3 +1,8 @@
+#include <string_view>
+#include <array>
+#include <cstdint>
+#include <string>
+#include <utility>
 #include "extremis/ui/game_messages.h"
 #include <algorithm>
 #include <cmath>

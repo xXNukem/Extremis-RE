@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "extremis/world/pit_clock.h"
 #include "extremis/world/door_clock.h"
 

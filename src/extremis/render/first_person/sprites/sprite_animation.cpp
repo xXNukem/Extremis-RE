@@ -1,3 +1,4 @@
+#include <cstddef>
 #include "extremis/render/first_person/sprites/sprite_animation.h"
 
 #include <cmath>

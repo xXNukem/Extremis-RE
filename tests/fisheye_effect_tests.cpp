@@ -1,3 +1,4 @@
+#include <cstddef>
 #include "vortex/render/first_person/postprocess/fisheye_effect.h"
 
 #include <cstdlib>

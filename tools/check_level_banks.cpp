@@ -1,3 +1,4 @@
+#include <filesystem>
 #include "extremis/resources/game_lab.h"
 #include "extremis/resources/texture_bank.h"
 #include "extremis/resources/sprite_bank.h"

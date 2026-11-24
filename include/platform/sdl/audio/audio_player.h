@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstddef>
+#include <filesystem>
+#include <optional>
+#include <string>
 #include "extremis/audio/audio_mixer.h"
 #include "vortex/audio/sdl_player.h"
 

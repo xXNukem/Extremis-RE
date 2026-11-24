@@ -1,3 +1,6 @@
+#include <string_view>
+#include <cstddef>
+#include <filesystem>
 #include "extremis/ui/original_font.h"
 #include "extremis/ui/utf8_glyph.h"
 #include "extremis/resources/spr_format.h"

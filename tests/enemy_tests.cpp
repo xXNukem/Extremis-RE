@@ -1,3 +1,9 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <vector>
 #include "extremis/gameplay/enemies/enemy_system.h"
 #include "extremis/gameplay/enemies/enemy_profiles.h"
 #include "vortex/render/first_person/sprites/sprite_renderer.h"

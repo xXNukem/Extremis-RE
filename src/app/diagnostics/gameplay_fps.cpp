@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "gameplay_fps.h"
 
 #include "platform/sdl/video/frame_profiler.h"

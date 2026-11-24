@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include "extremis/resources/game_lab.h"
 #include "vortex/core/geometry/point.h"
 

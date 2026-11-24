@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <cstdint>
 #include "port_menu_view.h"
 
 #include "app/startup/port_menu_state.h"

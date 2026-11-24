@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "extremis/audio/footstep_cadence.h"
 
 #include <algorithm>

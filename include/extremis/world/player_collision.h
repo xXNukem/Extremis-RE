@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include "extremis/resources/game_lab.h"
 #include "vortex/core/geometry/point.h"
 #include <optional>

@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <filesystem>
 #include "app/session/shuttle_session.h"
 #include "app/startup/startup_credits.h"
 #include "extremis/gameplay/player/player_inventory.h"

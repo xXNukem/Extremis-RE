@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
 #include "extremis/render/first_person/sprites/sprite_scene.h"
 #include "extremis/resources/sector_coordinates.h"
 #include "original_sprite_data.h"

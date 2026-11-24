@@ -1,3 +1,4 @@
+#include <vector>
 #include "platform/sdl/input/player_input.h"
 #include "app/session/item_session.h"
 #include "extremis/gameplay/player/survival_session.h"

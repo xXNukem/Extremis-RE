@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <filesystem>
 #include "extremis/resources/texture_bank.h"
 #include "extremis/render/first_person/materials/wall_animation.h"
 

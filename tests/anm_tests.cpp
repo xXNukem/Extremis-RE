@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 #include "extremis/resources/anm_format.h"
 #include <algorithm>
 #include <iostream>

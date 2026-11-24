@@ -1,3 +1,5 @@
+#include <filesystem>
+#include <vector>
 #include "extremis/gameplay/enemies/enemy_system.h"
 #include "extremis/gameplay/player/player_control.h"
 #include <algorithm>

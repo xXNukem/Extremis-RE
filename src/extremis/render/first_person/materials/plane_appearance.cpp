@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <filesystem>
 #include "extremis/render/first_person/materials/plane_appearance.h"
 
 #include <iostream>

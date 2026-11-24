@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 #include "extremis/gameplay/enemies/enemy_system.h"
 
 #include <algorithm>

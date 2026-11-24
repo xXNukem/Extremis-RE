@@ -1,3 +1,10 @@
+#include <string_view>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <utility>
+#include <vector>
 #include "extremis/ui/original_map.h"
 #include "vortex/core/graphics/color.h"
 #include "vortex/core/math/constants.h"

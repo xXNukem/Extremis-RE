@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "platform/sdl/video/frame_texture.h"
 
 #include <SDL3/SDL_render.h>

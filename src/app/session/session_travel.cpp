@@ -1,3 +1,4 @@
+#include <filesystem>
 #include "app_session.h"
 #include "destination_level.h"
 
@@ -31,7 +32,7 @@ void AppSession::transferLevel(SDL_Window* window, SDL_Renderer* renderer,
         if(!travel.elevator) return true;
         const auto& e=*travel.elevator;
         const auto result=showOriginalElevator(window,renderer,
-            std::filesystem::path(options.labPath).parent_path()/"DATA",
+            std::filesystem::u8path(options.labPath).parent_path()/"DATA",
             int(e.destinationFloor)-int(e.sourceFloor),gameAudio);
         playerInput.invalidateContext();items.clearInput();
         if(result==StartupCreditsResult::Quit) running=false;
@@ -72,7 +73,7 @@ void AppSession::transferLevel(SDL_Window* window, SDL_Renderer* renderer,
         const auto saved = visitedLevels.find(travel.zone);
         auto destination = prepareDestination(options.labPath,
             !restartRequested && saved != visitedLevels.end() ? saved->second :
-                game_lab::loadLevel(options.labPath, travel.zone), travel.arrival);
+                game_lab::loadLevel(std::filesystem::u8path(options.labPath), travel.zone), travel.arrival);
         if(!presentElevator()) {
             doorControl.resetLevel();
             return;
@@ -98,7 +99,7 @@ void AppSession::transferLevel(SDL_Window* window, SDL_Renderer* renderer,
             if (deathPresentation) deathPresentation->reset();
             victory.reset();
 #ifdef EXTREMIS_DEBUG_MENU
-            debugMenu=DebugMenu{}; debugMenu.load(options.labPath);
+            debugMenu=DebugMenu{}; debugMenu.load(std::filesystem::u8path(options.labPath));
 #endif
         }
         items.load(destination.levelData.level); // New game resets plans; elevator travel keeps them.

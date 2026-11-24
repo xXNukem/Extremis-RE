@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "extremis/gameplay/player/placed_bomb.h"
 
 #include <algorithm>

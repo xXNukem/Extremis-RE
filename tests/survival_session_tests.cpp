@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
 #include "extremis/gameplay/player/survival_session.h"
 #include "platform/sdl/input/survival_input.h"
 #include "extremis/audio/game_audio.h"

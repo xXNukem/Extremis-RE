@@ -1,3 +1,5 @@
+#include <string_view>
+#include <cstddef>
 #include "extremis/diagnostics/shot_trace.h"
 #include "extremis/ui/localization.h"
 #include "extremis/ui/utf8_glyph.h"

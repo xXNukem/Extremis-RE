@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <array>
+#include <cstdint>
 #include "extremis/ui/ambient_effects.h"
 #include "extremis/resources/game_lab.h"
 

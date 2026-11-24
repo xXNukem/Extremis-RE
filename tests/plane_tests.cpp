@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <utility>
+#include <vector>
 #include "extremis/render/first_person/materials/plane_appearance.h"
 #include "vortex/render/first_person/planes/plane_material.h"
 #include "vortex/render/first_person/planes/plane_renderer.h"

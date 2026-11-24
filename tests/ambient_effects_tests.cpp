@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "extremis/ui/ambient_effects.h"
 #include "extremis/resources/game_lab.h"
 #include "extremis/ui/frame_composition.h"

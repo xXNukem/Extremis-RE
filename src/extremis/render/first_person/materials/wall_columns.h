@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <utility>
+#include <vector>
 #include "extremis/resources/texture_bank.h"
 #include "vortex/render/first_person/raycast/raycast_geometry.h"
 #include "vortex/render/first_person/scene_renderer.h"

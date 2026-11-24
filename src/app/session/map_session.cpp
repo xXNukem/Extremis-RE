@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "app/session/map_session.h"
 #include "extremis/gameplay/player/survival_session.h"
 #include <SDL3/SDL.h>

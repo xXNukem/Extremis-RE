@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdint>
+#include <vector>
 #include "extremis/ui/ambient_effects.h"
 
 #include "extremis/resources/game_lab.h"

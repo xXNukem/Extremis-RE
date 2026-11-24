@@ -25,6 +25,11 @@ if(VORTEX_CPU_ONLY)
     return()
 endif()
 
+# Keep UTF-8 literals in the port's localization sources intact under MSVC.
+if(MSVC)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/utf-8>)
+endif()
+
 # The port keeps its archive output paths for diagnostic consumers.
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 add_subdirectory(src/platform/sdl)

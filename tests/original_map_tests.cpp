@@ -1,3 +1,7 @@
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
 #include "extremis/render/first_person/camera/camera_start.h"
 #include "extremis/ui/original_map.h"
 #include "app/session/map_session.h"

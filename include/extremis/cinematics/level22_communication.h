@@ -1,4 +1,7 @@
 #pragma once
+#include <array>
+#include <cstdint>
+#include <vector>
 #include "extremis/resources/anm_format.h"
 #include "extremis/resources/spr_format.h"
 #include "extremis/resources/game_lab.h"

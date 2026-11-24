@@ -1,3 +1,5 @@
+#include <optional>
+#include <vector>
 #include "extremis/audio/audio_mixer.h"
 
 #include <utility>

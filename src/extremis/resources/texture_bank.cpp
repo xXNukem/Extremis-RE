@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <vector>
 #include "extremis/resources/texture_bank.h"
 #include "extremis/resources/spr_format.h"
 #include "extremis/resources/vga_palette.h"
