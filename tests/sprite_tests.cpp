@@ -79,7 +79,7 @@ void wallImpactDepth()
     scene.bank.images.push_back(image());
     scene.objects.push_back({100,0,128,50,0});
     constexpr int w=100,h=100;
-    const auto makeDepth=[] {
+    const auto makeDepth=[w,h] {
         std::vector<double> values(w*h);
         for (int y=0;y<h;++y) for (int x=0;x<w;++x)
             values[y*w+x]=1.0/(.01+.00004*(x-50));
