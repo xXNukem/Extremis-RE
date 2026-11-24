@@ -7,6 +7,7 @@
 #include "extremis/resources/game_lab.h"
 #include "extremis/resources/audio_data.h"
 #include "extremis/resources/texture_bank.h"
+#include "extremis/gameplay/enemies/enemy_system.h"
 
 #include <algorithm>
 #include <array>
@@ -38,7 +39,10 @@ bool validateOriginalData(const std::filesystem::path& lab, std::string& error)
         // Check every level with the production parser, including geometry.
         const auto levels=game_lab::loadBankTable(lab);
         if (levels.size()!=30) { error="GAME.LAB does not contain 30 levels"; return false; }
-        for (unsigned level=0;level<levels.size();++level) game_lab::loadLevel(lab,level);
+        std::vector<game_lab::Level> completeLevels;
+        completeLevels.reserve(levels.size());
+        for (unsigned level=0;level<levels.size();++level)
+            completeLevels.push_back(game_lab::loadLevel(lab,level).level);
         std::error_code ec;
         if (std::filesystem::is_symlink(data,ec) || !std::filesystem::is_directory(data,ec)) {
             error="Missing DATA directory beside " + lab.string();
@@ -112,6 +116,15 @@ bool validateOriginalData(const std::filesystem::path& lab, std::string& error)
             // paired with incompatible or corrupt level banks.
             wall_textures::load(data,dalle,pal);
             wall_textures::loadPlanes(data,dalle,pal);
+        }
+        for (unsigned level=0;level<completeLevels.size();++level) {
+            try {
+                enemies::System system;
+                system.load(completeLevels[level],data);
+            } catch (const std::exception& e) {
+                error="Level " + std::to_string(level+1) + " MONS load failed: " + e.what();
+                return false;
+            }
         }
         error.clear();
         return true;

@@ -351,6 +351,38 @@ void otherBanks(const std::filesystem::path& directory)
     write(directory/"MONS4.SPT", std::vector<unsigned char>(16,0)); rejects();
     write(directory/"MONS4.SPT", std::vector<unsigned char>(7,0)); rejects();
 }
+void resourceFailures(const std::filesystem::path& directory)
+{
+    fixture(directory,4);
+    auto level=arena(); level.monsBank=4;
+    const auto name=directory/"MONS4.SPR";
+    const auto expectError=[&](const char* expected) {
+        try { enemies::System system; system.load(level,directory); }
+        catch (const std::runtime_error& e) {
+            check(std::string(e.what()).find(expected)!=std::string::npos,
+                  "Unexpected MONS load failure stage");
+            return;
+        }
+        throw std::runtime_error("Invalid MONS resource loaded");
+    };
+    const auto mask=directory/"MONS4.SPT", hidden=directory/"MONS4.SPT.hidden";
+    std::filesystem::rename(mask,hidden);
+    expectError("Cannot read monster resource");
+    std::filesystem::rename(hidden,mask);
+    write(name,{}); expectError("Truncated SPR integer");
+    fixture(directory,4);
+    write(name,{0,0,1,0,0,0,0,0}); expectError("Invalid first SPR offset");
+    fixture(directory,4);
+    write(directory/"PAL1.PAL",std::vector<unsigned char>(767,63));
+    expectError("Unsupported size");
+    fixture(directory,4);
+    write(directory/"MONS4.SPT",std::vector<unsigned char>(7,0));
+    expectError("Invalid monster bank");
+    fixture(directory,4);
+    enemies::System system; system.load(level,directory);
+    check(system.scene().bank.images.size()==16 && !system.scene().objects.empty(),
+          "Valid MONS resource did not load after failures");
+}
 void allBanks(const std::filesystem::path& directory, bool synthetic)
 {
     constexpr unsigned heights[]{270,170,190,160,180,200,270,200,270};
@@ -1035,7 +1067,7 @@ int main(int argc,char** argv)
             std::cout << "Enemy OBJET collision tests passed\n";
             return 0;
         }
-        sectorVisibility(argv[1]); placement(argv[1]); rendererMatrix(argv[1]); skippedRecordMapping(argv[1]); otherBanks(argv[1]); allBanks(argv[1],true); combat(argv[1]); combat(argv[1],3); mons3(argv[1]); deathEffects(); navigation(); sharedMovement(argv[1]); mons5(argv[1]); objetCollisions(argv[1]); objetSectorTransition(argv[1]); doorClearance(argv[1]);
+        sectorVisibility(argv[1]); placement(argv[1]); rendererMatrix(argv[1]); skippedRecordMapping(argv[1]); otherBanks(argv[1]); resourceFailures(argv[1]); allBanks(argv[1],true); combat(argv[1]); combat(argv[1],3); mons3(argv[1]); deathEffects(); navigation(); sharedMovement(argv[1]); mons5(argv[1]); objetCollisions(argv[1]); objetSectorTransition(argv[1]); doorClearance(argv[1]);
         if (argc>2) { originalMons5(argv[2]); original(argv[2]); allBanks(std::filesystem::path(argv[2]).parent_path()/"DATA",false); }
         std::cout<<"Enemy placement/resource tests passed\n";
         return 0;

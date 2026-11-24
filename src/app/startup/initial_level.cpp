@@ -93,6 +93,7 @@ bool AppSession::loadInitialLevel(const LaunchOptions& options)
                 const std::string message="Enemy resources could not be loaded:\n"+std::string(error.what());
                 SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Extremis RE: enemies unavailable",
                     message.c_str(),nullptr);
+                return false;
             }
             try {
                 camera = initialCamera(level);

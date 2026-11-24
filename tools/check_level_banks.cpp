@@ -33,8 +33,10 @@ int main(int argc, char** argv)
             check("SOL", [&] { wall_textures::loadPlanes(data,level.dalleBank,level.palBank); });
             check("OBJET", [&] { auto b = sprites::load(data,level.objetBank,level.palBank);
                 std::cerr << "Level " << level.zoneIndex+1 << " OBJET images=" << b.images.size(); });
-            check("MONS", [&] { enemies::System system; system.load(level,data);
-                std::cerr << " MONS images/masks=" << system.scene().bank.images.size() << '\n';
+            check("MONS", [&] { enemies::System system;
+                system.load(game_lab::loadLevel(lab,level.zoneIndex).level,data);
+                std::cerr << " MONS images/masks=" << system.scene().bank.images.size()
+                          << " instances=" << system.scene().objects.size() << '\n';
             });
         }
         std::cout << levels.size() << " levels checked; " << failures << " resource failures\n";
