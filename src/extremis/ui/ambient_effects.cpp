@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include "extremis/ui/ambient_effects.h"
+#include "extremis/world/pit_clock.h"
 #include "extremis/resources/game_lab.h"
 
 #include <algorithm>
@@ -70,6 +71,17 @@ bool PowerSurge::update(std::uint16_t ticks, bool higherPriorityEffect)
     darkness_ = active && !higherPriorityEffect ? (randomWord() & 63u) + 30u : 0;
     if (remaining_ < -640) remaining_ = 9600 + randomWord();
     return active;
+}
+
+bool PowerSurge::updateElapsed(double seconds, bool higherPriorityEffect)
+{
+    if (!std::isfinite(seconds) || seconds < 0) return false;
+    const double total = fractionalTicks_ + seconds * extremis::pit::inputHz / extremis::pit::divisor;
+    const double whole = std::floor(total);
+    fractionalTicks_ = total - whole;
+    // The surge owns only its fractional PIT phase. The shared door counter's
+    // one-unit-per-frame reset must not shorten this event at higher FPS.
+    return update(static_cast<std::uint16_t>(static_cast<std::uint64_t>(whole)), higherPriorityEffect);
 }
 
 PaletteTint PowerSurge::tint() const { return {darkness_, {0, 0, 0}}; }

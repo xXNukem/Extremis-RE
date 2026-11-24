@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -17,6 +18,22 @@ int main(int argc, char* argv[])
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL initialization failed: %s", SDL_GetError());
         return 1;
+    }
+    std::ofstream diagnosticLog;
+    if (SDL_getenv("EXTREMIS_ENEMY_TRACE") || SDL_getenv("EXTREMIS_SURGE_TRACE")) {
+        if (char* pref=SDL_GetPrefPath("Extremis RE","Extremis RE")) {
+            const auto logPath=std::filesystem::u8path(pref)/"extremis-diagnostics.log";
+            SDL_free(pref);
+            diagnosticLog.open(logPath,std::ios::trunc);
+            if (diagnosticLog) {
+                SDL_SetLogOutputFunction([](void* context,int,SDL_LogPriority,const char* message) {
+                    auto& output=*static_cast<std::ofstream*>(context);
+                    output << SDL_GetTicksNS() << ' ' << message << '\n';
+                    output.flush();
+                },&diagnosticLog);
+                SDL_Log("Diagnostics file: %s",logPath.u8string().c_str());
+            }
+        }
     }
     const auto* base=SDL_GetBasePath();
     const auto executableDirectory=base ? std::filesystem::u8path(base) : std::filesystem::path{};

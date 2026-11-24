@@ -126,10 +126,10 @@ void AppSession::transferLevel(SDL_Window* window, SDL_Renderer* renderer,
         if (checkpoint) disclosures.consume(*checkpoint);
         if (!restartRequested) discloseArrival();
         SDL_SetWindowTitle(window,survival.windowTitle(texturePreview.windowTitle()).c_str());
-        SDL_Log("Elevator: level %u, sector %u, arrival %.0f,%.0f; %zu sectors, %zu sprites, %zu enemies, %zu doors",
+        SDL_Log("Elevator: level %u, sector %u, arrival %.0f,%.0f; %zu sectors, %zu sprites, %zu enemy records, %zu enemy instances, %zu doors",
             travel.zone+1,travel.arrival.sector,camera->x,camera->y,
             data->level.sectors.size(),spriteScene->objects.size(),
-            enemySystem->records().size(),levelDoors.size());
+            enemySystem->records().size(),enemySystem->scene().objects.size(),levelDoors.size());
     } catch (const std::exception& error) {
         SDL_Log("Level load failed: %s",error.what());
         if (restartRequested) running=false;

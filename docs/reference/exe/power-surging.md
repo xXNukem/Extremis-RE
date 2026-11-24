@@ -40,14 +40,15 @@ The text queue sits immediately before the countdown. Its five ten-byte entries 
 
 **EXE-confirmed presentation coupling.** The timer and battery update are independent, including when the charge reaches zero on the surge update. Battery depletion clears the optics flag first. The frame later chooses its base at `0x73e7–0x73ff`, so any selected surge tint on that update darkens the normal palette. Otherwise an active optic system continues to run and consume battery while the surge darkens its green output. The colored lamp lookup may still detect a lamp during either effect. Neither the lamp nor optics is a condition on the surge's RNG calls. The separate entry fade uses the selected source at `0x7490` and jumps over normal tint arbitration at `0x74dd`. Warning and audio requests come from the player update before that decision. See [optic system and battery](colored-lights.md#optic-system-and-battery).
 
-**Port implementation.** The live session uses its shared gameplay counter,
-retains the surge across travel and resets it on NEW GAME or continuation. The HUD message
+**Port implementation.** The live session retains the surge across travel and resets it on NEW GAME or continuation. The HUD message
 queue deduplicates recurring notices. Surge and destruction requests share
 the existing single BANK[14] loop. The pulse takes precedence over lamp tint
 and darkens the already selected regular or green source at the world/HUD
-upload boundary. Battery drain uses the same gameplay delta independently.
+upload boundary. Battery drain uses the shared gameplay delta independently.
 If charge expires on a surge frame, that frame darkens the regular source.
 Blocking interfaces keep their own palette handling.
+
+**Port timing correction (2026-11-24, Port-tested/Adapted).** `doors::dos::Counter::reset()` sets the shared word to 1 on every rendered frame, following the documented DOS reset. `AppSession::run()` previously supplied that word directly to `PowerSurge::update()` once per frame. Thus the port subtracted roughly `PIT rate + rendered FPS` units per second: simulated 640-unit active phases take about 2.9 s at 60 FPS and 1.6 s at 240 FPS, whereas 640 nominal PIT units span about 4 s. These are port calculations, not measured DOS durations. The gameplay `Counter::Time` explicitly uses `std::chrono::nanoseconds` on all platforms; the issue was the frame reset, not a Windows-specific `steady_clock::duration` unit. The live surge now accumulates elapsed active simulation time at the nominal PIT ratio through `PowerSurge::updateElapsed()`, preserving the 9600/640 thresholds and leaving the shared door, bomb, oxygen, battery and security counter untouched. `tests/ambient_effects_tests.cpp` covers 60/240 FPS simulations; `tests/door_clock_tests.cpp` checks the nanosecond type and an actual steady-clock interval. Windows wall-clock observation is still pending; `EXTREMIS_SURGE_TRACE=1` writes active/inactive transitions and SDL nanosecond timestamps to `extremis-diagnostics.log` beside the port settings file. The warning queue can outlive the darkening; BANK[14] can also be requested by other systems.
 
 **Adapted.** The host uses an independent PRNG with the recovered range and
 thresholds. The existing message queue displays the complete text immediately.

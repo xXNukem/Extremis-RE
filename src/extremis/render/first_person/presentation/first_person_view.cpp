@@ -13,6 +13,7 @@
 #include "../scene/ray_scene.h"
 #include "../materials/wall_columns.h"
 #include "vortex/render/first_person/render_workers.h"
+#include "vortex/render/first_person/sprites/sprite_renderer.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <array>
@@ -261,8 +262,22 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
     style.layers = layers.data();
     style.layerCount = spriteScene || enemyScene || projectileScene || bomb ? layers.size() : 0;
 
+    struct EnemyCapture { std::vector<std::uint32_t> before; std::size_t changed=0; } enemyCapture;
+    static unsigned enemyTraceFrame=0;
+    const bool traceEnemies=SDL_getenv("EXTREMIS_ENEMY_TRACE") &&
+        (++enemyTraceFrame<=120 || enemyTraceFrame%120==0);
+    if (traceEnemies) {
+        style.observeLayer=[](void* context,std::size_t layer,bool after,const auto& colors) {
+            if (layer!=1) return;
+            auto& capture=*static_cast<EnemyCapture*>(context);
+            if (!after) capture.before=colors;
+            else for (std::size_t i=0;i<colors.size();++i)
+                capture.changed+=capture.before[i]!=colors[i];
+        };
+        style.layerContext=&enemyCapture;
+    }
     ShotCapture capture{layers.size() - 1, {}};
-    const bool traceShots = extremis::shot_trace::pixels && projectileScene &&
+    const bool traceShots = !traceEnemies && extremis::shot_trace::pixels && projectileScene &&
                             !projectileScene->objects.empty() && !mapState;
     if (traceShots) {
         style.observeLayer = [](void* context, std::size_t layer, bool after, const auto& pixels) {
@@ -289,6 +304,25 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
     }
     if (!rendered)
         return SDL_SetError("Invalid fisheye world framebuffer");
+
+    if (traceEnemies) {
+        std::size_t projected=0;
+        if (enemyScene) {
+            const vortex::sprites::Projection spriteProjection{
+                width,height,view.planeAndSpriteFocal,projection.eyeHeight};
+            for (const auto& object:enemyScene->objects) {
+                if (object.image>=enemyScene->bank.images.size()) continue;
+                const auto rectangle=vortex::sprites::project(object,
+                    enemyScene->bank.images[object.image],view.camera,spriteProjection);
+                if (rectangle && rectangle->left<width && rectangle->left+rectangle->width>0 &&
+                    rectangle->top<height && rectangle->top+rectangle->height>0) ++projected;
+            }
+        }
+        SDL_Log("ENEMY TRACE: frame=%u world=%dx%d fisheye=%d workers=%d bank_images=%zu instances=%zu projected=%zu changed_pixels=%zu",
+            enemyTraceFrame,width,height,video_.preferences.fisheyeEnabled,renderWorkers_!=nullptr,
+            enemyScene?enemyScene->bank.images.size():0,enemyScene?enemyScene->objects.size():0,
+            projected,enemyCapture.changed);
+    }
 
     auto& withoutShots = capture.pixels;
 #ifdef EXTREMIS_DEBUG_MENU

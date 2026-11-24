@@ -1,5 +1,6 @@
 #include <cstdint>
 #include "extremis/ui/ambient_effects.h"
+#include "extremis/world/pit_clock.h"
 #include "extremis/resources/game_lab.h"
 #include "extremis/ui/frame_composition.h"
 #include "extremis/ui/game_messages.h"
@@ -8,6 +9,7 @@
 
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <vector>
 
@@ -52,12 +54,31 @@ int main(int argc, char** argv)
         check(surge.update(1), "Last active surge update lost");
         check(!surge.update(0) && !surge.tint().percent, "Rearm left the old tint");
         check(extremis::ambientTint(lamp, surge.tint()).dac[1] == 63, "Lamp failed to restore");
+        for (const unsigned fps:{60u,240u}) {
+            extremis::PowerSurge timed;
+            check(!timed.update(9600),"Surge began before the quiet boundary");
+            unsigned activeFrames=0;
+            bool started=false;
+            for (unsigned frame=0;frame<fps*6;++frame) {
+                const bool active=timed.updateElapsed(1.0/fps);
+                if (active) { started=true; ++activeFrames; check(timed.tint().percent>0,"Active surge lost darkening"); }
+                else if (started) break;
+            }
+            const double duration=double(activeFrames)/fps;
+            const double nominal=640.0*extremis::pit::divisor/extremis::pit::inputHz;
+            check(started && std::abs(duration-nominal)<2.0/fps,
+                  "Surge duration depends on rendered frame rate");
+        }
 
         messages::Queue queue;
         queue.post(messages::Id::PowerSurge);
         queue.post(messages::Id::PowerSurge);
         check(queue.visible()[0] == "ATTENTION\r\n POWER IS SURGING!!!" &&
               queue.visible()[1].empty(), "Warning text or duplicate suppression");
+        queue.update(4.0,true);
+        check(!queue.visible()[0].empty(),"Warning should outlast nominal surge darkening");
+        queue.update(1.0,true);
+        check(queue.visible()[0].empty(),"Warning exceeded its separate 800-unit lifetime");
 
         std::vector<std::uint32_t> world(48000, 0);
         std::vector<std::uint32_t> hud(64000, 0x000000ff), wide;

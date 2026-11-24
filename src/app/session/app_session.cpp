@@ -68,6 +68,8 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
     bool terminalMenu = false;
     bool showPolygons = false;
     bool show3D = camera.has_value();
+    const bool traceSurge=SDL_getenv("EXTREMIS_SURGE_TRACE")!=nullptr;
+    bool lastSurgeActive=false;
     Uint64 previousTicks = SDL_GetTicks();
 #ifdef EXTREMIS_DEBUG_MENU
     // VORTEX_DEBUG_FPS_V1: FPS of actually presented gameplay frames.
@@ -300,7 +302,12 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
         const bool destructionRunning=doorReady && simulationActive && survival.alive() &&
             !items.busy() && items.selfDestruction().active();
         items.updateSelfDestruction(gameplayTicks,destructionRunning);
-        const bool surgeAlarm = simulationActive && survival.alive() && powerSurge.update(gameplayTicks);
+        const bool surgeAlarm = simulationActive && survival.alive() && powerSurge.updateElapsed(elapsedSeconds);
+        if (traceSurge && simulationActive && survival.alive() && surgeAlarm!=lastSurgeActive)
+            SDL_Log("SURGE TRACE: active=%d ticks_ns=%llu frame_ms=%.3f shared_ticks=%u darkness=%u",
+                surgeAlarm,static_cast<unsigned long long>(SDL_GetTicksNS()),elapsedSeconds*1000,
+                unsigned(gameplayTicks),powerSurge.tint().percent);
+        if (simulationActive && survival.alive()) lastSurgeActive=surgeAlarm;
         if (surgeAlarm) survival.postMessage(messages::Id::PowerSurge);
         gameAudio.destructionAlarm((doorReady && bombFrame.alarm) || surgeAlarm || (destructionRunning && !items.selfDestruction().expired()));
         if(destructionRunning) survival.postDestruction(items.selfDestruction().remaining());

@@ -3,9 +3,11 @@
 #include <vector>
 #include "extremis/world/door.h"
 #include "extremis/world/door_clock.h"
+#include "extremis/world/pit_clock.h"
 
 #include <iostream>
 #include <stdexcept>
+#include <thread>
 
 namespace {
 using doors::dos::Counter;
@@ -25,6 +27,18 @@ Counter::Time interruptAt(std::uint64_t n)
 
 void testFractions()
 {
+    static_assert(Counter::Time::duration::period::num==1 &&
+                  Counter::Time::duration::period::den==1000000000,
+                  "The gameplay clock must count nanoseconds on every platform");
+    const Counter::Time realStart=Counter::Clock::now();
+    Counter real(realStart);
+    std::this_thread::sleep_for(20ms);
+    const Counter::Time realEnd=Counter::Clock::now();
+    real.advance(realEnd);
+    const auto realNanoseconds=std::chrono::duration_cast<std::chrono::nanoseconds>(realEnd-realStart).count();
+    const auto expected=1+std::uint64_t(realNanoseconds)*extremis::pit::inputHz/
+        (extremis::pit::divisor*1000000000);
+    check(real.value()==expected,"Real steady clock used the wrong duration unit");
     Counter fine(origin), coarse(origin);
     check(fine.value() == 1 && fine.value() == 1, "Initial value / pure query");
     fine.advance(origin);

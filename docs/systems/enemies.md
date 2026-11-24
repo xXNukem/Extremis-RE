@@ -81,6 +81,10 @@ Another lovely quirk: a horizontally flipped sprite does **not** necessarily hav
 
 In the port, [`enemy_system.cpp`](../../src/extremis/gameplay/enemies/enemy_system.cpp) owns enemy state and damage, [`enemy_navigation.cpp`](../../src/extremis/gameplay/enemies/enemy_navigation.cpp) handles route movement, and [`enemy_effects.cpp`](../../src/extremis/gameplay/enemies/enemy_effects.cpp) handles the special death/fragment effects.
 
+### Windows visibility investigation (2026-11-24)
+
+**Port-tested on macOS Release:** original `GAME.LAB` and `DATA/` load all 30 monster banks with no resource errors using `check_level_banks`; the original level-1 `hud_tests` composition visibly draws MONS1 through the production renderer. Synthetic `enemy_tests` now cover a Unicode resource directory and enemy pixels in 4:3 and 21:9, fisheye on/off, and serial/worker rendering. The optional extended `enemy_tests` run with original assets fails its MONS5 movement/attack assertion at placement 13 on macOS; that separate movement result does not establish a visibility failure. These results do not establish why the user-reported Windows build shows no enemies. Initial enemy-load exceptions previously went only to `stderr` in a Windows GUI executable. They now produce a visible error dialog, and `EXTREMIS_ENEMY_TRACE=1` writes bank, instance, on-screen projection and enemy-layer pixel counts to `extremis-diagnostics.log` beside the port settings file. A native Windows run must distinguish a load failure, an empty scene, rejected projection/depth or later composition before a rendering fix is justified. No enemy AI or Vortex code was changed.
+
 ## When an alien hits back
 
 The original player reaction does more than lower a health bar. A hit can create a sequence of health loss and **physical knockback opposite the player's own facing direction** — not necessarily away from the attacker. The reconstructed reaction was traced around EXE `0x165db–0x166bb`.

@@ -19,12 +19,14 @@ void tintFrame(const std::uint32_t* source, std::uint32_t* output, std::size_t c
 class PowerSurge {
 public:
     bool update(std::uint16_t ticks, bool higherPriorityEffect = false);
+    bool updateElapsed(double seconds, bool higherPriorityEffect = false);
     PaletteTint tint() const;
 private:
     unsigned randomWord();
     std::int32_t remaining_ = 9600;
     std::uint32_t random_ = 0x7481c5d3u;
     unsigned darkness_ = 0;
+    double fractionalTicks_ = 0;
 };
 
 PaletteTint ambientTint(PaletteTint lamp, PaletteTint transient, bool optics = false);

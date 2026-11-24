@@ -7,6 +7,7 @@
 #include "extremis/gameplay/enemies/enemy_system.h"
 #include "extremis/gameplay/enemies/enemy_profiles.h"
 #include "vortex/render/first_person/sprites/sprite_renderer.h"
+#include "vortex/render/first_person/render_workers.h"
 #include "extremis/gameplay/player/weapon_fire.h"
 #include "extremis/gameplay/enemies/enemy_navigation.h"
 #include "extremis/world/objet_collision.h"
@@ -66,6 +67,40 @@ void placement(const std::filesystem::path& directory)
     system.load(level,directory); check(system.scene().objects.empty(),"Removed enemy reappeared");
     level.enemies[0].health=4;
     system.load(level,directory); check(system.scene().objects.size()==1,"Level reset failed");
+    const auto unicodeDirectory=directory/std::filesystem::u8path(u8"monstruos-á");
+    fixture(unicodeDirectory);
+    system.load(level,unicodeDirectory);
+    check(system.scene().objects.size()==1,"Unicode monster resource path failed");
+}
+void rendererMatrix(const std::filesystem::path& directory)
+{
+    fixture(directory);
+    game_lab::Level level{}; level.monsBank=level.palBank=1;
+    level.sectors.resize(1); level.sectors[0].gx=1000; level.sectors[0].gy=2000;
+    level.enemies={{4,2,6,0,0,300,100,0xffff,0,0,0x8000,0,300,100}};
+    enemies::System enemies; enemies.load(level,directory);
+    check(enemies.scene().objects.size()==1,"Enemy did not reach render scene");
+    const Camera camera{1000,2100,0};
+    const vortex::PreparedRayScene emptyWorld;
+    vortex::first_person::RenderWorkers workers(2);
+    for (const int width:{320,560}) for (const bool fisheye:{false,true}) {
+        const vortex::first_person::ColumnProjection projection{
+            width,150,1,0,std::tan(Camera::horizontalFov/2),200,128};
+        const vortex::first_person::View view{camera.renderPose(),projection,256,200,emptyWorld};
+        const vortex::first_person::SpriteLayer layer{&enemies.scene().bank,&enemies.scene().objects};
+        vortex::FisheyeEffect serialEffect{{5.0/6.0,0.20}}, workerEffect{{5.0/6.0,0.20}};
+        vortex::first_person::SceneStyle style;
+        style.layers=&layer; style.layerCount=1;
+        style.fisheye=fisheye?&serialEffect:nullptr;
+        std::vector<std::uint32_t> serial,parallel;
+        vortex::first_person::RenderBuffers serialBuffers,workerBuffers;
+        check(vortex::first_person::render(view,style,serial,serialBuffers),"Serial enemy render failed");
+        check(std::any_of(serial.begin(),serial.end(),[](auto pixel){return pixel!=0;}),
+              "Enemy invisible after projection/depth/composition");
+        style.fisheye=fisheye?&workerEffect:nullptr;
+        check(workers.render(view,style,parallel,workerBuffers),"Worker enemy render failed");
+        check(parallel==serial,"Worker enemy framebuffer differs from serial");
+    }
 }
 game_lab::Level arena()
 {
@@ -1000,7 +1035,7 @@ int main(int argc,char** argv)
             std::cout << "Enemy OBJET collision tests passed\n";
             return 0;
         }
-        sectorVisibility(argv[1]); placement(argv[1]); skippedRecordMapping(argv[1]); otherBanks(argv[1]); allBanks(argv[1],true); combat(argv[1]); combat(argv[1],3); mons3(argv[1]); deathEffects(); navigation(); sharedMovement(argv[1]); mons5(argv[1]); objetCollisions(argv[1]); objetSectorTransition(argv[1]); doorClearance(argv[1]);
+        sectorVisibility(argv[1]); placement(argv[1]); rendererMatrix(argv[1]); skippedRecordMapping(argv[1]); otherBanks(argv[1]); allBanks(argv[1],true); combat(argv[1]); combat(argv[1],3); mons3(argv[1]); deathEffects(); navigation(); sharedMovement(argv[1]); mons5(argv[1]); objetCollisions(argv[1]); objetSectorTransition(argv[1]); doorClearance(argv[1]);
         if (argc>2) { originalMons5(argv[2]); original(argv[2]); allBanks(std::filesystem::path(argv[2]).parent_path()/"DATA",false); }
         std::cout<<"Enemy placement/resource tests passed\n";
         return 0;

@@ -9,9 +9,11 @@
 #include "app/session/shuttle_session.h"
 
 #include <SDL3/SDL_log.h>
+#include <SDL3/SDL_messagebox.h>
 #include <exception>
 #include <iomanip>
 #include <iostream>
+#include <string>
 
 namespace app {
 bool AppSession::loadInitialLevel(const LaunchOptions& options)
@@ -82,8 +84,15 @@ bool AppSession::loadInitialLevel(const LaunchOptions& options)
                 enemies.load(level, std::filesystem::u8path(options.labPath).parent_path() / "DATA");
                 enemySystem = std::move(enemies);
                 std::cout << "MONS1: " << enemySystem->records().size() << " original enemies.\n";
+                SDL_Log("MONS load: bank=%u records=%zu images=%zu instances=%zu",
+                    unsigned(level.monsBank),enemySystem->records().size(),
+                    enemySystem->scene().bank.images.size(),enemySystem->scene().objects.size());
             } catch (const std::exception& error) {
                 std::cerr << "Enemies unavailable: " << error.what() << '\n';
+                SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,"MONS load failed: %s",error.what());
+                const std::string message="Enemy resources could not be loaded:\n"+std::string(error.what());
+                SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Extremis RE: enemies unavailable",
+                    message.c_str(),nullptr);
             }
             try {
                 camera = initialCamera(level);
