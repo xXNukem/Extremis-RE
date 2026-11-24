@@ -42,7 +42,7 @@ bool FirstPersonRenderer::resizeFrame(int width, int height, bool withHud)
 }
 
 bool FirstPersonRenderer::presentFrame(bool withHud, int outputWidth, int outputHeight,
-                                       const hud::Renderer* hudRenderer)
+                                       const hud::Renderer* hudRenderer, extremis::PaletteTint tint)
 {
 #ifdef EXTREMIS_DEBUG_MENU
     const auto compositionStart=SDL_GetTicksNS();
@@ -51,12 +51,20 @@ bool FirstPersonRenderer::presentFrame(bool withHud, int outputWidth, int output
     const auto frame=extremis::composeFrame(pixels_,composed_,wideComposed_,
         width_,height_,withHud,nativeComposed_,hudRenderer);
     if (frame.error) return SDL_SetError("%s",frame.error);
+    const auto* upload = frame.pixels;
+    if (tint.percent || tint.optics) {
+        const auto count = frame.pixels == composed_.data() ? composed_.size() :
+                           frame.pixels == pixels_.data() ? pixels_.size() : wideComposed_.size();
+        tinted_.resize(count);
+        extremis::tintFrame(frame.pixels,tinted_.data(),count,tint);
+        upload = tinted_.data();
+    }
 #ifdef EXTREMIS_DEBUG_MENU
     using namespace platform::sdl::video_profiling;
     FrameProfiler::addSample(profiler_,Composition,SDL_GetTicksNS()-compositionStart);
     FrameProfiler::Scope queueTimer(profiler_,Queue);
 #endif
-    return platform::sdl::queueFrameTexture(renderer_,uploadTexture_.get(),frame.pixels,
+    return platform::sdl::queueFrameTexture(renderer_,uploadTexture_.get(),upload,
                                           width_,outputWidth,outputHeight,frame.displayAspect);
 }
 

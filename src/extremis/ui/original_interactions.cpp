@@ -1,4 +1,6 @@
 #include "extremis/ui/original_interactions.h"
+#include "extremis/ui/localization.h"
+#include "extremis/ui/utf8_glyph.h"
 #include "vortex/core/graphics/color.h"
 #include "extremis/world/original_travel.h"
 #include "extremis/ui/interface_font.h"
@@ -56,6 +58,123 @@ std::optional<unsigned> letter(unsigned char c)
         case '!': return 65; case '\'': return 66; case ',': return 67; case '.': return 68; }
     return {};
 }
+// INVENT_T.SPR is the original inventory's shaded 5x9 alphabet. Compose on
+// copies of INVENT_A.SPR, in palette indices, before the normal draw path.
+void inventoryLine(spr_format::Image& target, const std::vector<spr_format::Image>& alphabet,
+                   std::string_view value, int left, int top, int available, bool orange=false)
+{
+    struct Character { localization::Glyph glyph; int width; };
+    std::vector<Character> characters;
+    int width=0;
+    for(std::size_t i=0;i<value.size();) {
+        const auto g=localization::glyph(value,i); i+=g.bytes;
+        const auto id=letter(g.base);
+        const int w=id?alphabet[*id].width:3;
+        characters.push_back({g,w}); width+=w+1;
+    }
+    if(width) --width;
+    const float scale=width>available?float(available)/width:1.f;
+    int advance=0;
+    const auto pixel=[&](int x,int y,std::uint8_t index) {
+        if(x>=0 && x<target.width && y>=0 && y<target.height)
+            target.indices[y*target.width+x]=index;
+    };
+    for(const auto& character:characters) {
+        const auto id=letter(character.glyph.base);
+        const int origin=left+int(advance*scale);
+        if(id) {
+            const auto& source=alphabet[*id];
+            for(int y=0;y<source.height;++y) for(int x=0;x<source.width;++x) {
+                const auto shade=source.indices[y*source.width+x];
+                if(shade==254) continue;
+                const std::uint8_t color=orange?std::uint8_t(shade<=217?67:shade==218?68:shade==219?69:shade==220?70:shade==221?71:72):shade;
+                pixel(origin+int(x*scale),top+y,color);
+            }
+            const int middle=origin+int(source.width*scale/2);
+            const auto mark=character.glyph.mark;
+            if(mark) {
+                const std::uint8_t ink=orange?67:216;
+                if(mark=='a') pixel(middle+1,top-1,ink);
+                else if(mark=='g') pixel(middle-1,top-1,ink);
+                else if(mark=='u') {pixel(middle-1,top-1,ink);pixel(middle+1,top-1,ink);}
+                else if(mark=='c') {pixel(middle,top+source.height,ink);pixel(middle-1,top+source.height+1,ink);}
+                else {pixel(middle-1,top-1,ink);pixel(middle+1,top-2,ink);}
+            }
+        }
+        advance+=character.width+1;
+    }
+}
+void localizedInventory(std::vector<spr_format::Image>& bank,
+                        const std::vector<spr_format::Image>& alphabet,
+                        localization::Language language)
+{
+    // Synthetic test resources intentionally contain one-pixel placeholders.
+    if(bank[6].width!=71 || bank[6].height!=25 ||
+       alphabet[0].width!=5 || alphabet[0].height!=9) return;
+    const bool spanish=language==localization::Language::Spanish;
+    // Base text occupies x=70..109 in the 184x180 sprite. The connector ends
+    // at x=69 and the separate section panel begins at screen x=180.
+    constexpr int bands[][2]={{2,22},{29,39},{48,68},{74,94},{98,118},{122,133}};
+    for(const auto& band:bands) for(int y=band[0];y<band[1];++y)
+        std::fill_n(bank[0].indices.begin()+y*bank[0].width+70,40,254);
+    const auto base=[&](int y,std::string_view first,std::string_view second={}) {
+        inventoryLine(bank[0],alphabet,first,70,y,40);
+        if(!second.empty()) inventoryLine(bank[0],alphabet,second,70,y+9,40);
+    };
+    base(4,spanish?"Batería":"Batterie",spanish?"Cargador":"Chargeur");
+    base(31,spanish?"Oxígeno":"Oxygène");
+    base(50,spanish?"Bolsillo:":"Poche:",spanish?"Inyectores":"Injecteurs");
+    base(76,spanish?"Bolsillo:":"Poche:",spanish?"Tarjetas":"Cartes");
+    base(100,spanish?"Bolsillo:":"Poche:",spanish?"Bomba":"Bombe");
+    base(124,spanish?"Salir":"Quitter");
+
+    // The selected labels are their own opaque black-backed sprites. Their
+    // original widths are too small for translations; 40 px stays within the
+    // left pane, ending before the section panel at screen x=180.
+    constexpr int heights[]={18,9,18,18,18};
+    for(int n=0;n<5;++n) {
+        auto& sprite=bank[1+n]; sprite.width=40; sprite.height=heights[n];
+        sprite.indices.assign(std::size_t(sprite.width)*sprite.height,254);
+    }
+    const auto selected=[&](int n,std::string_view first,std::string_view second={}) {
+        inventoryLine(bank[n],alphabet,first,0,0,40,true);
+        if(!second.empty()) inventoryLine(bank[n],alphabet,second,0,9,40,true);
+    };
+    selected(1,spanish?"Batería":"Batterie",spanish?"Cargador":"Chargeur");
+    selected(2,spanish?"Oxígeno":"Oxygène");
+    selected(3,spanish?"Bolsillo:":"Poche:",spanish?"Inyectores":"Injecteurs");
+    selected(4,spanish?"Bolsillo:":"Poche:",spanish?"Tarjetas":"Cartes");
+    selected(5,spanish?"Bolsillo:":"Poche:",spanish?"Bomba":"Bombe");
+
+    constexpr int titleTop[]={8,3,3,5,9};
+    const std::string_view titles[5][2]={
+        {spanish?"Batería SE":"Batterie SE",""},
+        {spanish?"Reserva":"Réserve",spanish?"Oxígeno":"Oxygène"},
+        {spanish?"Inyector":"Injecteur",spanish?"Tónico":"Tonique"},
+        {spanish?"Tarjeta":"Carte",spanish?"Electrónica":"Électronique"},
+        {spanish?"Bomba DAM10":"Bombe DAM10",""}};
+    for(int n=0;n<5;++n) {
+        auto& sprite=bank[6+n];
+        // The title interior is uniformly palette 223 under the original
+        // glyphs. Restore only that interior; the four border edges remain.
+        for(int y=2;y<22;++y)
+            std::fill_n(sprite.indices.begin()+y*sprite.width+2,67,223);
+        const auto centered=[&](std::string_view line,int y) {
+            int width=0;
+            for(std::size_t i=0;i<line.size();) {
+                const auto g=localization::glyph(line,i); i+=g.bytes;
+                const auto id=letter(g.base);
+                width+=(id?alphabet[*id].width:3)+1;
+            }
+            if(width) --width;
+            inventoryLine(sprite,alphabet,line,2+(67-std::min(width,61))/2,y,61);
+        };
+        centered(titles[n][0],titleTop[n]);
+        if(!titles[n][1].empty()) centered(titles[n][1],titleTop[n]+10);
+    }
+    bank[26].width=40; bank[26].indices.assign(40*9,254); bank[26].height=9;
+    inventoryLine(bank[26],alphabet,spanish?"Salir":"Quitter",0,0,40,true);
+}
 }
 Resources load(const std::filesystem::path& directory)
 {
@@ -90,6 +209,11 @@ Renderer::Renderer(Resources resources): resources_(std::move(resources))
         const auto c=resources_.palette[i];
         colors_[i]=vortex::packOpaqueRgb(c.r, c.g, c.b);
     }
+    for(unsigned i=0;i<2;++i) {
+        localizedInventory_[i]=resources_.inventory;
+        localizedInventory(localizedInventory_[i],resources_.letters,
+                           i?localization::Language::French:localization::Language::Spanish);
+    }
 }
 void Renderer::image(std::vector<std::uint32_t>& pixels, const spr_format::Image& s,
                      int x, int y, bool transparent, int clipTop, int clipBottom,
@@ -105,25 +229,32 @@ void Renderer::image(std::vector<std::uint32_t>& pixels, const spr_format::Image
 }
 void Renderer::smallText(std::vector<std::uint32_t>& pixels, std::string_view text, int x, int y, bool tiny) const
 {
+    const auto localized=localization::translate(text);
     interface_font::draw(pixels,tiny?resources_.tinyFont:resources_.smallFont,
-                         colors_[tiny?24:102],text,x,y);
+                         colors_[tiny?24:102],localized,x,y);
 }
 void Renderer::menuText(std::vector<std::uint32_t>& pixels, std::string_view text, int y, bool selected) const
 {
+    const auto localized=localization::translate(text); text=localized;
     int width=0;
-    for (unsigned char c : text) { const auto id=letter(c); width+=id ? resources_.letters[*id].width+1 : 4; }
-    int x=72+(176-width)/2;
+    for (std::size_t i=0;i<text.size();) { const auto decoded=localization::glyph(text,i); i+=decoded.bytes; const auto id=letter(decoded.base); width+=id ? resources_.letters[*id].width+1 : 4; }
+    const float factor=localization::current()!=localization::Language::English && width>176 ? 176.f/width : 1.f;
+    int x=72+int((176-width*factor)/2);
     // EXE 0x1ce21 centers within 176 pixels; 0x1d0a2 suppresses blinking text.
     if (selected) return;
-    for (unsigned char c : text) {
-        const auto id=letter(c);
+    for (std::size_t i=0;i<text.size();) {
+        const auto decoded=localization::glyph(text,i); i+=decoded.bytes;
+        const auto id=letter(decoded.base);
         if (id) {
             const auto& s=resources_.letters[*id];
-            for (int row=0;row<s.height;++row) for (int col=0;col<s.width;++col)
-                if (x+col>=72 && x+col<248 && y+row>=146 && y+row<187)
-                    pixels[(y+row)*320+x+col]=colors_[s.indices[row*s.width+col]];
-            x+=s.width+1;
-        } else x+=4;
+            for (int row=0;row<s.height;++row) for (int col=0;col<s.width;++col) {
+                const int px=x+int(col*factor);
+                if (px>=72 && px<248 && y+row>=146 && y+row<187)
+                    pixels[(y+row)*320+px]=colors_[s.indices[(decoded.mark=='i'?s.height-1-row:row)*s.width+(decoded.mark=='i'?s.width-1-col:col)]];
+            }
+            if(decoded.mark && decoded.mark!='i') localization::markPixels(pixels,x,y,s.width,s.height,colors_[102],decoded.mark);
+            x+=int((s.width+1)*factor);
+        } else x+=int(4*factor);
     }
 }
 void Renderer::code(std::vector<std::uint32_t>& pixels, const State& s) const
@@ -142,10 +273,13 @@ void Renderer::code(std::vector<std::uint32_t>& pixels, const State& s) const
     image(pixels,resources_.keyboard[s.fingerPhase==2?9:s.fingerPhase?8:7],handX+42,handY+9,true,25,125,62,258);
     if (!s.notice.empty()) { smallText(pixels,s.notice,77,36); return; }
     const std::string prompt="TYPE IN CODE ZONE "+s.zoneName+"    ";
-    smallText(pixels,prompt,77,36);
-    smallText(pixels,s.entered,77+4*int(prompt.size()),36);
+    const bool localized=localization::current()!=localization::Language::English;
+    smallText(pixels,localized?std::string_view(prompt).substr(0,prompt.size()-4):std::string_view(prompt),77,36);
+    const int codeX=localized?77:77+4*int(prompt.size());
+    const int codeY=localized?46:36;
+    smallText(pixels,s.entered,codeX,codeY);
     for (std::size_t i=s.entered.size();i<6;++i)
-        smallText(pixels,".",77+4*int(prompt.size()+i),36);
+        smallText(pixels,".",codeX+4*int(i),codeY);
 }
 void Renderer::supply(std::vector<std::uint32_t>& pixels, const State& s, bool weapon) const
 {
@@ -163,6 +297,16 @@ void Renderer::supply(std::vector<std::uint32_t>& pixels, const State& s, bool w
     if (weapon && kind>=6) return;
     if (!weapon && kind>=7) return;
     image(pixels,bank[weapon?kind+6:kind<3?kind+7:kind==6?11:10],75,32);
+    if(!weapon && localization::current()!=localization::Language::English) {
+        for(int row=34;row<56;++row)
+            std::fill_n(pixels.begin()+row*320+77,67,colors_[220]);
+        constexpr const char* ids[]={"modal.supply_battery","modal.supply_oxygen","modal.supply_energy",
+            "modal.supply_card","modal.supply_card","modal.supply_card","modal.supply_bomb"};
+        const auto label=localization::byId(ids[kind],localization::current());
+        const auto line=label.find('\n');
+        smallText(pixels,label.substr(0,line),79,line==std::string_view::npos?41:37,true);
+        if(line!=std::string_view::npos) smallText(pixels,label.substr(line+1),79,44,true);
+    }
     if (!weapon && kind>=3 && kind<=5) {
         image(pixels,bank[27],145,32);
         image(pixels,bank[28+kind-3],214,36);
@@ -170,19 +314,67 @@ void Renderer::supply(std::vector<std::uint32_t>& pixels, const State& s, bool w
     const unsigned number=(!weapon && kind<2)?amount/(kind==0?9:18):amount;
     for (unsigned i=0,div=100;i<3;++i,div/=10)
         image(pixels,bank[16+(number/div)%10],(weapon?220:221)+6*int(i),36);
+    if(localization::current()!=localization::Language::English) {
+        for(int row=32;row<47;++row)
+            std::fill_n(pixels.begin()+row*320+145,106,colors_[223]);
+        const bool card=!weapon && kind>=3 && kind<=5;
+        const auto label=localization::byId(weapon?"modal.ammo":card?"modal.number":"modal.condition",
+                                            localization::current());
+        interface_font::draw(pixels,resources_.tinyFont,colors_[102],
+                             std::string(label)+": "+(card?std::string(1,kind==3?'E':kind==4?'C':'N'):"")+
+                             std::to_string(number)+(weapon||card?"":"%"),172,36);
+    }
+    if (!weapon && kind==0 && s.replacing) {
+        // Battery charge is in PIT units in inventory and whole seconds in the cabinet.
+        const auto option=[&](unsigned index, const char* label, unsigned percent) {
+            if (s.selection==index && !s.blinkVisible) return;
+            const bool localized=localization::current()!=localization::Language::English;
+            const auto text=std::string(label)+std::to_string(percent)+"%";
+            if(localized) interface_font::draw(pixels,resources_.tinyFont,colors_[102],
+                localization::translate(text),77,83+14*int(index));
+            else smallText(pixels,text,77,80+11*int(index));
+        };
+        if(localization::current()!=localization::Language::English) {
+            const auto label=localization::byId("panel.battery_owned",localization::current());
+            const auto split=localization::current()==localization::Language::French?std::size_t(9):std::size_t(12);
+            interface_font::draw(pixels,resources_.tinyFont,colors_[102],label.substr(0,split),77,68);
+            interface_font::draw(pixels,resources_.tinyFont,colors_[102],label.substr(split+1),77,75);
+        } else smallText(pixels,"ALREADY HAVE A BATTERY",77,68);
+        option(0,"TAKE BATTERY ",number);
+        option(1,"KEEP BATTERY ",unsigned(s.batteryCharge)/1440);
+        return;
+    }
     image(pixels,bank[13],75,60);
-    // The question sprite already contains both bright labels. These overlays
-    // contain palette 220 (dark), so dim the option that is NOT selected.
-    image(pixels,bank[s.selection==0?15:14],s.selection==0?117:90,96);
+    if(localization::current()==localization::Language::English) {
+        // Original question and choice sprites retain their DOS presentation.
+        image(pixels,bank[s.selection==0?15:14],s.selection==0?117:90,96);
+    } else {
+        for(int row=64;row<109;++row)
+            std::fill_n(pixels.begin()+row*320+77,60,colors_[220]);
+        const auto language=localization::current();
+        const auto question=localization::byId("modal.take_question",language);
+        const auto split=language==localization::Language::Spanish?std::size_t(7):std::size_t(11);
+        smallText(pixels,question.substr(0,split),77,72,true);
+        smallText(pixels,question.substr(split+1),77,80,true);
+        const auto choice=[&](std::string_view id,int x,unsigned index) {
+            if(s.selection==index && !s.blinkVisible) return;
+            interface_font::draw(pixels,resources_.tinyFont,colors_[s.selection==index?102:24],
+                                 localization::byId(id,language),x,97);
+        };
+        choice("modal.yes",89,0); choice("modal.no",117,1);
+    }
     if (!s.notice.empty()) smallText(pixels,s.notice,77,110);
 }
 void Renderer::cards(std::vector<std::uint32_t>& pixels, const State& s) const
 {
-    image(pixels,resources_.inventory[0],68,10,false);
+    const auto language=localization::current();
+    const auto& bank=language==localization::Language::English?resources_.inventory:
+        localizedInventory_[language==localization::Language::French?1:0];
+    image(pixels,bank[0],68,10,false);
     unsigned pocket=0;
     for (int card:s.cards) if (card>=0) {
         const unsigned family=unsigned(card)>>12;
-        if (family<3) image(pixels,resources_.inventory[19+family],203,50+31*int(pocket));
+        if (family<3) image(pixels,bank[19+family],203,50+31*int(pocket));
         ++pocket;
     }
     for (int row=0;row<41;++row)
@@ -212,7 +404,9 @@ void Renderer::cards(std::vector<std::uint32_t>& pixels, const State& s) const
 }
 void Renderer::inventory(std::vector<std::uint32_t>& pixels, const State& s) const
 {
-    const auto& bank=resources_.inventory;
+    const auto language=localization::current();
+    const auto& bank=language==localization::Language::English?resources_.inventory:
+        localizedInventory_[language==localization::Language::French?1:0];
     image(pixels,bank[0],68,10,false);
     const unsigned section=std::min(s.selection,5u);
     constexpr int rows[]{14,41,60,86,110,134}; // EXE file 0x1aafa.
@@ -222,9 +416,14 @@ void Renderer::inventory(std::vector<std::uint32_t>& pixels, const State& s) con
         std::fill_n(pixels.begin()+row*320+72,176,colors_[254]);
     if (s.inventoryUse) {
         if (section==0) {
-            menuText(pixels,s.detectorEnabled?"Battery utilized for the radar":"Battery is not usable",146,false);
-            menuText(pixels,s.detectorEnabled?"Eteindre le radar":"Radar is running",157,s.useSelection==0 && !s.blinkVisible);
-            menuText(pixels,"Exit",168,s.useSelection==1 && !s.blinkVisible);
+            using Mode=player::BatteryMode;
+            const char* first=s.batteryMode==Mode::Off ? "Turn on radar" :
+                              s.batteryMode==Mode::Radar ? "Turn off radar" : "Turn off optics";
+            const char* second=s.batteryMode==Mode::Optics ? "Turn on radar" : "Turn on optics";
+            menuText(pixels,"Battery level "+std::to_string(s.batteryCharge/1440),146,false);
+            menuText(pixels,first,157,s.useSelection==0 && !s.blinkVisible);
+            menuText(pixels,second,168,s.useSelection==1 && !s.blinkVisible);
+            menuText(pixels,"No change",179,s.useSelection==2 && !s.blinkVisible);
             return;
         }
         if (section==2 && s.injectors[0]>0 && s.injectors[1]>0) {
@@ -233,7 +432,8 @@ void Renderer::inventory(std::vector<std::uint32_t>& pixels, const State& s) con
             menuText(pixels,"Exit",168,s.useSelection==2 && !s.blinkVisible);
             return;
         }
-        menuText(pixels,section==1?"Use oxygen bottle":"Use injector",146,
+        const char* action=section==4?"Use bomb":section==1?"Use oxygen bottle":"Use injector";
+        menuText(pixels,action,146,
                  s.useSelection==0 && !s.blinkVisible);
         menuText(pixels,"Do not use",157,s.useSelection==1 && !s.blinkVisible);
         return;
@@ -241,8 +441,13 @@ void Renderer::inventory(std::vector<std::uint32_t>& pixels, const State& s) con
     switch(section) {
     case 0:
         image(pixels,bank[s.batteryCharge<0?11:16],199,66);
-        menuText(pixels,s.batteryCharge<0?"No battery":s.batteryCharge==0?"Batterie vide":
-                 s.detectorEnabled?"Battery utilized for the radar":"Battery is not usable",146,false); break;
+        menuText(pixels,s.batteryCharge<0 ? "No battery" : s.batteryCharge==0 ? "Empty battery" :
+                 s.batteryMode==player::BatteryMode::Radar ? "Battery utilized for the radar" :
+                 s.batteryMode==player::BatteryMode::Optics ? "Battery utilized for optics system" :
+                 "Battery available",146,false);
+        if (s.batteryCharge>0)
+            menuText(pixels,"Battery level "+std::to_string(s.batteryCharge/1440),157,false);
+        break;
     case 1:
         image(pixels,bank[s.oxygenReserve<0?12:17],197,40);
         menuText(pixels,s.oxygenReserve<0?"No oxygen bottle":s.oxygenReserve==0?"Empty oxygen bottle":"Use oxygen bottle",146,false);

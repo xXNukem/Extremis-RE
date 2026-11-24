@@ -129,6 +129,11 @@ void reachAndPersistence()
           level.sectors[0].entitiesA[0].type == 0x5004,"World state changed immutable source or decoration");
     check(world.collect({50,100,0},true,inventory,{}).transfer == player::Transfer::Empty,
           "Consumed panel reappeared on subsequent update");
+    auto snapshot = level;
+    world.storePanelContents(snapshot);
+    items::World returned(snapshot);
+    check(returned.collect({50,100,0},true,inventory,{}).transfer == player::Transfer::Empty,
+          "Revisiting a level restored a consumed supply");
     world = items::World(level);
     inventory = player::Inventory{};
     check(world.collect({50,100,0},true,inventory,{}).transfer == player::Transfer::Taken,

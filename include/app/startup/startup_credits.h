@@ -8,4 +8,4 @@ struct SDL_Window;
 struct SDL_Renderer;
 
 StartupCreditsResult showStartupCredits(SDL_Window* window, SDL_Renderer* renderer,
-                                        const std::filesystem::path& resourceDirectory = {});
+                                        const std::filesystem::path& resourceDirectory = {}, float gain = 1.f);

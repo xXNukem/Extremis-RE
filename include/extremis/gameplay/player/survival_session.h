@@ -17,7 +17,7 @@ public:
     explicit SurvivalSession(bool diagnostics = false);
     void handleInput(SurvivalInput input);
     bool update(double seconds, bool simulationActive, GameAudio& audio, bool running = false,
-                bool deferDeathSound = false);
+                bool deferDeathSound = false, std::uint16_t gameplayTicks = 0);
     bool alive() const;
     hud::State hudState() const;
     std::string windowTitle(const std::string& base) const;

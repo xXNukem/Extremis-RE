@@ -1,5 +1,7 @@
 #include "extremis/world/pit_clock.h"
 #include "extremis/cinematics/level22_communication.h"
+#include "extremis/ui/localization.h"
+#include "extremis/ui/cinematic_text.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -149,17 +151,37 @@ void Presentation::render() {
         }
     };
     if(prompt) {
-        if(phase_!=Phase::PromptIn) label(resources_.question[0],20,phase_==Phase::Question?characters_:128);
+        const auto language=localization::current();
+        const auto localizedQuestion=localization::cinematicById("comm.question",language);
+        const auto localizedYes=localization::cinematicById("comm.yes",language);
+        const auto localizedNo=localization::cinematicById("comm.no",language);
+        const auto promptLabel=[&](std::string_view localized,const std::string& original,int y,unsigned count) {
+            if(localized.empty()) {label(original,y,count);return;}
+            const auto map=[](unsigned char c){return glyph(c);};
+            const int w=localization::measureIndexed(resources_.font,localized,map);
+            localization::drawIndexed(canvas,resources_.font,localized,count,unsigned(original.size()),
+                std::max(0,(320-w)/2),y,320,y+11,11,map);
+        };
+        if(phase_!=Phase::PromptIn) promptLabel(localizedQuestion,resources_.question[0],20,phase_==Phase::Question?characters_:128);
         if(phase_==Phase::Choice || phase_==Phase::PromptOut) {
-            if(!yes_ || blink_<80) label(resources_.question[1],30,128);
-            if(yes_ || blink_<80) label(resources_.question[2],40,128);
+            if(!yes_ || blink_<80) promptLabel(localizedYes,resources_.question[1],30,128);
+            if(yes_ || blink_<80) promptLabel(localizedNo,resources_.question[2],40,128);
         }
     } else if(phase_==Phase::Typing || phase_==Phase::Acknowledge) {
-        clearText(canvas);int x=96,y=19;
+        clearText(canvas);
+        const std::string key="comm.page.0"+std::to_string(page_+1);
+        const auto localized=localization::cinematicById(key,localization::current());
+        if(!localized.empty()) {
+            localization::drawIndexed(canvas,resources_.sprites,localized,characters_,
+                unsigned(resources_.pages[page_].size()),96,19,256,151,6,
+                [](unsigned char c){return glyph(c);});
+        } else {
+        int x=96,y=19;
         for(unsigned i=0;i<characters_;++i) {
             const unsigned char c=resources_.pages[page_][i];
             if(c=='\r') {x=96;y+=6;continue;}
             const int g=glyph(c);if(g>=0) image(canvas,resources_.sprites[g],x,y);x+=4;
+        }
         }
     } else if(phase_==Phase::Opening || phase_==Phase::Closing) {
         canvas=screens_[0];image(canvas,resources_.sprites[frame_-1],46,53);

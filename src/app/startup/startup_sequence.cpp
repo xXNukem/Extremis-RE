@@ -9,10 +9,11 @@
 namespace app {
 StartupCreditsResult playStartupSequence(SDL_Window* window, SDL_Renderer* renderer,
     const LaunchOptions& options, const std::filesystem::path& dataDirectory,
-    bool hasLevel, PortMenuVideoState& video, int& exitCode)
+    bool hasLevel, UserSettings& settings, const std::filesystem::path& settingsPath, int& exitCode,
+    const continuation::Checkpoint*& checkpoint)
 {
     auto credits=options.communicationDebug?StartupCreditsResult::SkipAll:
-                 showStartupCredits(window,renderer,dataDirectory);
+                 showStartupCredits(window,renderer,dataDirectory,settings.audioGain());
     if (credits==StartupCreditsResult::Error) {
         SDL_Log("Startup credits failed: %s",SDL_GetError());
         exitCode=1;
@@ -21,7 +22,12 @@ StartupCreditsResult playStartupSequence(SDL_Window* window, SDL_Renderer* rende
     const bool diagnosticStartup=options.communicationDebug || options.shuttleDebug || options.vitalsDebug || options.destructionDebug;
     if ((credits==StartupCreditsResult::Continue || credits==StartupCreditsResult::SkipAll) &&
         hasLevel && !diagnosticStartup) {
-        const auto choice=showPortMenu(window,renderer,dataDirectory,false,video);
+        const auto menu=showPortMenu(window,renderer,dataDirectory,false,settings,settingsPath);
+        if (menu.choice==PortMenuChoice::Continue) {
+            checkpoint=menu.checkpoint;
+            return StartupCreditsResult::Continue;
+        }
+        const auto choice=menu.choice;
         if (choice==PortMenuChoice::NewGame) credits=StartupCreditsResult::Continue;
         else {
             if (choice==PortMenuChoice::Error) exitCode=1;
@@ -34,7 +40,7 @@ StartupCreditsResult playStartupSequence(SDL_Window* window, SDL_Renderer* rende
         if(credits==StartupCreditsResult::Error) exitCode=1;
     }
     if (credits==StartupCreditsResult::Continue && hasLevel) {
-        credits=showOriginalIntro(window,renderer,dataDirectory);
+        credits=showOriginalIntro(window,renderer,dataDirectory,settings.audioGain());
         if(credits==StartupCreditsResult::Error) exitCode=1;
     }
     return credits;

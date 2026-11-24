@@ -1,4 +1,4 @@
-add_library(original_hud STATIC original_hud.cpp)
+add_library(original_hud STATIC original_hud.cpp ambient_effects.cpp)
 target_sources(original_hud PRIVATE ../render/first_person/presentation/view_scale.cpp frame_composition.cpp original_interactions.cpp interaction_animation.cpp interface_font.cpp original_map.cpp ../cinematics/player_death.cpp)
 target_link_libraries(original_hud PUBLIC texture_bank anm_format PRIVATE doors)
 target_compile_features(original_hud PUBLIC cxx_std_17)

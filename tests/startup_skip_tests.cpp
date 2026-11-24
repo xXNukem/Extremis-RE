@@ -64,7 +64,10 @@ int main(int argc,char** argv) {
         check(showStartupCredits(window,renderer)==StartupCreditsResult::Continue,"Normal custom playback failed");
         check(polls>200,"Normal custom playback ended early");
         if(argc>1) {
-            for(auto player:{showOriginalPresentation,showOriginalIntro}) {
+            const auto intro=[](SDL_Window* w, SDL_Renderer* r, const std::filesystem::path& data) {
+                return showOriginalIntro(w,r,data);
+            };
+            for(auto player:{showOriginalPresentation,+intro}) {
                 for(auto scan:{SDL_SCANCODE_SPACE,SDL_SCANCODE_E}) {
                     for(unsigned at:{2u,30u,150u,400u}) {
                         prepare(scan,at);

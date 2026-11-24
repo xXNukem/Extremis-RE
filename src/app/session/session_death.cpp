@@ -39,8 +39,8 @@ AppSession::DeathFrame AppSession::advanceDeathPresentation(SDL_Window* window, 
     // per step for visibility; original timing remains unverified.
     const auto stage=deathPresentation.stage();
     if(stage==player::DeathPresentation::Stage::Body) SDL_Delay(32);
-    else if(stage!=player::DeathPresentation::Stage::Menu) SDL_Delay(16);
-    return DeathFrame::Presented;
+    else SDL_Delay(16);
+    return stage==player::DeathPresentation::Stage::Finished ? DeathFrame::Finished : DeathFrame::Presented;
 }
 
 AppSession::DeathFrame AppSession::beginDeathPresentation(SDL_Renderer* renderer,
@@ -50,9 +50,7 @@ AppSession::DeathFrame AppSession::beginDeathPresentation(SDL_Renderer* renderer
     const bool shipExpired=items.selfDestruction().expired();
     const auto deathCause=!survival.alive()?survival.vitals().deathCause():
         shipExpired?player::DeathCause::SelfDestruction:player::DeathCause::None;
-    if(shipExpired && !deathPresentation) {
-        SDL_Log("Ship expiry requires original death resources");return DeathFrame::Error;
-    }
+    if(deathCause!=player::DeathCause::None && !deathPresentation) return DeathFrame::Finished;
     if(deathCause!=player::DeathCause::None && deathPresentation && !deathPresentation->active() && firstPerson.frame().size()==64000) {
         gameAudio.stopEffects();
         if(deathCause==player::DeathCause::SelfDestruction) {

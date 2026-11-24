@@ -14,6 +14,14 @@ owns the device stream, decoded bank and mixer. The mixer references the bank
 while producing PCM, and the player stops the callback before releasing the
 bank.
 
+MASTER VOLUME scales the gameplay mixer output against its original
+maximum gain. The menu's hover, transition and confirmation streams,
+startup credits, intro, shuttle and ending each receive the same
+preference through SDL stream gain. Death and elevator audio use the
+gameplay mixer. A volume of 0 silences output while playback cursors,
+voice lifetimes and bank-relative gains continue normally. Classic's S
+shortcut temporarily mutes game effects while retaining the saved volume.
+
 | Sound/effect | Known reference | Note |
 | --- | --- | --- |
 | Footsteps | `BANK[7]` | Part of the original movement/camera cadence |

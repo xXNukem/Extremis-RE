@@ -5,7 +5,7 @@
 #include <cstdint>
 
 namespace messages {
-enum class Id { PortalLocked, DoorUnlocked, CardRejected, AlreadyDisabled, EmptyPanel, MapBlocked, MapUnavailable, SelfDestruction };
+enum class Id { PortalLocked, DoorUnlocked, CardRejected, AlreadyDisabled, EmptyPanel, MapBlocked, MapUnavailable, SelfDestruction, PowerSurge, BombWarning, Shock, BatteryLow, RadarExpired, OpticsExpired };
 std::string_view text(Id id);
 
 // Original five-entry, duplicate-suppressing queue and 800-tick lifetime.

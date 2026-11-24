@@ -414,3 +414,11 @@ phases. Keep the window focused: normal death completes, then all of FSEQ
 plays, including FIN, hold and fade. Escape must do nothing during FSEQ.
 The original menu follows. Use Enter on RUN, then Enter on Make new party to
 verify a fresh level 1; alternatively select EXIT. F9 is absent in Release.
+
+## Current port handoff (2026-11-20)
+
+**Adapted:** FSEQ success opens the custom main menu without RESUME. The
+historical native-menu testing instructions above are superseded. The
+campaign latch prevents replay and does not load any death or menu artwork.
+Choose NEW GAME to play the opening and reload level 1. Quit/error from
+FSEQ bypasses the menu. See [the shared handoff](player-death.md#custom-menu-handoff-2026-11-20).

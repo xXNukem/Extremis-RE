@@ -3,6 +3,13 @@
 #include <SDL3/SDL_events.h>
 #include <utility>
 
+bool ItemSession::requestContextualAction(const Camera& camera, const collision::World& obstacles)
+{
+    if (busy() || !available_ || !world_ || !world_->target(camera,obstacles)) return false;
+    take_ = true;
+    return true;
+}
+
 bool ItemSession::handleEvent(const SDL_Event& event, std::uint32_t windowId)
 {
     if (event.type==SDL_EVENT_WINDOW_FOCUS_LOST && event.window.windowID==windowId) {

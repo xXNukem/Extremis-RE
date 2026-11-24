@@ -62,7 +62,7 @@ updates are called inside it; PIT/audio interrupts remain available. All
 voices are stopped on entry and before GAMEOVER by `0x13090`. Oxygen's
 native sample loop ends at that stop, not on an invented audio timer.
 
-## Port implementation and limits
+## Port implementation and limits (historical, see current handoff below)
 
 `player_death.cpp` owns presentation state and indexed resource composition;
 `anm_format.cpp` reuses the ANM decoder for VGA1. `SurvivalSession` still owns
@@ -160,7 +160,7 @@ after correcting the synthetic palette expectation in the death test.
 Temporal comparison with the original DOS game remains pending.
 
 
-## Shared victory menu entry (2026-11-15)
+## Historical shared victory menu entry (2026-11-15)
 
 `DeathPresentation::beginMenu()` now opens the existing menu reveal directly
 for successful FSEQ completion. The main loop retains that menu for a living
@@ -170,3 +170,39 @@ RUN/new party and EXIT are shared; OPTIONS/password limitations remain.
 Debug CTest 30/30 passed, including direct victory menu/restart and Quit/Error
 checks. See [Ending integration](ending.md#campaign-integration-2026-11-15).
 No new original-game evidence was gathered.
+
+## Custom menu handoff (2026-11-20)
+
+**EXE-confirmed, independently re-read:** The dispatcher at
+`0x768b–0x76fe` checks victory first, then health, oxygen and ship expiry
+in that order. Health, oxygen and ship expiry pass AX=0, 1 and 2
+respectively to `0x1723a`. The three paths call the same GAMEOVER at
+`0x1748b`, `0x175a3` and `0x176bb` and each clears AX before return
+(`0x1749f`, `0x175b7`, `0x176cf`). Thus they take `0x7700 → 0x6a40`,
+then `0x6a4e → 0x1d92d`. The successful FSEQ caller jumps to that same
+menu via `0x76a4` without GAMEOVER.
+
+**Adapted:** All three causes complete GAMEOVER and its final fade before
+sending control to the custom main menu. FSEQ completion enters the same
+menu. Session input gives the death presentation priority over Escape
+pause so a fresh Escape can dismiss GAMEOVER at its normal input gate.
+The original menu loader, draw states and event handlers are removed from
+the port. The original files remain external and other sequences can
+still load their own resources.
+
+[`session_events.cpp`](../../../src/app/session/session_events.cpp) shares
+menu input cleanup and the NEW GAME intro with the pause path. The terminal
+entry disables RESUME. Full reload uses the existing first-level transfer.
+Quit and errors propagate as app termination. If death resources are
+unavailable, the session can fall back directly to the custom menu.
+
+**Port-tested, 2026-11-20:** Debug and Release CTest 43/43 each. The resource-backed
+death and FSEQ fixtures passed. The Debug selector loaded all 30 levels and
+55 arrivals with SDL's dummy video driver. A separate SDL software-rendered
+app probe used local original resources and the existing health, oxygen,
+ship-countdown and level-30 MONS9 diagnostic inputs. All four reached the
+custom main menu, ignored Escape there, and exited through its four-row
+layout. A second health run chose NEW GAME, reached playable level 1 and
+exited via the normal pause menu. These checks exercise the port's session
+handoff. Native DOS visuals, cadence, audio mixing and the timing of real
+enemy attacks were outside the host probe.

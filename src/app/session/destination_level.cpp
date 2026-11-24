@@ -7,10 +7,9 @@
 #include <utility>
 
 namespace app {
-DestinationLevel prepareDestination(const char* labPath, unsigned zone,
+DestinationLevel prepareDestination(const char* labPath, game_lab::Level1 levelData,
                                     const game_lab::PlayerStart& arrival)
 {
-    auto levelData=game_lab::loadLevel(labPath,zone);
     auto& level=levelData.level;
     level.playerStart=arrival;
     const auto camera=initialCamera(level);

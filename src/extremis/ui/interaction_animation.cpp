@@ -1,4 +1,5 @@
 #include "extremis/ui/original_interactions.h"
+#include "extremis/ui/localization.h"
 #include <algorithm>
 
 namespace interaction {
@@ -33,7 +34,7 @@ void Renderer::shutters(std::vector<std::uint32_t>& pixels,const State& s) const
     const auto& bank=plan?resources_.plan:weapon?resources_.weaponOpening:resources_.supplyOpening;
     image(pixels,bank[0],62,25,false);
     if(plan) {
-        smallText(pixels,"TRANSFER ",142,51);
+        smallText(pixels,"TRANSFER",142,51);
         const auto value=std::min(s.transfer,100u);
         const char digits[]{char('0'+value/100),char('0'+value/10%10),char('0'+value%10),0};
         smallText(pixels,digits,154,81); smallText(pixels,"ZONE "+s.zoneName,140,112);
@@ -66,8 +67,12 @@ void Renderer::reader(std::vector<std::uint32_t>& pixels,const State& s) const
         if(((s.frame>>2)&3)==3) image(pixels,bank[3],198,58);
         if(((s.frame>>2)&12)==12) image(pixels,bank[4],198,74);
     }
+    const auto translated=localization::translate(s.notice);
+    std::size_t visible=std::min(translated.size(),std::size_t(s.frame/2));
+    while(visible<translated.size() && visible>0 &&
+          (static_cast<unsigned char>(translated[visible])&0xc0)==0x80) --visible;
     const auto text=(s.phase==Phase::CardCheck || s.phase==Phase::CardResult)?
-        std::string_view(s.notice).substr(0,std::min(s.notice.size(),std::size_t(s.frame/2))):std::string_view(s.notice);
+        std::string_view(translated).substr(0,visible):std::string_view(translated);
     smallText(pixels,text,76,37);
 }
 void Renderer::movie(std::vector<std::uint32_t>& pixels,const State& s) const

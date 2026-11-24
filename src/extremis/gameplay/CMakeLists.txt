@@ -1,10 +1,10 @@
-add_library(player_vitals STATIC player/player_vitals.cpp player/self_destruction.cpp)
+add_library(player_vitals STATIC player/placed_bomb.cpp player/player_vitals.cpp player/self_destruction.cpp)
 target_compile_definitions(player_vitals PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
 target_include_directories(player_vitals PUBLIC "${PROJECT_SOURCE_DIR}/include")
 target_compile_features(player_vitals PUBLIC cxx_std_17)
 set_target_properties(player_vitals PROPERTIES CXX_EXTENSIONS NO)
 
-add_library(player_inventory STATIC player/player_inventory.cpp items/level_items.cpp)
+add_library(player_inventory STATIC player/player_inventory.cpp player/continuation.cpp items/level_items.cpp)
 target_link_libraries(player_inventory PUBLIC player_vitals player_collision)
 target_compile_features(player_inventory PUBLIC cxx_std_17)
 set_target_properties(player_inventory PROPERTIES CXX_EXTENSIONS NO)
@@ -22,7 +22,9 @@ add_library(enemies STATIC
     enemies/enemy_navigation.cpp
     enemies/enemy_mons5.cpp
     enemies/enemy_effects.cpp
+    enemies/enemy_generators.cpp
     enemies/motion_detector.cpp)
+    
 target_link_libraries(enemies PUBLIC sprites player_collision player_vitals doors PRIVATE player_control door_control)
 target_compile_features(enemies PUBLIC cxx_std_17)
 set_target_properties(enemies PROPERTIES CXX_EXTENSIONS NO)

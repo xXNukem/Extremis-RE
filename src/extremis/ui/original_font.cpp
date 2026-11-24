@@ -1,4 +1,5 @@
 #include "extremis/ui/original_font.h"
+#include "extremis/ui/utf8_glyph.h"
 #include "extremis/resources/spr_format.h"
 
 #include <algorithm>
@@ -84,7 +85,9 @@ Font::~Font()
 float Font::measure(std::string_view text) const
 {
     float width=0.f, longest=0.f;
-    for (unsigned char c : text) {
+    for (std::size_t i=0;i<text.size();) {
+        const auto decoded=localization::glyph(text,i); i+=decoded.bytes;
+        const unsigned char c=decoded.base;
         if (c=='\r' || c=='\n') {
             longest=std::max(longest,width);
             width=0.f;
@@ -104,7 +107,9 @@ bool Font::draw(SDL_Renderer* renderer, std::string_view text, float x, float y,
     if (scale<=0.f || !renderer) return false;
     const float originX=x;
     const Uint8 alpha=Uint8(std::clamp(opacity,0.f,1.f)*255.f);
-    for (unsigned char c : text) {
+    for (std::size_t i=0;i<text.size();) {
+        const auto decoded=localization::glyph(text,i); i+=decoded.bytes;
+        const unsigned char c=decoded.base;
         if (c=='\r' || c=='\n') { x=originX; y+=11.f*scale; continue; }
         if (c==' ') { x+=9.f*scale; continue; }
         const int index=spriteIndex(c);
@@ -113,7 +118,19 @@ bool Font::draw(SDL_Renderer* renderer, std::string_view text, float x, float y,
         if (!SDL_SetTextureColorMod(glyph.texture,tint.r,tint.g,tint.b) ||
             !SDL_SetTextureAlphaMod(glyph.texture,alpha)) return false;
         const SDL_FRect destination{x,y,glyph.width*scale,10.f*scale};
-        if (!SDL_RenderTexture(renderer,glyph.texture,nullptr,&destination)) return false;
+        if (decoded.mark=='i') {
+            if (!SDL_RenderTextureRotated(renderer,glyph.texture,nullptr,&destination,180.0,nullptr,SDL_FLIP_NONE)) return false;
+        } else if (!SDL_RenderTexture(renderer,glyph.texture,nullptr,&destination)) return false;
+        if (decoded.mark && decoded.mark!='i') {
+            if (!SDL_SetRenderDrawColor(renderer,tint.r,tint.g,tint.b,alpha)) return false;
+            const float middle=x+glyph.width*scale*.5f;
+            if (decoded.mark=='c') { if (!SDL_RenderLine(renderer,middle,y+9*scale,middle-scale,y+11*scale)) return false; }
+            else if (decoded.mark=='u') { if (!SDL_RenderLine(renderer,middle-scale,y-scale,middle+scale,y-scale)) return false; }
+            else if (decoded.mark=='t') { if (!SDL_RenderLine(renderer,middle-scale,y-scale,middle,y-2*scale) || !SDL_RenderLine(renderer,middle,y-2*scale,middle+scale,y-scale)) return false; }
+            else if (decoded.mark=='a') { if (!SDL_RenderLine(renderer,middle,y-2*scale,middle+scale,y-scale)) return false; }
+            else if (decoded.mark=='g') { if (!SDL_RenderLine(renderer,middle-scale,y-scale,middle,y-2*scale)) return false; }
+            else if (decoded.mark=='e') { if (!SDL_RenderLine(renderer,middle-scale,y-scale,middle,y-2*scale) || !SDL_RenderLine(renderer,middle,y-2*scale,middle+scale,y-scale)) return false; }
+        }
         x+=(glyph.width+1)*scale;
     }
     return true;

@@ -1,4 +1,5 @@
 #include "extremis/resources/audio_data.h"
+#include "app/startup/port_menu.h"
 #include "extremis/audio/audio_mixer.h"
 #include "platform/sdl/audio/audio_player.h"
 #include "extremis/audio/game_audio.h"
@@ -11,6 +12,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 
 namespace {
@@ -477,6 +479,104 @@ void originalDoorTail(const audio::Bank& bank)
     std::cout << "Door tail: one request; previous consumed=5032 wraps=1; corrected consumed=3700 wraps=0.\n";
 }
 
+void masterVolumeOutput(const std::filesystem::path& fixtures,
+                        const std::filesystem::path& directory)
+{
+    bool diskAvailable = false;
+    for (int i=0; i<SDL_GetNumAudioDrivers(); ++i)
+        diskAvailable |= std::string_view(SDL_GetAudioDriver(i)) == "disk";
+    if (!diskAvailable) {
+        std::cout << "SDL disk audio driver unavailable; PCM output check skipped.\n";
+        return;
+    }
+    SDL_SetHintWithPriority(SDL_HINT_AUDIO_DRIVER,"disk",SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER,"dummy",SDL_HINT_OVERRIDE);
+    check(SDL_InitSubSystem(SDL_INIT_VIDEO),"Cannot initialize video for menu audio test");
+    const std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> window(
+        SDL_CreateWindow("Menu audio regression",640,400,0),SDL_DestroyWindow);
+    check(bool(window),"Cannot create audio regression window");
+    const std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)> renderer(
+        SDL_CreateRenderer(window.get(),"software"),SDL_DestroyRenderer);
+    check(bool(renderer),"Cannot create audio regression renderer");
+
+    const auto peak = [&](const std::filesystem::path& raw, const SDL_AudioSpec& spec) {
+        std::ifstream input(raw,std::ios::binary);
+        const std::vector<Uint8> data{std::istreambuf_iterator<char>(input),{}};
+        const SDL_AudioSpec mono{SDL_AUDIO_F32,1,spec.freq};
+        Uint8* pcm = nullptr;
+        int size = 0;
+        check(!data.empty() && SDL_ConvertAudioSamples(&spec,data.data(),int(data.size()),&mono,&pcm,&size),
+              "Could not read PCM from the SDL disk device");
+        const std::unique_ptr<Uint8, decltype(&SDL_free)> owned(pcm,SDL_free);
+        float maximum = 0;
+        const auto* values = reinterpret_cast<const float*>(pcm);
+        for (int i=0; i<size/int(sizeof(float)); ++i)
+            maximum = std::max(maximum,std::abs(values[i]));
+        return maximum;
+    };
+
+    // Capture the physical device mix, including the separate Port Menu streams.
+    for (const bool menu : {false,true}) {
+        std::array<float,3> peaks{};
+        for (std::size_t i=0; i<peaks.size(); ++i) {
+            UserSettings settings;
+            settings.masterVolume = static_cast<unsigned>(i)*50;
+            const auto file = fixtures / ((menu ? "menu-" : "game-") + std::to_string(i) + ".raw");
+            check(SDL_SetHint(SDL_HINT_AUDIO_DISK_OUTPUT_FILE,file.u8string().c_str()),"Cannot set PCM capture path");
+            check(SDL_InitSubSystem(SDL_INIT_AUDIO),"Cannot initialize disk audio");
+            const SDL_AudioSpec requested{SDL_AUDIO_F32,2,44100};
+            const auto device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&requested);
+            SDL_AudioSpec spec{};
+            check(device && SDL_GetAudioDeviceFormat(device,&spec,nullptr),"Disk device format unavailable");
+            if (menu) {
+                SDL_FlushEvents(SDL_EVENT_FIRST,SDL_EVENT_LAST);
+                for (const auto code : {SDL_SCANCODE_DOWN,SDL_SCANCODE_DOWN,SDL_SCANCODE_RETURN}) {
+                    SDL_Event e{};
+                    e.type = SDL_EVENT_KEY_DOWN;
+                    e.key.windowID = SDL_GetWindowID(window.get());
+                    e.key.scancode = code;
+                    check(SDL_PushEvent(&e),"Cannot queue menu sound");
+                }
+                const auto timer = SDL_AddTimer(200,[](void*,SDL_TimerID,Uint32) -> Uint32 {
+                    SDL_Event stop{};
+                    stop.type = SDL_EVENT_QUIT;
+                    SDL_PushEvent(&stop);
+                    return 0;
+                },nullptr);
+                check(timer != 0,"Cannot schedule menu exit");
+                check(showPortMenu(window.get(),renderer.get(),directory,false,settings,{}).choice ==
+                      PortMenuChoice::Exit,"Menu audio playback did not exit cleanly");
+            } else {
+                GameAudio audio;
+                if (i != 1) audio.setMasterGain(settings.audioGain());
+                audio.load(directory);
+                check(audio.enabled(),"Game audio did not start");
+                if (i == 1) {
+                    audio.toggleEffects();
+                    audio.setMasterGain(settings.audioGain());
+                    check(audio.outputGain() == 0.f,"Classic mute lost priority over Master Volume");
+                    audio.toggleEffects();
+                    check(audio.outputGain() == .5f,"Unmuting lost the Master Volume");
+                }
+                audio.interfaceKey();
+                const auto until = SDL_GetTicks() + 1500;
+                while (SDL_GetTicks() < until && !audio.effectStatistics(28)->completed)
+                    SDL_Delay(5);
+                check(audio.effectStatistics(28)->completed==1,"Master Volume changed effect completion");
+                SDL_Delay(75);
+            }
+            SDL_CloseAudioDevice(device);
+            SDL_QuitSubSystem(SDL_INIT_AUDIO);
+            peaks[i] = peak(file,spec);
+        }
+        check(peaks[0] == 0 && peaks[2] > .001f && std::abs(peaks[1]/peaks[2]-.5f) < .03f,
+              menu ? "Menu output is not proportional to Master Volume" : "Game output is not proportional to Master Volume");
+        std::cout << (menu ? "Menu" : "Game") << " PCM peaks at 0/50/100: "
+                  << peaks[0] << ", " << peaks[1] << ", " << peaks[2] << '\n';
+    }
+    SDL_SetHintWithPriority(SDL_HINT_AUDIO_DRIVER,"dummy",SDL_HINT_OVERRIDE);
+}
+
 void originals(const std::filesystem::path& directory)
 {
     const auto bank = audio::loadBank(directory/"BANK.DSS");
@@ -510,6 +610,9 @@ int main(int argc,char* argv[])
         { auto fixture=audio::decodeBank(bankBytes()); fixture[0].sample.loopFlag=65535;
           fixture[0].sample.loopBegin=0; fixture[0].sample.loopEnd=127; boundedInterface(fixture,0); } exactCompletion(); simultaneousEffects(); loopLifecycle(); playback(argv[1]);
         formatConversion(); weaponSounds(argv[1]); doorEvents(argv[1]); footstepEvents(argv[1]); noOverlappingSteps();
+        const auto volumeFixture=std::filesystem::path(argv[1])/"master-volume";
+        writeBank(volumeFixture/"BANK.DSS",30);
+        masterVolumeOutput(volumeFixture,argc==3 ? std::filesystem::path(argv[2]) : volumeFixture);
         if (argc==3) originals(argv[2]);
         std::cout << "DSS decoding, PCM, loops, mixing and SDL dummy playback passed.\n";
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

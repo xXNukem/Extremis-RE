@@ -21,11 +21,15 @@ public:
         std::optional<ElevatorTravel> elevator;
     };
     std::optional<Travel> takeTravel();
+    bool takeBombPlacement();
     void load(const game_lab::Level& level);
+    void storePanelContents(game_lab::Level& level) const;
     // Returns true when the modal interface owns this event.
     bool handleEvent(const SDL_Event& event, std::uint32_t windowId);
+    bool requestContextualAction(const Camera& camera, const collision::World& obstacles);
     void update(const Camera* camera, bool active, const collision::World& obstacles,
-                SurvivalSession& player, GameAudio& audio, DoorControl* security = nullptr, double seconds = 1.0/70.0);
+                SurvivalSession& player, GameAudio& audio, DoorControl* security = nullptr, double seconds = 1.0/70.0,
+                bool enemyInConnectedSet = false);
     bool modal() const;
     bool securitiesComplete() const;
     unsigned completedSecurities() const;
@@ -58,6 +62,7 @@ private:
     unsigned zone_ = 0;
     std::optional<Travel> travel_;
     bool take_ = false, injector_ = false, oxygen_ = false;
+    bool bombPlacement_ = false;
     bool inventoryRequested_ = false;
     Action action_ = Action::None;
     unsigned blink_ = 0;

@@ -10,7 +10,7 @@ public:
     CreditsAudio& operator=(const CreditsAudio&) = delete;
     ~CreditsAudio();
 
-    void start();
+    void start(float gain);
     void setFocused(bool focused);
 
 private:

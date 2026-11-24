@@ -61,7 +61,14 @@ struct Level {
     std::optional<std::uint16_t> accessCode; // Word at header +0x0e target, EXE [0x519a].
     std::vector<std::uint16_t> codeTargets; // Count/list following accessCode for code terminals.
     unsigned zoneIndex = 0; // Zero-based GAME.LAB/MAP.SPR record, not resource-bank number.
+    std::uint16_t generatorHealth = 0;
+    std::vector<std::uint16_t> generatorSectors;
+    // Bounded DOS directory reads after sector count for a bomb carried across levels.
+    std::vector<Vertex> trailingOrigins;
 };
+
+std::optional<Vertex> bombOrigin(const Level& level, unsigned sector, std::uint16_t x, std::uint16_t y);
+unsigned blastStrength(Vertex origin, Vertex target);
 
 struct Header {
     std::uint16_t levelCount;

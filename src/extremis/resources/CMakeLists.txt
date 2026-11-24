@@ -13,3 +13,11 @@ add_library(anm_format STATIC anm_format.cpp)
 target_include_directories(anm_format PUBLIC "${PROJECT_SOURCE_DIR}/include")
 target_compile_features(anm_format PUBLIC cxx_std_17)
 set_target_properties(anm_format PROPERTIES CXX_EXTENSIONS NO)
+
+
+add_library(vga_palette STATIC vga_palette.cpp)
+target_include_directories(vga_palette PUBLIC "${PROJECT_SOURCE_DIR}/include")
+target_compile_features(vga_palette PUBLIC cxx_std_17)
+set_target_properties(vga_palette PROPERTIES CXX_EXTENSIONS NO)
+target_link_libraries(texture_bank PRIVATE vga_palette)
+target_link_libraries(anm_format PRIVATE vga_palette)

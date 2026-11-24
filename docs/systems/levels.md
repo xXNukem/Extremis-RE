@@ -30,9 +30,10 @@ Each level begins with the IDs of four resource banks:
 | `+0x0A` | Offset | Connection-state words, including dynamic doors |
 | `+0x0C` | Offset | Enemy records |
 | `+0x0E` | Offset | Access-code data |
+| `+0x10` | Offset | Enemy-generator count, spawn health and sector list |
 | `+0x12` | Word | Sector count, followed by the sector directory |
 
-These aren't separate files per level. They're **sections inside the same level record**, reached through offsets relative to its beginning. The parser validates those offsets before reading them. For the exact implementation, see [`src/extremis/resources/game_lab.cpp`](../../src/extremis/resources/game_lab.cpp) and [`include/extremis/resources/game_lab.h`](../../include/extremis/resources/game_lab.h).
+These aren't separate files per level. They're **sections inside the same level record**, reached through offsets relative to its beginning. The parser validates the offsets it uses. The enemy-generator table is documented from DOS and LAB evidence and has no port loader yet. For the exact implementation, see [`src/extremis/resources/game_lab.cpp`](../../src/extremis/resources/game_lab.cpp) and [`include/extremis/resources/game_lab.h`](../../include/extremis/resources/game_lab.h).
 
 ## Sectors: a room is more than four walls
 
@@ -128,4 +129,8 @@ The rule is simple: identify a strange byte sequence, check how DOS uses it, *th
 
 **Original evidence:** sector and bank loading near EXE `0x11335`; sector traversal `0x114ba–0x1185c`; original player new-game template at file `0x1d8a0`. The most useful cross-reference is the parsed type definitions in `game_lab.h`.
 
-*What remains uncertain?* The exact triggers for some level-specific events, nest locations and their destruction mechanics, and full start-to-finish validation of all 30 levels. See [Known differences](../reference/known-differences.md).
+*What remains uncertain?* The exact triggers for some level-specific events, the armed bomb’s cross-level edge cases, and full start-to-finish validation of all 30 levels. [Generator locations and blast rules](../reference/exe/nests-and-bomb.md). See [Known differences](../reference/known-differences.md).
+
+## Campaign checkpoints and the working LAB
+
+DOS displays fixed quick-access passwords during eligible level entries. The password selects one of 16 authored starts with its own sector, position, equipment and vitals. New and continued parties copy the original `DATA/DATA.LAB` into a fresh working `GAME.LAB`. Within a party, DOS writes level changes back to that working file when releasing a level, preserving door unlocks while clearing door motion and open state. The next party gets pristine levels and a fresh session. The port's LOAD GAME uses those starts and clears its in-memory level snapshots. The original LAB stays unchanged. See the [complete checkpoint list, input rules and disk routines](../reference/exe/password-continuation.md).

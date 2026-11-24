@@ -1,5 +1,7 @@
 #include "extremis/world/pit_clock.h"
 #include "extremis/cinematics/original_shuttle.h"
+#include "extremis/ui/localization.h"
+#include "extremis/ui/cinematic_text.h"
 #include <algorithm>
 #include <fstream>
 #include <stdexcept>
@@ -82,7 +84,18 @@ void Presentation::callback() {
     }
     sprite(1,6,121,0);int x=125,y=5;
     const auto& text=resources_.text[script_];
-    for(unsigned i=0;i<std::min<unsigned>(characters_,text.size());++i) {
+    const std::string key="shuttle.script.0"+std::to_string(script_+1);
+    const auto localized=localization::cinematicById(key,localization::current());
+    if(!localized.empty()) {
+        std::string framed="-------------------\r  ";
+        for(std::size_t i=0;i<localized.size();++i) {
+            if(i+2<localized.size() && localized.substr(i,3)==" / ") {framed+="\r  ";i+=2;}
+            else framed+=localized[i];
+        }
+        framed+="\r-------------------";
+        localization::drawIndexed(canvas_,resources_.sprites[0],framed,characters_,unsigned(text.size()),
+            125,5,310,90,5,[](unsigned char c){return glyph(c)-1;});
+    } else for(unsigned i=0;i<std::min<unsigned>(characters_,text.size());++i) {
         unsigned char ch=text[i];if(ch=='\r') {x=125;y+=5;continue;}
         if(ch==' ') {x+=4;continue;}
         int n=glyph(ch);if(n>0 && unsigned(n)<=resources_.sprites[0].size()) {

@@ -93,6 +93,14 @@ There are **nine** enemy records in level 1, including waiting enemies in sector
 
 A quick way to investigate an apparent bug is therefore: note the **level, sector, enemy index, behaviour and door states** first. “The alien went home” is not a bug report until we know whether it was a mode-1 enemy.
 
+## Motion detector
+
+The powered detector projects the live enemy records from their current sector origin and local position. It takes up to ten records in level order within the detector rectangle and then applies the current sweep phase. It can pick up a stationary enemy through a wall. The panel is forward-biased, and a target directly behind the player produces no visible marker during the sweep. The sweep graphic and the contact markers are separate CASQUE sprites. The markers use their encoded centers so that the contact stays anchored as it fades. [DOS instruction trace and live position-to-pixel validation](../reference/exe/motion-detector.md).
+
+## Enemy generators
+
+Twelve levels have a generator sector table, with 21 enabled entries in the shipped map. Every 800 update units, each intact generator outside the connected-sector set can reuse one removed mode-4 enemy record. Its level supplies the MONS bank and the spawn health. A close enough inventory-bomb blast changes the generator's Entity A variant and stops that generator. [Locations, slot limits and original instruction trace](../reference/exe/nests-and-bomb.md).
+
 ## Still on the workbench
 
 Decorative-object collision is applied in `enemy_system.cpp` through `collision::constrainObjets` in `objet_collision.cpp`, including the **±80 angular-unit** response. `tests/enemy_tests.cpp::objetCollisions` covers normal/MONS5 movement, bounds, solidity and the current animated image extent. Specific enemy routes and the final sequence need continued playtesting. See [Known differences](../reference/known-differences.md).

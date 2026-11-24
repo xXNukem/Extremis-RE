@@ -45,11 +45,19 @@ void SurvivalSession::handleInput(SurvivalInput input)
 #endif
 }
 
-bool SurvivalSession::update(double seconds, bool simulationActive, GameAudio& audio, bool running, bool deferDeathSound)
+bool SurvivalSession::update(double seconds, bool simulationActive, GameAudio& audio, bool running, bool deferDeathSound,
+                             std::uint16_t gameplayTicks)
 {
     messages_.update(seconds,simulationActive && wasActive_ && alive());
-    // Discard entry/resume frames, whose elapsed interval may include inactive time.
-    inventory_.updateBattery(seconds,simulationActive && wasActive_ && alive());
+    if (simulationActive && alive() && gameplayTicks && inventory_.batteryMode()!=player::BatteryMode::Off) {
+        const auto previousMode=inventory_.batteryMode();
+        inventory_.updateBattery(gameplayTicks);
+        if (inventory_.batteryMode()==player::BatteryMode::Off)
+            messages_.post(previousMode==player::BatteryMode::Radar ?
+                           messages::Id::RadarExpired : messages::Id::OpticsExpired);
+        if (inventory_.batteryCharge()<4800) messages_.post(messages::Id::BatteryLow);
+    }
+    // The vitals keep their existing elapsed-time path.
     vitals_.update(seconds,simulationActive && wasActive_,running);
     wasActive_ = simulationActive && alive();
     const auto death = vitals_.deathCause();
@@ -73,7 +81,7 @@ hud::State SurvivalSession::hudState() const
     result.health = vitals_.health();
     result.oxygen = vitals_.oxygen();
     result.messages = messages_.visible();
-    result.batteryCharge=inventory_.batteryCharge(); result.detectorEnabled=inventory_.detectorEnabled();
+    result.batteryCharge=inventory_.batteryCharge(); result.batteryInUse=inventory_.batteryMode()!=player::BatteryMode::Off;
     result.weapon = inventory_.weapon();
     result.ammunition = inventory_.ammunition();
     result.oxygenBottle = inventory_.oxygenReserve() >= 0;

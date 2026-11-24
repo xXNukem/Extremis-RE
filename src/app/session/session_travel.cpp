@@ -20,7 +20,8 @@ void AppSession::transferLevel(SDL_Window* window, SDL_Renderer* renderer,
     const LaunchOptions& options, const ItemSession::Travel& travel,
     bool restartRequested, bool arrivingByShuttle, bool& running,
     FirstPersonRenderer& firstPerson, DoorControl& doorControl, PlayerInput& playerInput,
-    GameAudio& gameAudio, player::DeathPresentation* deathPresentation, VictorySession& victory
+    GameAudio& gameAudio, player::DeathPresentation* deathPresentation, VictorySession& victory,
+    const continuation::Checkpoint* checkpoint
 #ifdef EXTREMIS_DEBUG_MENU
     , DebugMenu& debugMenu
 #endif
@@ -36,6 +37,15 @@ void AppSession::transferLevel(SDL_Window* window, SDL_Renderer* renderer,
         if(result==StartupCreditsResult::Quit) running=false;
         return result==StartupCreditsResult::Continue;
     };
+    const auto discloseArrival = [&] {
+        if (!arrivingByShuttle && !travel.elevator) return;
+        pendingDisclosure=disclosures.arrive(travel.zone,travel.arrival.sector);
+        if (pendingDisclosure) {
+            playerInput.releaseRelativeMouse();
+            SDL_ResetKeyboard();
+            SDL_FlushEvents(SDL_EVENT_KEY_DOWN,SDL_EVENT_KEY_UP);
+        }
+    };
     // An elevator travelling within the same level must not reload the world.
     if (!restartRequested && data && travel.zone == data->level.zoneIndex) {
         auto arrivalLevel = data->level;
@@ -46,7 +56,9 @@ void AppSession::transferLevel(SDL_Window* window, SDL_Renderer* renderer,
             doorControl.resetLevel();
             return;
         }
+        const auto previousSector=camera?camera->sector:std::nullopt;
         camera = nextCamera;
+        if (previousSector!=nextCamera.sector) discloseArrival();
         playerInput.invalidateContext();
 
         SDL_Log("Elevator: same-level transfer to sector %u",
@@ -57,13 +69,29 @@ void AppSession::transferLevel(SDL_Window* window, SDL_Renderer* renderer,
     }
 
     try {
-        auto destination=prepareDestination(options.labPath,travel.zone,travel.arrival);
+        const auto saved = visitedLevels.find(travel.zone);
+        auto destination = prepareDestination(options.labPath,
+            !restartRequested && saved != visitedLevels.end() ? saved->second :
+                game_lab::loadLevel(options.labPath, travel.zone), travel.arrival);
         if(!presentElevator()) {
             doorControl.resetLevel();
             return;
         }
+        if (!restartRequested && data) {
+            auto snapshot = *data;
+            items.storePanelContents(snapshot.level);
+            if (enemySystem) snapshot.level.enemies = enemySystem->records();
+            for (auto& door : snapshot.level.connectionStates) door &= 0x0400;
+            visitedLevels.insert_or_assign(snapshot.level.zoneIndex,std::move(snapshot));
+            visitedLevels.erase(travel.zone);
+        }
         if(restartRequested) {
+            visitedLevels.clear();
             survival=SurvivalSession(options.vitalsDebug);
+            if (checkpoint) {
+                survival.inventory().startWith(checkpoint->inventory);
+                survival.vitals().startWith(checkpoint->health,checkpoint->oxygen);
+            }
             items=ItemSession{};
             items.setAvailable(interactionRenderer.has_value());
             gameAudio.stopEffects();
@@ -94,13 +122,16 @@ void AppSession::transferLevel(SDL_Window* window, SDL_Renderer* renderer,
         mapSession.beginFrame(data->level.zoneIndex);
         survival.clearMessages(); // Vitals, inventory and battery retain their values.
         playerInput.invalidateContext();
+        if (checkpoint) disclosures.consume(*checkpoint);
+        if (!restartRequested) discloseArrival();
         SDL_SetWindowTitle(window,survival.windowTitle(texturePreview.windowTitle()).c_str());
         SDL_Log("Elevator: level %u, sector %u, arrival %.0f,%.0f; %zu sectors, %zu sprites, %zu enemies, %zu doors",
             travel.zone+1,travel.arrival.sector,camera->x,camera->y,
             data->level.sectors.size(),spriteScene->objects.size(),
             enemySystem->records().size(),levelDoors.size());
     } catch (const std::exception& error) {
-        SDL_Log("Elevator destination load failed: %s",error.what());
+        SDL_Log("Level load failed: %s",error.what());
+        if (restartRequested) running=false;
     }
     doorControl.resetLevel();
 }

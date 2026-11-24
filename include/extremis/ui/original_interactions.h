@@ -1,5 +1,6 @@
 #pragma once
 #include "extremis/resources/spr_format.h"
+#include "extremis/gameplay/player/player_inventory.h"
 #include "extremis/resources/anm_format.h"
 #include "extremis/resources/texture_bank.h"
 #include <array>
@@ -34,7 +35,7 @@ struct State {
     std::array<int,2> injectors{-1,-1};
     int oxygenReserve = -1;
     int batteryCharge = -1;
-    bool detectorEnabled = false;
+    player::BatteryMode batteryMode = player::BatteryMode::Off;
     bool inventoryUse = false;
     unsigned useSelection = 0;
     unsigned fingerPhase = 0;
@@ -76,6 +77,7 @@ private:
     void inventory(std::vector<std::uint32_t>& pixels, const State& state) const;
     void cards(std::vector<std::uint32_t>& pixels, const State& state) const;
     Resources resources_;
+    std::array<std::vector<spr_format::Image>,2> localizedInventory_;
     std::array<std::uint32_t,256> colors_{};
 };
 std::optional<std::uint8_t> codeChecksum(std::string_view code);

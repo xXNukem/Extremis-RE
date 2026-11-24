@@ -1,5 +1,4 @@
 #include "extremis/cinematics/player_death.h"
-#include "app/session/victory_session.h"
 #include <SDL3/SDL.h>
 #include <iostream>
 #include <stdexcept>
@@ -10,7 +9,7 @@ using D=player::DeathPresentation;
 player::DeathResources fixture()
 {
     player::DeathResources r;
-    for(auto* a:{&r.health,&r.oxygen,&r.gameOver,&r.menu}) {
+    for(auto* a:{&r.health,&r.oxygen,&r.gameOver}) {
         a->palette.fill(0x408020ff);
         a->frames.emplace_back(64000,1);
     }
@@ -22,9 +21,6 @@ player::DeathResources fixture()
     r.oxygen.frames.emplace_back(64000,2); r.oxygen.palette[2]=0x204080ff;
     r.body.assign(6,{1,1,0,0,{2}}); r.health.palette[2]=0x80ff20ff;
     r.font.assign(76,{1,1,0,0,{2}});
-    r.menuFont=r.font;
-    r.menuArt.assign(3,{62,43,0,0,std::vector<std::uint8_t>(62*43,0)});
-    r.menuLines={"RUN","OPTIONS","EXIT","NEW","CONTINUE","BACK"};
     r.lines={"A","B","","","","","",""};
     return r;
 }
@@ -141,13 +137,8 @@ void run(player::DeathResources r, bool save)
         check(d.stage()==D::Stage::GameOverFade,"Fresh key/timeout failed to dismiss");
         for(int i=0;i<101;++i) d.advance(0);
         check(d.stage()==D::Stage::Finished && d.pixels()[0]==255,"Final fade failed");
-        d.advance(0);
         for(int i=0;i<51;++i) d.advance(0);
-        check(d.stage()==D::Stage::Menu,"Missing return to native menu");
-        check(d.menuInput(0,true)==D::Request::None,"RUN must open submenu");
-        check(d.menuInput(0,true)==D::Request::Restart,"New game request missing");
-        d.menuInput(2,false); d.menuInput(0,true);
-        check(d.menuInput(2,true)==D::Request::Exit,"Exit request missing");
+        check(d.stage()==D::Stage::Finished && d.pixels()[0]==255,"Completion must stay terminal until session reset");
         d.reset(); check(!d.active(),"Reset failed");
         d.begin(cause,scene); check(d.stage()==D::Stage::Tint,"Restart failed");
     }
@@ -155,23 +146,6 @@ void run(player::DeathResources r, bool save)
 int main(int argc,char** argv)
 {
     try {
-        D menu(fixture()); VictorySession victory; unsigned plays=0;
-        auto play=[&]() { ++plays; return StartupCreditsResult::Continue; };
-        auto enter=[&]() { menu.beginMenu(); };
-        victory.update(false,play,enter);
-        check(plays==0 && !menu.active(),"Premature victory handoff");
-        victory.update(true,play,enter);
-        check(plays==1 && menu.stage()==D::Stage::MenuReveal,"Victory did not enter native menu");
-        for(int i=0;i<51;++i) menu.advance(0);
-        victory.update(true,play,enter);
-        check(plays==1 && menu.stage()==D::Stage::Menu,"Victory replayed or reset menu");
-        check(menu.menuInput(0,true)==D::Request::None && menu.menuInput(0,true)==D::Request::Restart,"Victory menu cannot restart");
-        victory.reset(); menu.reset();
-        victory.update(true,[&]() { ++plays; return StartupCreditsResult::Quit; },enter);
-        check(plays==2 && !menu.active(),"Quit entered menu");
-        victory.reset();
-        victory.update(true,[]() { return StartupCreditsResult::Error; },enter);
-        check(!menu.active(),"Failed FSEQ entered menu");
         {
             auto r=fixture();D d(r);std::vector<std::uint32_t> black(64000,255);
             d.begin(player::DeathCause::SelfDestruction,black);

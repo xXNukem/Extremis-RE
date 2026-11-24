@@ -28,6 +28,10 @@ Bank decode(const std::vector<std::uint8_t>& bytes,
     return colorImages(spr_format::decode(bytes), palette);
 }
 
+Bank load(const std::filesystem::path& file, const std::array<wall_textures::Rgb,256>& palette)
+{
+    return colorImages(spr_format::load(file),palette);
+}
 Bank load(const std::filesystem::path& directory, std::uint16_t objetBank,
           std::uint16_t palBank)
 {

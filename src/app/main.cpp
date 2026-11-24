@@ -19,6 +19,12 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    const auto labDirectory=options->labPath ? std::filesystem::path(options->labPath).parent_path()
+                                             : std::filesystem::path{};
+    const auto settingsPath=userSettingsPath();
+    auto settings=loadUserSettings(settingsPath,options->labPath ? labDirectory/"EXTREMIS.CFG"
+                                                                 : std::filesystem::path{});
+    localization::bind(&settings.language);
     SDL_Window* window = SDL_CreateWindow(session.windowTitle().c_str(), 960, 600,
                                            SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_FULLSCREEN);
     if (!window) {
@@ -39,14 +45,19 @@ int main(int argc, char* argv[])
     platform::sdl::configureMetalFullscreenPresentation(renderer);
 #endif
 
+    const auto savedMode=settings.render.mode;
+    initializePortVideo(window,renderer,settings);
+    if (savedMode.nativeMax!=settings.render.mode.nativeMax ||
+        savedMode.renderScale!=settings.render.mode.renderScale)
+        saveUserSettings(settingsPath,settings);
+
     int exitCode = 0;
-    PortMenuVideoState video;
-    const auto dataDirectory=options->labPath ? std::filesystem::path(options->labPath).parent_path()/"DATA"
-                                       : std::filesystem::path{};
+    const auto dataDirectory=options->labPath ? labDirectory/"DATA" : std::filesystem::path{};
+    const continuation::Checkpoint* checkpoint=nullptr;
     const auto credits=app::playStartupSequence(window,renderer,*options,dataDirectory,
-                                                session.hasLevel(),video,exitCode);
+                                                session.hasLevel(),settings,settingsPath,exitCode,checkpoint);
     if (credits==StartupCreditsResult::Continue || credits==StartupCreditsResult::SkipAll)
-        session.run(window,renderer,*options,dataDirectory,video,exitCode);
+        session.run(window,renderer,*options,dataDirectory,settings,settingsPath,exitCode,checkpoint);
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);

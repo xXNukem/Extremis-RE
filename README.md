@@ -48,65 +48,57 @@ The idea is to build a versatile engine that adapts to each game, rather than fo
 
 ## Development progress
 
-**Estimated completion: ~65%** (manual estimate, not a measured percentage of code or completed levels).
+**Estimated completion: ~85%** (manual estimate, not a measured percentage of code or completed levels).
 
-**🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩⬛⬛⬛⬛⬛⬛⬛ &nbsp; 65%**
+**🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩⬛⬛⬛ &nbsp; 85%**
 
-The core engine, major original cinematics, level 22 events and a port menu with working display and aspect-ratio settings are implemented. Save/load, the remaining menu settings, campaign-wide verification and release testing are still outstanding.
+Extremis RE is approaching its first public release. The major gameplay, rendering, audio, survival and interface systems have been reconstructed. Original password continuation, persistent settings and multilingual support are operational. Full-campaign verification and Windows release testing remain outstanding.
 
 ### Feature status
 
 | Area | Status | Notes |
 |:--|:--|:--|
-| Original game data and 30 level definitions | Implemented | All level definitions can be loaded; later levels require gameplay verification |
-| 3D renderer | Functional | Textured walls, floors, ceilings and sprites; widescreen rendering is supported, while higher internal resolutions and performance work remain |
-| Player controls and survival | Functional | Movement, health, oxygen, running and collision; timing and edge cases need further verification |
-| Doors, terminals and elevators | Functional | Opening/closing, security, interactions and level transfers; special cases remain to be tested |
-| Weapons, projectiles and enemies | Functional | Combat and enemy behaviour implemented; all banks and later-game encounters are not fully verified |
-| Decorative objects | Functional | Sprite animations and collision implemented; some timing and bank-specific behaviour remain |
-| HUD, inventory and map | Functional | Original 320×200 layout and interfaces, with an extended HUD in widescreen; visual polish and interaction checks remain |
-| Sound effects | Functional | Original audio resources and gameplay cues; ambient audio and some timing need verification |
-| Original startup presentation | Implemented | Blue Sphere, Présente, title, four credits and all 12 PSEQ stages; timing differences remain |
-| Player death and GAME OVER | Implemented | Health, oxygen and self-destruction death sequences, GAME OVER and menu return; some timing is adapted |
-| Original main menu | Partial | Returns after GAME OVER and victory; original startup integration and password continuation are unfinished |
-| Port main menu and OPTIONS | Partial | Startup and in-game menu with BACK TO GAME, fullscreen display modes and aspect-ratio selection; other settings and LOAD GAME remain pending |
-| Final cinematic | Implemented | Original FSEQ sequence, connected to MONS9 defeat; visually validated, full-campaign trigger still to be verified |
-| Inter-level elevator cinematics | Implemented | Four original movement variants integrated and visually validated; DOS timing comparison pending |
-| Level 22 self-destruction | Implemented | 16 security conditions, countdown, alarms and explosion death; persistence across levels verified |
-| Level 22 shuttle evacuation | Implemented | Boarding, access checks, full travel sequence and level 23 arrival; visually validated |
-| Level 22 communication | Implemented | Door-triggered YES/NO prompt and seven narrative pages; visually validated |
-| Original in-game text | Needs review | Translate remaining French to English and proofread existing English messages |
-| Save/load | Not implemented | Full game-state persistence and restoration are pending |
-| Full campaign | Not verified | All 30 levels require end-to-end testing, including events, transitions and the ending |
-| Platform support and releases | In progress | Development and manual testing primarily on macOS; Windows and release packaging need validation |
+| Original game data and 30 levels | Implemented | All level definitions load; complete campaign playthrough remains |
+| Vortex Engine and 3D renderer | Functional | Multithreaded software rendering, widescreen, scalable resolution and fisheye |
+| Lighting and visual effects | Functional | Colored lights, floor/ceiling rendering, infrared optics and POWER IS SURGING |
+| Player controls and survival | Functional | Modern and classic controls, health, oxygen, running and collision |
+| Enemies and combat | Functional | Weapons, enemy AI, radar and generators; remaining edge cases require testing |
+| Doors, terminals and level travel | Functional | Access cards, elevators, shuttle and inter-level persistence |
+| Inventory and pickups | Functional | Original interfaces, batteries, weapons, supplies and localized inventory graphics |
+| HUD and map | Functional | Original DOS presentation and widescreen HUD extension |
+| Audio | Functional | Original sound effects and working persistent master volume |
+| Original cinematics | Implemented | Introduction, credits, elevator travel, communication, death and ending sequences |
+| Bombs and nests | Functional | Placement, explosions, enemy generators and destroyed-nest persistence |
+| Password continuation | Implemented | All 16 DOS passwords, LOAD GAME and arrival notifications |
+| Port menu and settings | Implemented | Video, audio, controls and persistent settings.ini |
+| Localization | Functional | English, Spanish and French; three ambiguous narrative passages remain in English |
+| Full campaign | Not fully verified | All 30 levels require end-to-end gameplay testing |
+| Platform support and releases | In progress | macOS development validated; native Windows testing and packaging pending |
 
-**Latest reported Debug test result (16 November 2026): 36/36 CTest tests passed.** This does not mean all levels or DOS behaviour have been verified.
+**Latest reported automated result (24 November 2026): 46/46 CTest tests passed in both Debug and Release.** This does not establish complete DOS fidelity or full-campaign verification.
 
 ### Implemented so far
 
-- Original level, texture, sprite and audio data loading.
-- First-person renderer with floor and ceiling textures.
-- Player movement, survival systems, weapons, projectiles and enemy AI.
-- Doors, readers, terminals, elevators, inventory, HUD and map.
-- Decorative sprite animation and collision handling.
-- Custom Extremis RE startup presentation.
-- Port menu with original DOS sound effects, BACK TO GAME, fullscreen display-mode selection, widescreen rendering and an extended HUD.
-- Original Blue Sphere presentation, In Extremis title, credits and PSEQ introduction.
-- Original health/oxygen death presentations, GAME OVER and final FSEQ cinematic.
-- Original four-variant elevator transitions and level 22 shuttle evacuation to level 23.
-- Level 22 autodestruction countdown, explosion death and seven-page communication event.
-- Automated tests and technical notes based on the original executable.
+- Original 30-level data, textures, sprites, enemy resources and audio loading.
+- Vortex Engine rendering with widescreen, configurable resolutions, fisheye and multithreading.
+- Original colored lighting, infrared optics, radar and electrical power fluctuations.
+- Player survival, combat, enemy AI, interactive objects and destructible nests.
+- Doors, access cards, terminals, inventory, elevators and shuttle transitions.
+- Inter-level state persistence and original password-based continuation.
+- Original introduction, death sequences, communication events and final cinematic.
+- Persistent audio, video and control preferences, including classic keyboard gameplay.
+- English, Spanish and French localization of menus, gameplay interfaces and most narrative sequences.
+- Original-style localized inventory graphics composed without modifying DOS assets.
+- Automated regression tests and extensive executable-based reverse-engineering documentation.
 
 ### Main work remaining
 
-- Save/load and full game-state restoration.
-- Implement LOAD GAME, finish the remaining port OPTIONS settings and original menu/password integration.
-- Higher internal rendering resolutions (up to 4K), extended HUD polish and a custom optional floating HUD.
-- Translate remaining French dialogue and correct spelling and grammar in English text.
-- Fidelity checks for animation timing, audio and specific original effects.
-- Remaining gameplay, collision and rendering edge cases.
-- Full playthrough and validation of all 30 levels, including the final encounter.
-- Windows testing, performance work and release packaging.
+- Complete an end-to-end playthrough of all 30 levels and verify progression and ending.
+- Investigate remaining enemy AI edge cases, including the level 3 MONS5 diagnostic.
+- Validate outstanding audiovisual timing, bomb presentation and DOS fidelity details.
+- Visually review remaining localization layouts and three ambiguous narrative passages.
+- Perform native Windows testing, release builds and distribution packaging.
+- Optional future enhancement: modern full-state saving alongside original passwords.
 
 ## Build and run
 

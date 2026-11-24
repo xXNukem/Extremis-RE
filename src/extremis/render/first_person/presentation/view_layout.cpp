@@ -44,3 +44,11 @@ ViewLayout viewLayout(int outputWidth, int outputHeight, bool withHud,
     return {width, height, projectionReferenceWidth, renderScale, nativeMax};
 }
 } // namespace extremis::render_detail
+
+namespace extremis {
+RequestedVideoSize composedViewSize(int outputWidth, int outputHeight, const VideoRenderSettings& video)
+{
+    const auto layout = render_detail::viewLayout(outputWidth,outputHeight,true,video);
+    return {layout.width, int(std::lround(double(layout.height)*hud::height/hud::viewHeight))};
+}
+}

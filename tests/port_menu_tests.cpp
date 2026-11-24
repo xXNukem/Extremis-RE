@@ -1,10 +1,16 @@
+#undef NDEBUG
+#include "app/startup/port_menu.h"
+#include <fstream>
 #include "app/startup/port_menu_state.h"
+#include "extremis/ui/utf8_glyph.h"
 #include <SDL3/SDL.h>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
 #include <cassert>
+#include <array>
 #include <string>
+#include <tuple>
 
 static void choose(PortMenuState& s,unsigned index)
 {
@@ -12,9 +18,187 @@ static void choose(PortMenuState& s,unsigned index)
     assert(s.key(SDL_SCANCODE_RETURN)==PortMenuChoice::None);
 }
 
-int main()
+static void queueKey(SDL_Window* window, SDL_Scancode key)
 {
-    PortMenuState start(false);
+    SDL_Event event{};
+    event.type = SDL_EVENT_KEY_DOWN;
+    event.key.windowID = SDL_GetWindowID(window);
+    event.key.scancode = key;
+    assert(SDL_PushEvent(&event));
+}
+
+static void queueClick(SDL_Window* window, float y)
+{
+    SDL_Event event{};
+    event.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    event.button.windowID = SDL_GetWindowID(window);
+    event.button.button = SDL_BUTTON_LEFT;
+    event.button.x = 320;
+    event.button.y = y;
+    assert(SDL_PushEvent(&event));
+}
+
+static void persistence(const std::filesystem::path& directory)
+{
+    std::filesystem::create_directories(directory);
+    const auto path = directory / "settings.ini";
+    const auto cfg = directory / "EXTREMIS.CFG";
+    const auto lab = directory / "GAME.LAB";
+    constexpr auto labContents = "Read-only game data fixture";
+    std::filesystem::remove(path);
+    std::ofstream(cfg,std::ios::binary) << std::string(13,'\0');
+    std::ofstream(lab,std::ios::binary) << labContents;
+    const auto defaults = loadUserSettings(path);
+    assert(defaults.masterVolume == 80 && !defaults.classicControls && !defaults.vsync);
+    assert(defaults.render.preferences.aspectChoice == 3 && !defaults.render.preferences.fisheyeEnabled &&
+           defaults.render.preferences.floorAndCeiling && defaults.render.preferences.coloredLights);
+    assert(defaults.render.mode.renderScale == 1 && !defaults.render.mode.nativeMax);
+    assert(defaults.language == UserLanguage::English);
+    assert(!loadUserSettings(path,cfg).render.preferences.floorAndCeiling);
+
+    {
+        std::ofstream file(path);
+        file << "garbage\naspect=-1\nresolution=99999\nfisheye=not-a-number\nfloor_and_ceiling=2\n"
+                "colored_lights=-9\nvsync=0x1\nmaster_volume=500\nclassic_controls=9\nlanguage=3\n"
+                "master_volume=50\n";
+    }
+    auto settings = loadUserSettings(path);
+    assert(settings.masterVolume == 50 && settings.audioGain() == .5f);
+    assert(settings.render.preferences.aspectChoice == 3 && !settings.render.preferences.fisheyeEnabled &&
+           settings.render.preferences.floorAndCeiling && settings.render.preferences.coloredLights);
+    assert(settings.render.mode.renderScale == 1 && !settings.render.mode.nativeMax &&
+           !settings.vsync && !settings.classicControls && settings.language == UserLanguage::English);
+    std::ofstream(path) << "master_volume=-1\naspect=4xyz\nfisheye=1suffix\n";
+    assert(loadUserSettings(path).masterVolume == defaults.masterVolume);
+
+    SDL_Window* window = SDL_CreateWindow("Options regression",640,400,0);
+    assert(window);
+    SDL_Renderer* renderer = SDL_CreateRenderer(window,"software");
+    assert(renderer);
+    settings.render.mode.renderScale = maxDosResolutionScale;
+    initializePortVideo(window,renderer,settings);
+    assert(settings.render.mode.renderScale == 1 && !settings.render.mode.nativeMax);
+    assert(settings.render.mode.requestedSize.height == 200);
+
+    // Use the same blocking menu that the application opens from gameplay.
+    SDL_FlushEvents(SDL_EVENT_FIRST,SDL_EVENT_LAST);
+    queueClick(window,273); // OPTIONS from pause
+    queueClick(window,129); // VIDEO
+    queueClick(window,98); // AUTO -> 4:3
+    queueClick(window,137); // 1x -> 2x
+    queueClick(window,174); // Fisheye on
+    queueClick(window,212); // Planes off
+    queueClick(window,251); // Lamps off
+    queueClick(window,290); // VSync on
+    queueKey(window,SDL_SCANCODE_ESCAPE);
+    queueClick(window,178); // AUDIO
+    for (int i=0; i<5; ++i) queueKey(window,SDL_SCANCODE_LEFT);
+    queueKey(window,SDL_SCANCODE_ESCAPE);
+    queueClick(window,222); // CONTROLS
+    queueKey(window,SDL_SCANCODE_RETURN);
+    for (int i=0; i<3; ++i) queueKey(window,SDL_SCANCODE_ESCAPE);
+    assert(showPortMenu(window,renderer,{},true,settings,path).choice == PortMenuChoice::Resume);
+
+    SDL_DestroyRenderer(renderer);
+    settings = loadUserSettings(path,cfg);
+    assert(settings.render.preferences.aspectChoice == 0 && settings.render.preferences.fisheyeEnabled &&
+           !settings.render.preferences.floorAndCeiling && !settings.render.preferences.coloredLights);
+    assert(settings.render.mode.renderScale == 2 && !settings.render.mode.nativeMax);
+    assert(settings.masterVolume == 0 && settings.audioGain() == 0.f && settings.classicControls &&
+           settings.vsync && settings.language == UserLanguage::English);
+    renderer = SDL_CreateRenderer(window,"software");
+    assert(renderer);
+    initializePortVideo(window,renderer,settings);
+    int interval = 0;
+    assert(SDL_GetRenderVSync(renderer,&interval) && interval == 1);
+    assert(settings.render.mode.requestedSize.width == 640 && settings.render.mode.requestedSize.height == 400);
+
+    // Main menu still accepts the keyboard and pointer in Classic.
+    queueClick(window,176);
+    assert(showPortMenu(window,renderer,{},false,settings,path).choice == PortMenuChoice::NewGame);
+    queueKey(window,SDL_SCANCODE_DOWN);
+    queueKey(window,SDL_SCANCODE_RETURN);
+    SDL_Event text{};
+    text.type = SDL_EVENT_TEXT_INPUT;
+    text.text.windowID = SDL_GetWindowID(window);
+    text.text.text = "ATILAHUN";
+    assert(SDL_PushEvent(&text));
+    queueKey(window,SDL_SCANCODE_RETURN);
+    const auto continuation = showPortMenu(window,renderer,{},false,settings,path);
+    assert(continuation.choice == PortMenuChoice::Continue && continuation.checkpoint);
+    assert(settings.classicControls && settings.render.mode.renderScale == 2 && settings.masterVolume == 0);
+    assert(SDL_GetRenderVSync(renderer,&interval) && interval == 1);
+
+    settings.render.mode.nativeMax = true;
+    settings.render.preferences.aspectChoice = 2;
+    settings.masterVolume = 100;
+    assert(saveUserSettings(path,settings));
+    auto max = loadUserSettings(path);
+    assert(max.render.mode.nativeMax && max.masterVolume == 100 && max.audioGain() == 1.f);
+    initializePortVideo(window,renderer,max);
+    assert(max.render.mode.nativeWidth > 0 && max.render.mode.nativeHeight > 0);
+    assert(max.render.mode.requestedSize.width <= max.render.mode.nativeWidth &&
+           max.render.mode.requestedSize.height >= 200);
+    for (auto language : {UserLanguage::Spanish,UserLanguage::French,UserLanguage::English}) {
+        max.language=language;assert(saveUserSettings(path,max));
+        assert(loadUserSettings(path).language==language);
+    }
+    std::ifstream resources(lab,std::ios::binary);
+    const std::string bytes{std::istreambuf_iterator<char>(resources),{}};
+    assert(bytes == labContents && !loadUserSettings({},cfg).render.preferences.floorAndCeiling);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+}
+
+int main(int argc,char** argv)
+{
+    for (const auto& entry:localization::entries) {
+        assert(!entry.id.empty() && !entry.en.empty() && !entry.es.empty() && !entry.fr.empty());
+        assert(localization::byId(entry.id,UserLanguage::Spanish)==entry.es);
+        assert(localization::byId(entry.id,UserLanguage::French)==entry.fr);
+        for(std::string_view value:{entry.es,entry.fr})
+            for(std::size_t i=0;i<value.size();) {
+                const auto g=localization::glyph(value,i);
+                assert(g.bytes>0 && i+g.bytes<=value.size());
+                assert(g.base!='?' || value[i]=='?' || g.mark=='i');
+                i+=g.bytes;
+            }
+    }
+    for(const auto& entry:localization::cinematicEntries)
+        for(std::string_view value:{entry.es,entry.fr})
+            for(std::size_t i=0;i<value.size();) {
+                const auto g=localization::glyph(value,i);
+                assert(g.bytes>0 && i+g.bytes<=value.size());
+                assert(g.base!='?' || value[i]=='?' || g.mark=='i');
+                i+=g.bytes;
+            }
+    assert(localization::translate("Card C001",UserLanguage::Spanish)=="Tarjeta C001");
+    assert(localization::glyph("¿",0).mark=='i');
+    assert(localization::glyph("Ñ",0).base=='N');
+    assert(localization::glyph("Ç",0).base=='C');
+    for (std::string_view character : {"Á","É","Í","Ó","Ú","À","È","Ñ","Ç","¿","¡","’"})
+        assert(localization::glyph(character,0).bytes==character.size());
+    for (const auto& [character,base,mark] : std::array<std::tuple<std::string_view,char,char>,38>{{
+        {"á",'a','a'},{"é",'e','a'},{"í",'i','a'},{"ó",'o','a'},{"ú",'u','a'},
+        {"Á",'A','a'},{"É",'E','a'},{"Í",'I','a'},{"Ó",'O','a'},{"Ú",'U','a'},
+        {"ñ",'n','t'},{"Ñ",'N','t'},{"ü",'u','u'},{"Ü",'U','u'},
+        {"ç",'c','c'},{"Ç",'C','c'},{"à",'a','g'},{"è",'e','g'},
+        {"ê",'e','e'},{"â",'a','e'},{"ô",'o','e'},{"û",'u','e'},
+        {"À",'A','g'},{"È",'E','g'},{"Ê",'E','e'},{"Â",'A','e'},
+        {"Ô",'O','e'},{"Û",'U','e'},{"¿",'?','i'},{"¡",'!','i'},
+        {"ö",'o','u'},{"Ö",'O','u'},{"ï",'i','u'},{"Ï",'I','u'},
+        {"ë",'e','u'},{"Ë",'E','u'},{"ù",'u','g'},{"Ù",'U','g'}
+    }}) {
+        const auto g=localization::glyph(character,0);
+        if(!(g.bytes==character.size() && g.base==base && g.mark==mark))
+            SDL_Log("Glyph mismatch: %.*s got %c/%c expected %c/%c",int(character.size()),character.data(),g.base,g.mark,base,mark);
+        assert(g.bytes==character.size() && g.base==base && g.mark==mark);
+    }
+    assert(localization::translate("ATTENTION:\r\n5M 00S UNTIL EXPLOSION!",UserLanguage::Spanish)==
+           "ATENCIÓN:\r\n¡EXPLOSIÓN EN 5M 00S!");
+    assert(argc == 2);
+    UserSettings startSettings;
+    PortMenuState start(false,startSettings);
     start.setAvailableVideoModes({{853,480,1.f},{1920,1080,1.f}});
     assert(start.page()==PortMenuPage::Main && start.rowCount()==4);
     assert(start.label(1)=="LOAD GAME");
@@ -22,7 +206,6 @@ int main()
     assert(start.pointerMove(320.f,217.f));
     assert(start.selection()==1);
     assert(!start.pointerMove(320.f,217.f));
-    assert(start.pointerClick(320.f,217.f)==PortMenuChoice::None);
     assert(start.pointerClick(320.f,258.f)==PortMenuChoice::None);
     assert(start.page()==PortMenuPage::Options && start.selection()==0);
     assert(start.rowCount()==5 && std::string(start.pageTitle())=="OPTIONS");
@@ -44,7 +227,7 @@ int main()
     assert(start.label(2)=="FISHEYE EFFECT : OFF");
     assert(!start.fisheyeEnabled());
     assert(start.label(3)=="FLOOR AND CEILING : ON");
-    assert(start.label(4)=="COLORED LIGHTS : OFF");
+    assert(start.label(4)=="COLORED LIGHTS : ON");
     start.key(SDL_SCANCODE_RIGHT);
     assert(start.label(0)=="ASPECT RATIO : 4:3");
     start.key(SDL_SCANCODE_LEFT);
@@ -61,7 +244,7 @@ int main()
     assert(start.pointerClick(320.f,220.f)==PortMenuChoice::None);
     assert(start.label(3)=="FLOOR AND CEILING : OFF");
     assert(start.pointerClick(320.f,255.f)==PortMenuChoice::None);
-    assert(start.label(4)=="COLORED LIGHTS : ON");
+    assert(start.label(4)=="COLORED LIGHTS : OFF");
     assert(start.label(5)=="VSYNC : UNAVAILABLE");
     assert(start.pointerClick(320.f,298.f)==PortMenuChoice::None);
     assert(start.selection()==5 && start.label(5)=="VSYNC : UNAVAILABLE");
@@ -90,14 +273,15 @@ int main()
 
     choose(start,3);
     assert(start.page()==PortMenuPage::Language && start.rowCount()==4);
-    assert(start.label(1)=="ENGLISH - SELECTED");
-    start.key(SDL_SCANCODE_E);
-    assert(start.label(0)=="FRENCH - SELECTED");
-    assert(start.label(1)=="ENGLISH");
-    start.key(SDL_SCANCODE_DOWN);start.key(SDL_SCANCODE_DOWN);
-    assert(start.label(2)=="SPANISH");
-    start.key(SDL_SCANCODE_RETURN);
-    assert(start.label(2)=="SPANISH - SELECTED");
+    assert(start.label(0)=="ENGLISH - SELECTED");
+    start.key(SDL_SCANCODE_DOWN); start.key(SDL_SCANCODE_RETURN);
+    assert(startSettings.language==UserLanguage::Spanish);
+    assert(start.label(1)=="ESPAÑOL - SELECCIONADO");
+    start.key(SDL_SCANCODE_DOWN); start.key(SDL_SCANCODE_RETURN);
+    assert(startSettings.language==UserLanguage::French);
+    assert(start.label(2)=="FRANÇAIS - SÉLECTIONNÉ");
+    start.key(SDL_SCANCODE_UP);start.key(SDL_SCANCODE_UP);start.key(SDL_SCANCODE_RETURN);
+    assert(startSettings.language==UserLanguage::English);
     start.key(SDL_SCANCODE_ESCAPE);
     assert(start.page()==PortMenuPage::Options);
     choose(start,4);
@@ -106,7 +290,8 @@ int main()
     assert(start.pointerClick(320.f,298.f)==PortMenuChoice::Exit);
 
     // Preview data includes Retina and synthetic internal-resolution modes.
-    PortMenuState video(false);
+    UserSettings videoSettings;
+    PortMenuState video(false,videoSettings);
     video.setDisplaySize(3840,2160);
     video.setAvailableVideoModes({{1920,1080,1.f},{1470,956,2.f}});
     assert(video.videoDimensions()==std::make_pair(320,200));
@@ -138,7 +323,8 @@ int main()
     video.setVideoChoices(3,0);
     assert(video.videoDimensions()==std::make_pair(320,200));
 
-    PortMenuState unavailable(false);
+    UserSettings unavailableSettings;
+    PortMenuState unavailable(false,unavailableSettings);
     unavailable.setAvailableVideoModes({{1920,1080,1.f},{3360,1440,1.f}});
     unavailable.setDisplaySize(2560,1600);
     unavailable.setVideoChoices(1,1); // Real SDL 1920x1080 mode
@@ -158,14 +344,30 @@ int main()
     unavailable.key(SDL_SCANCODE_LEFT); // 1080p
     assert(unavailable.label(1)=="RESOLUTION : 1920 X 1080");
 
-    PortMenuState noModes(false);
+    UserSettings noModesSettings;
+    PortMenuState noModes(false,noModesSettings);
     noModes.setDisplaySize(2940,1912);
     noModes.setAvailableVideoModes({});
     noModes.setVideoChoices(3,99);
     assert(noModes.videoDimensions()==std::make_pair(320,200));
     assert(noModes.label(0)=="NEW GAME"); // no phantom resolution choices
 
-    PortMenuState game(true);
+    UserSettings transitionSettings;
+    PortMenuState pause(true,transitionSettings);
+    choose(pause,3); // Options from pause.
+    choose(pause,3); // Language.
+    pause.key(SDL_SCANCODE_DOWN);pause.key(SDL_SCANCODE_RETURN); // Español.
+    assert(transitionSettings.language==UserLanguage::Spanish);
+    pause.key(SDL_SCANCODE_ESCAPE);pause.key(SDL_SCANCODE_ESCAPE);
+    assert(pause.label(0)=="VOLVER AL JUEGO");
+    pause.key(SDL_SCANCODE_DOWN);
+    assert(pause.key(SDL_SCANCODE_RETURN)==PortMenuChoice::NewGame);
+    assert(transitionSettings.language==UserLanguage::Spanish);
+    PortMenuState reopenedPause(true,transitionSettings);
+    assert(reopenedPause.label(2)=="CARGAR PARTIDA");
+
+    UserSettings gameSettings;
+    PortMenuState game(true,gameSettings);
     assert(game.rowCount()==5);
     assert(game.label(0)=="BACK TO GAME");
     assert(game.label(1)=="NEW GAME");
@@ -193,7 +395,8 @@ int main()
         choose(menu,0);
         assert(menu.page()==PortMenuPage::Video);
     };
-    PortMenuState unsupported(true,renderer);
+    UserSettings unsupportedSettings;
+    PortMenuState unsupported(true,unsupportedSettings,renderer);
     openVideo(unsupported);
     assert(unsupported.pointerClick(320.f,294.f)==PortMenuChoice::None);
     assert(unsupported.label(5)=="VSYNC : OFF" && unsupported.vsyncChangeFailed());
@@ -210,7 +413,8 @@ int main()
     assert(SDL_SetRenderVSync(renderer,0));
     int outputWidth=0, outputHeight=0;
     assert(SDL_GetRenderOutputSize(renderer,&outputWidth,&outputHeight));
-    PortMenuState sync(true,renderer);
+    UserSettings syncSettings;
+    PortMenuState sync(true,syncSettings,renderer);
     openVideo(sync);
     int interval=-99;
     assert(SDL_GetRenderVSync(renderer,&interval));
@@ -219,17 +423,17 @@ int main()
     assert(!sync.pointerMove(320.f,313.f)); // Gap before BACK.
     sync.key(SDL_SCANCODE_RIGHT);
     assert(SDL_GetRenderVSync(renderer,&interval) && interval==1);
-    assert(sync.label(5)=="VSYNC : ON");
+    assert(sync.label(5)=="VSYNC : ON" && syncSettings.vsync);
     assert(sync.key(SDL_SCANCODE_ESCAPE)==PortMenuChoice::None);
     assert(sync.key(SDL_SCANCODE_ESCAPE)==PortMenuChoice::None);
     assert(sync.key(SDL_SCANCODE_ESCAPE)==PortMenuChoice::Resume);
-    PortMenuState reopened(true,renderer);
+    PortMenuState reopened(true,syncSettings,renderer);
     openVideo(reopened);
     assert(reopened.label(5)=="VSYNC : ON");
     assert(reopened.pointerClick(320.f,294.f)==PortMenuChoice::None);
     assert(SDL_GetRenderVSync(renderer,&interval) && interval==0);
     assert(reopened.label(5)=="VSYNC : OFF");
-    assert(reopened.label(2)=="FISHEYE EFFECT : OFF");
+    assert(reopened.label(2)=="FISHEYE EFFECT : OFF" && !syncSettings.vsync);
     assert(reopened.label(3)=="FLOOR AND CEILING : ON");
     assert(reopened.videoDimensions()==std::make_pair(320,200));
     int width=0, height=0;
@@ -238,5 +442,7 @@ int main()
     assert(width==outputWidth && height==outputHeight);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    SDL_SetHint(SDL_HINT_AUDIO_DRIVER,"dummy");
+    persistence(argv[1]);
     SDL_Quit();
 }

@@ -7,8 +7,6 @@
 #include "extremis/cinematics/level22_communication.h"
 #include "extremis/cinematics/original_shuttle_player.h"
 #include "extremis/cinematics/original_ending_player.h"
-#include "extremis/cinematics/player_death.h"
-#include "app/session/victory_session.h"
 #include "platform/sdl/input/player_input.h"
 #include "app/session/shuttle_session.h"
 
@@ -47,7 +45,8 @@ StartupCreditsResult AppSession::playShuttle(SDL_Window* window, SDL_Renderer* r
     auto result=shuttle::prompt(window,renderer,std::filesystem::path(labPath).parent_path()/"DATA",
                                 boarding,survival.inventory(),items);
     if(result==StartupCreditsResult::Continue && boarding.step()==shuttle::Step::Flight) {
-        result=showOriginalShuttle(window,renderer,std::filesystem::path(labPath).parent_path()/"DATA");
+        result=showOriginalShuttle(window,renderer,std::filesystem::path(labPath).parent_path()/"DATA",
+                                   false,gameAudio.outputGain());
         if(result==StartupCreditsResult::Continue) {
             shuttleTravel=boarding.complete(result,items);
             survival.clearMessages();
@@ -65,22 +64,15 @@ StartupCreditsResult AppSession::playShuttle(SDL_Window* window, SDL_Renderer* r
 
 StartupCreditsResult AppSession::playVictory(SDL_Window* window, SDL_Renderer* renderer,
     const char* labPath, FirstPersonRenderer& firstPerson, GameAudio& gameAudio,
-    PlayerInput& playerInput, DoorControl& doorControl, enemies::System& activeEnemies,
-    player::DeathPresentation* deathPresentation, VictorySession& victory)
+    PlayerInput& playerInput, DoorControl& doorControl, enemies::System& activeEnemies)
 {
-    return victory.update(true,[&]() {
-        gameAudio.stopEffects(); activeEnemies.takeSounds();
-        items.clearInput(); playerInput.invalidateContext();
-        doorControl.beginFrame(false);
-        mapSession=original_map::Session{};
-        if(!deathPresentation) {
-            SDL_Log("Victory requires the original menu resources");
-            return StartupCreditsResult::Error;
-        }
-        original_ending::EntryImage entry;
-        entry.rgba=firstPerson.frame();
-        return showOriginalEnding(window,renderer,
-            std::filesystem::path(labPath).parent_path()/"DATA",std::move(entry));
-    },[&]() { deathPresentation->beginMenu(); });
+    gameAudio.stopEffects(); activeEnemies.takeSounds();
+    items.clearInput(); playerInput.invalidateContext();
+    doorControl.beginFrame(false);
+    mapSession=original_map::Session{};
+    original_ending::EntryImage entry;
+    entry.rgba=firstPerson.frame();
+    return showOriginalEnding(window,renderer,
+        std::filesystem::path(labPath).parent_path()/"DATA",std::move(entry),gameAudio.outputGain());
 }
 }

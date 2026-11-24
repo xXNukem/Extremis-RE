@@ -159,7 +159,8 @@ bool drawPageHeader(SDL_Renderer* r,const original_font::Font* font,
 {
     if (state.page()==PortMenuPage::Main) return true;
     const std::string_view heading=state.pageTitle();
-    constexpr float x=52.f,y=37.f,scale=2.45f;
+    constexpr float x=52.f,y=37.f;
+    const float scale=std::min(2.45f, (626.f-x)/std::max(1.f,textWidth(font,heading,1.f)));
     const float width=textWidth(font,heading,scale);
     const auto tick=std::uint32_t(std::floor(time*18.));
     const auto noise=hash32(seed ^ (tick+5u)*0x85ebca6bu);
@@ -285,21 +286,22 @@ bool drawOptions(SDL_Renderer* r,const original_font::Font* font,
             if (!drawSelectionECG(r,y,selectionAge,seed,left,right)) return false;
         }
         // Scale is fixed for the page; only horizontal centering follows the value.
-        const float x=320.f-textWidth(font,label,glyphScale)*.5f;
-        const float textY=y+(rowHeight-10.f*glyphScale)*.5f;
-        if (selected && !textAt(r,font,label,x+2.f,textY+1.f,glyphScale,phosphor,.20f))
+        const float fittedScale=std::min(glyphScale,(right-left-24.f)/std::max(1.f,textWidth(font,label,1.f)));
+        const float x=320.f-textWidth(font,label,fittedScale)*.5f;
+        const float textY=y+(rowHeight-10.f*fittedScale)*.5f;
+        if (selected && !textAt(r,font,label,x+2.f,textY+1.f,fittedScale,phosphor,.20f))
             return false;
-        if (!textAt(r,font,label,x,textY,glyphScale,tint,selected?1.f:.80f)) return false;
+        if (!textAt(r,font,label,x,textY,fittedScale,tint,selected?1.f:.80f)) return false;
     }
     if (state.page()==PortMenuPage::Video) {
-        const std::string_view notice = state.vsyncChangeFailed()
+        const std::string_view notice = localization::byEnglish(state.vsyncChangeFailed()
             ? "VSYNC SWITCH FAILED"
             : !state.videoModeAvailable()
             ? "DISPLAY MODE SWITCH FAILED"
             : state.aspectChoice()==0 ? "4:3 ORIGINAL DOS VIEW"
             : state.aspectChoice()==1 ? "16:9 EXPANDED GAME VIEW"
             : state.aspectChoice()==2 ? "21:9 EXPANDED GAME VIEW"
-                                      : "AUTO: MATCH MONITOR ASPECT";
+                                      : "AUTO: MATCH MONITOR ASPECT",state.language());
         const float x=320.f-textWidth(font,notice,1.f)*.5f;
         if (!textAt(r,font,notice,x,355.f,1.f,pale,.88f)) return false;
     }

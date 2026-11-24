@@ -20,7 +20,7 @@ CinematicVoiceStream::~CinematicVoiceStream()
     if (initialized_) SDL_QuitSubSystem(SDL_INIT_AUDIO);
 }
 
-void CinematicVoiceStream::open(audio::Bank bank, const char* title)
+void CinematicVoiceStream::open(audio::Bank bank, const char* title, float gain)
 {
     auto samples = audio::mixerSamples(std::move(bank));
     mixers_[0].setSamples(samples);
@@ -32,7 +32,7 @@ void CinematicVoiceStream::open(audio::Bank bank, const char* title)
     initialized_ = true;
     const SDL_AudioSpec spec{SDL_AUDIO_F32, 1, audio::sampleRate};
     stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, feed, this);
-    if (!stream_ || !SDL_ResumeAudioStreamDevice(stream_)) {
+    if (!stream_ || !SDL_SetAudioStreamGain(stream_,gain) || !SDL_ResumeAudioStreamDevice(stream_)) {
         SDL_Log("%s audio device: %s", title, SDL_GetError());
         if (stream_) SDL_DestroyAudioStream(stream_);
         stream_ = nullptr;

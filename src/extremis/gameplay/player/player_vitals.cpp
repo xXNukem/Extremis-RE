@@ -11,8 +11,13 @@ bool Vitals::alive() const { return death_ == DeathCause::None; }
 
 void Vitals::reset()
 {
-    health_ = maximumHealth;
-    oxygen_ = maximumOxygen;
+    startWith(maximumHealth, maximumOxygen);
+}
+
+void Vitals::startWith(int health, int oxygen)
+{
+    health_ = health;
+    oxygen_ = oxygen;
     fractionalTicks_ = 0;
     death_ = DeathCause::None;
 }

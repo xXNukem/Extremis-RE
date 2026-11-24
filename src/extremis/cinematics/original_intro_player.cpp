@@ -22,7 +22,7 @@ audio::Bank loadVoices(const std::filesystem::path& directory)
 } // namespace
 
 StartupCreditsResult showOriginalIntro(SDL_Window* window,SDL_Renderer* renderer,
-                                      const std::filesystem::path& directory) {
+                                      const std::filesystem::path& directory, float gain) {
     try {
         bool skipAtEntry=false;
         SDL_Event initialEvent;
@@ -46,7 +46,7 @@ StartupCreditsResult showOriginalIntro(SDL_Window* window,SDL_Renderer* renderer
         if(!texture || !SDL_SetTextureScaleMode(texture.get(),SDL_SCALEMODE_NEAREST)) throw std::runtime_error(SDL_GetError());
         platform::sdl::CinematicVoiceStream audio;
         try {
-            audio.open(loadVoices(directory), "Original intro");
+            audio.open(loadVoices(directory), "Original intro", gain);
         } catch (const std::exception& error) {
             SDL_Log("Original intro audio unavailable: %s", error.what());
         }

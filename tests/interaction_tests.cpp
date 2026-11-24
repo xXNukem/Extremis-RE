@@ -1,4 +1,7 @@
 #include "extremis/ui/original_interactions.h"
+#include "extremis/ui/localization.h"
+#include "extremis/ui/interface_font.h"
+#include "extremis/ui/utf8_glyph.h"
 #include "extremis/world/original_travel.h"
 #include "app/session/item_session.h"
 #include "extremis/gameplay/player/survival_session.h"
@@ -230,18 +233,87 @@ void selectionRegressions()
 }
 void detectorInventory()
 {
-    Session s; std::uint16_t battery=900;
-    s.player.inventory().takeSupply(battery);
+    using Mode=player::BatteryMode;
+    Session s;
     s.press(SDL_SCANCODE_I); s.press(SDL_SCANCODE_E);
-    check(s.items.interfaceState()->inventoryUse,"Battery section did not open detector action");
+    check(!s.items.interfaceState()->inventoryUse,"Absent battery opened selector");
+    s.press(SDL_SCANCODE_I);
+    std::uint16_t battery=900;
+    s.player.inventory().takeSupply(battery);
+    const auto mode=[&](unsigned selection, Mode expected) {
+        s.press(SDL_SCANCODE_I); s.press(SDL_SCANCODE_E);
+        check(s.items.interfaceState()->inventoryUse,"Battery section did not open the selector");
+        for (unsigned option=0;option<selection;++option) s.press(SDL_SCANCODE_DOWN);
+        s.press(SDL_SCANCODE_E);
+        check(!s.items.modal() && s.player.inventory().batteryMode()==expected &&
+              s.player.inventory().batteryCharge()==144000,"Battery choice did not preserve charge or close");
+    };
+    mode(0,Mode::Radar);
+    mode(1,Mode::Optics);
+    check(s.player.hudState().batteryInUse && !s.player.inventory().detectorEnabled(),"Optics HUD or radar exclusion");
+    mode(2,Mode::Optics);
+    mode(1,Mode::Radar);
+    mode(0,Mode::Off);
+    mode(1,Mode::Optics);
+    mode(0,Mode::Off);
+}
+
+void batteryCabinet()
+{
+    using Mode=player::BatteryMode;
+    Session s(0x3205,900);
+    std::uint16_t used=450;
+    s.player.inventory().takeSupply(used);
+    s.player.inventory().setBatteryMode(Mode::Optics);
+    s.player.inventory().updateBattery(159);
+    const auto open=[&] {
+        s.press(SDL_SCANCODE_E);
+        check(s.items.interfaceState(),"Battery cabinet did not open");
+        if (s.items.interfaceState()->screen==interaction::Screen::Code) s.code();
+        s.press(SDL_SCANCODE_E);
+        check(s.items.interfaceState() && s.items.interfaceState()->replacing,
+              "Charged battery did not open the replacement selector");
+    };
+    open();
+    s.press(SDL_SCANCODE_DOWN); s.press(SDL_SCANCODE_E);
+    s.items.storePanelContents(s.level);
+    check(s.player.inventory().batteryCharge()==71841 && s.level.sectors[0].walls[0].extra==900,
+          "Keeping a battery changed its charge or the cabinet");
+    open();
     s.press(SDL_SCANCODE_E);
-    check(s.player.inventory().detectorEnabled(),"Inventory action did not enable original detector");
-    const int charge=s.player.inventory().batteryCharge();
-    s.press(SDL_SCANCODE_ESCAPE);
-    check(!s.items.modal() && s.player.inventory().batteryCharge()==charge,"Inventory close consumed battery");
-    s.press(SDL_SCANCODE_I); s.press(SDL_SCANCODE_E); s.press(SDL_SCANCODE_E);
-    check(!s.player.inventory().detectorEnabled(),"Inventory could not turn detector off");
-    s.press(SDL_SCANCODE_I); check(!s.items.modal(),"Detector inventory could not close");
+    s.items.storePanelContents(s.level);
+    check(s.player.inventory().batteryCharge()==144000 && s.player.inventory().batteryMode()==Mode::Optics &&
+          s.level.sectors[0].walls[0].extra==449,"Battery exchange changed mode or stored the wrong charge");
+    s.items.load(s.level);
+    check(s.player.inventory().batteryMode()==Mode::Optics &&
+          s.player.inventory().batteryCharge()==144000,"Reloading cabinet contents reset the live device");
+}
+
+void bombInventory()
+{
+    Session s;
+    SDL_Event key{};
+    key.type=SDL_EVENT_KEY_DOWN; key.key.windowID=17; key.key.scancode=SDL_SCANCODE_I;
+    s.items.handleEvent(key,17);
+    s.items.update(&s.camera,true,s.obstacles,s.player,s.audio,&s.control,1.0/70.0,true);
+    check(!s.items.modal(),"Inventory opened near connected enemy");
+    key.type=SDL_EVENT_KEY_UP; s.items.handleEvent(key,17);
+    s.press(SDL_SCANCODE_I);
+    for (int i=0;i<4;++i) s.press(SDL_SCANCODE_DOWN);
+    s.press(SDL_SCANCODE_E);
+    check(!s.items.interfaceState()->inventoryUse && !s.items.takeBombPlacement(),"Empty bomb slot offered placement");
+    s.press(SDL_SCANCODE_I);
+    std::uint16_t contents=0x6064;
+    s.player.inventory().takeSupply(contents);
+    s.press(SDL_SCANCODE_I);
+    for (int i=0;i<4;++i) s.press(SDL_SCANCODE_DOWN);
+    s.press(SDL_SCANCODE_E);
+    check(s.items.interfaceState()->inventoryUse,"Bomb confirmation missing");
+    s.press(SDL_SCANCODE_DOWN); s.press(SDL_SCANCODE_E);
+    check(s.player.inventory().mine()==100 && !s.items.takeBombPlacement(),"Declining placement consumed bomb");
+    s.press(SDL_SCANCODE_E); s.press(SDL_SCANCODE_E);
+    check(!s.items.modal() && s.player.inventory().mine()==-1 && s.items.takeBombPlacement() &&
+          !s.items.takeBombPlacement(),"Placement did not consume one bomb and resume play exactly once");
 }
 void inventoryAndElevator()
 {
@@ -557,6 +629,9 @@ void allPanelsLab(const char* path)
                 (panel.weapon?interaction::Screen::Weapon:interaction::Screen::Supply),"Correct zone code rejected");
             s.press(SDL_SCANCODE_E);
             check(!s.items.modal(),"Original object did not transfer to empty inventory");
+            if (!panel.weapon && kind==0)
+                check(panel.contents==900 && s.player.inventory().batteryCharge()==144000,
+                      "Stock battery did not transfer its LAB charge");
             if(!panel.weapon && kind>=3 && kind<=5) {
                 check(s.player.inventory().cards()[0]==int(panel.contents)-0x3000,"Original card was changed or lost");
                 ++cards;
@@ -564,6 +639,7 @@ void allPanelsLab(const char* path)
         }
         std::cout<<"Zone "<<zone+1<<": "<<tested<<" non-elevator panels verified.\n";
     }
+    check(supplies[0]==12,"Campaign battery cabinet count differs");
     for(const auto& [type,n]:types) std::cout<<"Type "<<std::hex<<type<<std::dec<<": "<<n<<"\n";
     for(const auto& [kind,n]:supplies) std::cout<<"Supply class "<<kind<<": "<<n<<"\n";
     std::cout<<count<<" panels; "<<cards<<" cards transferred; "<<empty<<" empty; "<<disabled<<" disabled readers.\n";
@@ -822,7 +898,35 @@ void sequenceTiming()
 void originals(const std::filesystem::path& directory)
 {
     const auto resources=interaction::load(directory);
+    for(std::string_view character:{"á","é","í","ó","ú","Á","É","Í","Ó","Ú",
+                                    "ñ","Ñ","ü","Ü","ç","Ç","à","è","ê","â","ô","û","¿","¡"}) {
+        std::vector<std::uint32_t> pixels(64000,0);
+        interface_font::draw(pixels,resources.tinyFont,0xffffffff,character,30,30);
+        check(std::count(pixels.begin()+30*320+30,pixels.begin()+36*320,0xffffffff)>0,
+              (std::string("Real TYPO_3X5 glyph disappeared: ")+std::string(character)).c_str());
+        const auto g=localization::glyph(character,0);
+        if(g.mark!='i' && g.mark!='c')
+            check(std::count(pixels.begin()+28*320+30,pixels.begin()+30*320+34,0xffffffff)>0,
+                  (std::string("Real TYPO_3X5 accent disappeared: ")+std::string(character)).c_str());
+    }
     const interaction::Renderer renderer(resources);
+    localization::Language language=localization::Language::English;
+    localization::bind(&language);
+    interaction::State localizedState;localizedState.screen=interaction::Screen::Inventory;
+    localizedState.batteryCharge=7200;
+    std::vector<std::uint32_t> english(64000),spanish(64000),french(64000);
+    check(renderer.draw(english,localizedState),"English inventory rendering failed");
+    language=localization::Language::Spanish;
+    check(renderer.draw(spanish,localizedState),"Spanish inventory rendering failed");
+    language=localization::Language::French;
+    check(renderer.draw(french,localizedState),"French inventory rendering failed");
+    check(english!=spanish && english!=french && spanish!=french,"Localized inventory did not change pixels");
+    for(int y=11;y<36;++y) {
+        const auto border=180+y*320;
+        check(english[border]==spanish[border] && english[border]==french[border],
+              "Inventory section border changed with language");
+    }
+    localization::bind(nullptr);
     std::filesystem::create_directories("build/panel-debug");
     unsigned i=0;
     for(auto screen:{interaction::Screen::Code,interaction::Screen::Supply,interaction::Screen::Weapon,
@@ -852,6 +956,46 @@ void originals(const std::filesystem::path& directory)
         const bool saved=SDL_SaveBMP(surface,("build/panel-debug/"+name+".bmp").c_str());
         SDL_DestroySurface(surface); check(saved,"Cannot save variant");
     };
+    for(auto screen:{interaction::Screen::Inventory,interaction::Screen::Cards,
+                    interaction::Screen::Supply,interaction::Screen::Weapon}) {
+        localization::bind(&language);
+        interaction::State state; state.screen=screen;
+        state.contents=screen==interaction::Screen::Weapon?0x11f4:0x0064;
+        state.batteryCharge=72000;
+        state.cards={1,0x1001,-1};
+        const auto name=screen==interaction::Screen::Inventory?"inventory":screen==interaction::Screen::Cards?"cards":
+                        screen==interaction::Screen::Supply?"supply":"weapon";
+        std::array<std::vector<std::uint32_t>,3> rendered;
+        for(unsigned i=0;i<3;++i) {
+            language=static_cast<localization::Language>(i);
+            rendered[i].assign(64000,0x121212ff);
+            check(renderer.draw(rendered[i],state),"Localized modal draw failed");
+            save(state,std::string(name)+"-language-"+std::to_string(i));
+        }
+        check(rendered[0]!=rendered[1] && rendered[0]!=rendered[2] && rendered[1]!=rendered[2],
+              (std::string("Real-resource modal did not distinguish EN/ES/FR: ")+name).c_str());
+        language=localization::Language::English;
+        std::vector<std::uint32_t> restored(64000,0x121212ff);
+        check(renderer.draw(restored,state) && restored==rendered[1],"Language change required reopening modal");
+    }
+    localization::bind(nullptr);
+    for(unsigned variant=0;variant<3;++variant) {
+        interaction::State state;
+        state.screen=variant==2?interaction::Screen::Inventory:interaction::Screen::Supply;
+        state.contents=variant==0?0x3001:0x0064;
+        state.replacing=variant==1;
+        state.inventoryUse=variant==2;
+        state.batteryCharge=72000;
+        localization::bind(&language);
+        std::vector<std::uint32_t> en(64000),es(64000),fr(64000);
+        language=localization::Language::English;check(renderer.draw(en,state),"English variant draw failed");
+        language=localization::Language::Spanish;check(renderer.draw(es,state),"Spanish variant draw failed");
+        language=localization::Language::French;check(renderer.draw(fr,state),"French variant draw failed");
+        check(en!=es && en!=fr && es!=fr,"Card, battery or inventory-use modal was not localized");
+        save(state,"variant-"+std::to_string(variant)+"-fr");
+        language=localization::Language::Spanish;save(state,"variant-"+std::to_string(variant)+"-es");
+        localization::bind(nullptr);
+    }
     for(unsigned selection=0;selection<2;++selection) {
         interaction::State state; state.screen=interaction::Screen::Supply; state.contents=0x4001;
         state.selection=selection; save(state,selection?"pickup-no":"pickup-yes");
@@ -882,11 +1026,16 @@ void originals(const std::filesystem::path& directory)
     interaction::State rejected; rejected.screen=interaction::Screen::Cards;
     rejected.cards={1,0x1001,0x2001}; rejected.notice="Incompatible card type";
     save(rejected,"cards-rejected");
+    localization::bind(&language);
     for(unsigned section=0;section<6;++section) {
         interaction::State state; state.screen=interaction::Screen::Inventory;
         state.selection=section; state.cards={1,0x1001,-1}; state.injectors={100,0}; state.oxygenReserve=144000;
-        save(state,"inventory-"+std::to_string(section));
+        for(unsigned i=0;i<3;++i) {
+            language=static_cast<localization::Language>(i);
+            save(state,"inventory-section-"+std::to_string(section)+"-language-"+std::to_string(i));
+        }
     }
+    localization::bind(nullptr);
     interaction::State lift; lift.screen=interaction::Screen::Elevator; lift.elevatorIndex=1;
     for(unsigned row=0;row<4;++row) { lift.selection=row; save(lift,"elevator-"+std::to_string(row)); }
     SDL_SetHint(SDL_HINT_AUDIO_DRIVER,"dummy");
@@ -902,7 +1051,7 @@ void originals(const std::filesystem::path& directory)
 }
 int main(int argc,char* argv[])
 {
-    try { graphics(); checksum(); flows(); selectionRegressions(); detectorInventory(); inventoryAndElevator(); originalTravel(); unifiedControls(); cardCountsAndLiftDirections(); capacityAndPlan(); pauseAndFailures(); codeTerminal(); sequenceTiming(); missingVariants(); destructionReaders(); if(argc==2) originals(argv[1]); if(argc==3 && std::string_view(argv[1])=="--lab") { originalTravelLab(argv[2]); allPanelsLab(argv[2]); }
+    try { graphics(); checksum(); flows(); selectionRegressions(); detectorInventory(); batteryCabinet(); bombInventory(); inventoryAndElevator(); originalTravel(); unifiedControls(); cardCountsAndLiftDirections(); capacityAndPlan(); pauseAndFailures(); codeTerminal(); sequenceTiming(); missingVariants(); destructionReaders(); if(argc==2) originals(argv[1]); if(argc==3 && std::string_view(argv[1])=="--lab") { originalTravelLab(argv[2]); allPanelsLab(argv[2]); }
         std::cout<<"Original interaction coordinates, bounds, resources and code format passed.\n";
     } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
 }

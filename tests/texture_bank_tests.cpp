@@ -87,6 +87,11 @@ int main(int argc, char* argv[])
         check(wall_textures::loadPlanes(directory, 2, 2).ceiling.pixels[0].g == 255,
               "SOL2 palette selection");
         expectFailure(directory, 99);
+        const auto colors = wall_textures::loadPalette(palPath);
+        for (unsigned i = 0; i < colors.size(); ++i) {
+            check(colors[i].r == ((i % 64) * 255 + 31) / 63 && colors[i].g == 255,
+                  "VGA palette channel expansion");
+        }
         auto invalid = palette;
         invalid[0] = 64;
         write(palPath, invalid);

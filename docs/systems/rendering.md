@@ -175,6 +175,20 @@ A PAL file contains **256 RGB entries**, three bytes each: **768 bytes**. Each c
 
 This is also why simply adding a modern grey overlay to an interface doesn't necessarily reproduce a DOS palette change. Some original effects operate at the palette level, and a few are still under investigation.
 
+### Proximity lights
+
+**EXE-confirmed / DATA-confirmed.** The red and green OBJET1 ceiling lamps in levels 1, 5, 8, 11 and 15 tint the complete gameplay display, including the HUD and weapon. The player movement pass checks the proposed XY in its source sector. At an integer distance `d = max(abs(dx),abs(dy))`, a lamp contributes `80 − floor(d/2)` percent while `d < 160`. Vertical position and line of sight play no part. The first qualifying Entity A record wins in overlapping boxes. The optic system suppresses the tint and a transient palette effect, such as a power surge or damage flash, takes priority. The normal palette returns when the player leaves the lamp's range and no competing effect applies.
+
+The port tints the composed scene and instruments on active gameplay frames when COLORED LIGHTS is enabled. The option defaults to ON to preserve the lighting already visible in the port. It controls proximity lamps independently of optics and the power surge. When optics is on, the compositor replaces each pixel's quantized VGA RGB with `(0, min(63, 2×G), 0)` and bypasses the lamp tint. It uses fresh composed pixels each frame. The [palette and placement evidence](../reference/exe/colored-lights.md) includes exact VGA channel arithmetic, all 30 records and an overlap case for testing.
+
+### Power surges
+
+The DOS player update carries a campaign-wide counter for the intermittent
+power surge. Each active update requests the warning and alarm and can darken
+the entire display through the VGA palette, including the HUD. The surge
+does not change gameplay state beyond its own timer, message and sound requests.
+The port uses the same presentation transform as lamps and gives the surge priority. A pulse darkens the green image with optics enabled. If charge runs out on that frame, it darkens the normal colors instead. See [the original event and palette priority](../reference/exe/power-surging.md).
+
 ## SOL: two 128×128 planes
 
 The floor and ceiling live in **`SOL<n>.DAS`**, selected using the level's DALLE/SOL bank ID, **not** from the currently visible wall type.
@@ -186,7 +200,7 @@ row y: 128 floor indices | 128 ceiling indices
         <------------- 256 bytes -------------->
 ```
 
-The original F control toggles floor and ceiling texturing together. The port also supports that toggle; rendering the planes is considerably more expensive than drawing a flat background at high output resolution.
+The original F control toggles floor and ceiling texturing together. In the port, F and FLOOR AND CEILING update the same preference in both gameplay profiles. A missing SOL bank uses the flat background. The user preference survives level loads and restarts.
 
 The software renderer advances SOL texture coordinates across each scanline with 32.32 fixed-point additions. It uses the existing material sampler near texel boundaries, outside the bounded coordinate range, for widths above 8192, and for other texture dimensions. Wall coverage still skips hidden samples. The `floor_ceiling` test compares scanlines against the material sampler pixel by pixel.
 

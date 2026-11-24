@@ -51,6 +51,12 @@ When a locker closes after a successful pickup, `ItemSession` runs `MovieIn`, `M
 
 The contextual **E** action handles nearby panels and doors as appropriate; inside a modal it confirms. **I** opens and closes inventory; Escape cancels a modal. The input routing is designed so a key that opened the panel doesn't immediately confirm whatever happens to be selected.
 
+With a charged battery, **E** on the battery slot opens its mode selector.
+Navigate with **W/S** or **↑/↓** and confirm with **E** to return to play.
+Battery cabinets also use the current modal controls to confirm an exchange
+when the installed battery still has charge. Both panels pause the
+gameplay battery clock. [Battery, detector and optics](items.md#battery-detector-and-optics).
+
 This was an actual reconstruction pitfall: a user could open inventory but not close it, or see the wrong card set because the reader filtered out incompatible cards before displaying them. The current model separates *what cards you have* from *whether a particular card is accepted*.
 
 ### A small piece of original character
@@ -66,6 +72,15 @@ Likewise, the audio heard during map transfer and map open/close needs separate 
 **Original references:** early map panel `0x3606` data, interaction dispatch near `0xa608`, animation routines listed in source comments, connection traversal `0x114ba–0x1185c`. For the sector model, start with [Levels](levels.md).
 
 Player death temporarily owns the full 320×200 canvas and consumes interface
-input. The original GAMEOVER text and menu/new-game path are described in
-[Death sequences](../reference/exe/player-death.md); the optional menu branches
-OPTIONS and password continuation remain unavailable.
+input. After GAMEOVER or the victory ending, the port opens its custom
+main menu without RESUME. The original GAMEOVER text is documented in
+[Death sequences](../reference/exe/player-death.md).
+
+Choose **LOAD GAME** in the custom menu and type the eight-character
+continuation code. Enter confirms and Backspace erases the last character.
+An accepted code starts a fresh party with the checkpoint's preset inventory
+and vitals. Eligible elevator and shuttle arrivals can display a quick code
+while the world is paused. Each notice has one use per program run, including
+when its code was already entered. The code itself stays reusable. The six
+characters requested at terminals belong to a different system.
+[Password continuation](../reference/exe/password-continuation.md).

@@ -1,8 +1,19 @@
 #include "extremis/gameplay/player/player_inventory.h"
 #include <algorithm>
-#include <cmath>
 
 namespace player {
+void Inventory::startWith(const Loadout& loadout)
+{
+    cards_ = loadout.cards;
+    injectors_ = loadout.injectors;
+    mine_ = loadout.mine;
+    oxygenReserve_ = loadout.oxygenReserve;
+    battery_ = loadout.battery;
+    weapon_ = loadout.weapon;
+    ammunition_ = loadout.ammunition;
+    batteryMode_ = BatteryMode::Off;
+}
+
 Transfer Inventory::replaceCard(std::uint16_t& contents, unsigned slot)
 {
     const auto kind=contents>>12;
@@ -12,15 +23,15 @@ Transfer Inventory::replaceCard(std::uint16_t& contents, unsigned slot)
     contents=std::uint16_t(previous+0x3000);
     return Transfer::Exchanged;
 }
-Transfer Inventory::takeSupply(std::uint16_t& contents)
+Transfer Inventory::takeSupply(std::uint16_t& contents, bool exchangeChargedBattery)
 {
     if (contents == 0xffff) return Transfer::Empty;
     const unsigned kind = contents >> 12, amount = contents & 0xfff;
     if (kind==0) {
-        if (battery_>0) return Transfer::Capacity; // Full battery replacement confirmation remains unchanged in scope.
+        if (battery_>0 && !exchangeChargedBattery) return Transfer::Capacity;
         const int previous=battery_;
-        battery_=int(amount)*Vitals::ticksPerSecond; batteryFraction_=0;
-        contents=previous<0?0xffff:0;
+        battery_=int(amount)*Vitals::ticksPerSecond;
+        contents=previous<0 ? 0xffff : std::uint16_t(previous/Vitals::ticksPerSecond);
         return previous<0?Transfer::Taken:Transfer::Exchanged;
     }
     // EXE 0x191a8..0x191d2: one mine slot, initialized to 100 on pickup.
@@ -104,23 +115,35 @@ bool Inventory::consumeShot()
 } // namespace player
 
 namespace player {
+bool Inventory::setBatteryMode(BatteryMode mode)
+{
+    if (mode!=BatteryMode::Off && battery_<=0) return false;
+    batteryMode_=mode;
+    return true;
+}
+
 bool Inventory::toggleDetector()
 {
     if (battery_<=0) return false;
-    detector_=!detector_; return true;
+    return setBatteryMode(detectorEnabled() ? BatteryMode::Off : BatteryMode::Radar);
 }
-void Inventory::updateBattery(double seconds, bool active)
+
+void Inventory::updateBattery(std::uint16_t gameplayTicks)
 {
-    if (!active || !detector_ || !std::isfinite(seconds) || seconds<0) return;
-    const double ticks=seconds*Vitals::ticksPerSecond+batteryFraction_;
-    const int consumed=int(std::min(double(std::max(0,battery_)),std::floor(ticks+1e-9)));
-    batteryFraction_=std::max(0.0,ticks-std::floor(ticks+1e-9));
-    battery_-=consumed;
-    if (battery_<=0) { battery_=0; detector_=false; batteryFraction_=0; }
+    if (batteryMode_==BatteryMode::Off) return;
+    battery_=std::max(0,battery_-int(gameplayTicks));
+    if (!battery_) batteryMode_=BatteryMode::Off;
 }
 }
 
 namespace player {
+bool Inventory::useMine()
+{
+    if (mine_<0) return false;
+    mine_=-1;
+    return true;
+}
+
 int Inventory::mine() const
 {
     return mine_;
@@ -131,8 +154,12 @@ int Inventory::batteryCharge() const
     return battery_;
 }
 
+BatteryMode Inventory::batteryMode() const
+{
+    return batteryMode_;
+}
 bool Inventory::detectorEnabled() const
 {
-    return detector_;
+    return batteryMode_==BatteryMode::Radar;
 }
 } // namespace player

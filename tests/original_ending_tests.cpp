@@ -1,6 +1,5 @@
 #include "extremis/cinematics/original_ending.h"
 #include "app/session/victory_session.h"
-#include "extremis/cinematics/player_death.h"
 #include "extremis/resources/audio_data.h"
 #ifdef EXTREMIS_ENDING_PREVIEW
 #include "extremis/cinematics/original_ending_player.h"
@@ -42,17 +41,7 @@ void firstWait(Presentation& p) {
     check(p.phase()==Phase::Wait && p.frame()==0,"First reveal length");
 }
 void fullSequence(Resources r) {
-    player::DeathResources menuResources;
-    for(auto* a:{&menuResources.health,&menuResources.oxygen,&menuResources.gameOver,&menuResources.menu}) {
-        a->palette.fill(255); a->frames.emplace_back(64000,0);
-    }
-    menuResources.body.assign(6,{1,1,0,0,{1}});
-    menuResources.font.assign(76,{1,1,0,0,{1}});
-    menuResources.menuFont=menuResources.font;
-    menuResources.menuArt.assign(3,{62,43,0,0,std::vector<std::uint8_t>(62*43)});
-    menuResources.lines.assign(8,""); menuResources.menuLines.assign(6,"");
-    player::DeathPresentation menu(std::move(menuResources));
-    VictorySession victory; unsigned plays=0;
+    VictorySession victory; unsigned plays=0, menuEntries=0;
     const auto play=[&]() {
     ++plays;
     Presentation p(std::move(r));
@@ -95,15 +84,19 @@ void fullSequence(Resources r) {
     check(std::all_of(p.pixels().begin(),p.pixels().end(),[](auto c){return c==255;}),"Ending must finish black");
     check(std::all_of(p.indices().begin(),p.indices().end(),[](auto c){return c==0;}),"Ending must clear canvas");
     p.advance(100,true);check(p.takeCues().empty() && p.scene()==Scene::Done,"Completion must be idempotent");
-    check(!menu.active(),"Menu appeared before FSEQ completed");
+    check(menuEntries==0,"Menu appeared before FSEQ completed");
     return StartupCreditsResult::Continue;
     };
-    const auto enter=[&]() { menu.beginMenu(); };
+    const auto enter=[&]() { ++menuEntries; };
     victory.update(false,play,enter);check(plays==0,"Premature FSEQ");
     victory.update(true,play,enter);
-    for(unsigned i=0;i<51;++i) menu.advance(0);
     victory.update(true,play,enter);
-    check(plays==1 && menu.stage()==player::DeathPresentation::Stage::Menu,"Full FSEQ must return to menu exactly once");
+    check(plays==1 && menuEntries==1,"Full FSEQ must return to menu exactly once");
+    for(auto outcome:{StartupCreditsResult::Quit,StartupCreditsResult::Error}) {
+        victory.reset();
+        check(victory.update(true,[&]() { return outcome; },enter)==outcome && menuEntries==1,
+              "Interrupted FSEQ must propagate its outcome without opening the menu");
+    }
 }
 void timing() {
     Presentation p(fixture());firstWait(p);

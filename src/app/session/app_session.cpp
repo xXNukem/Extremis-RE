@@ -22,16 +22,18 @@
 #include <exception>
 #include <cmath>
 #include <optional>
+#include <utility>
 
 namespace app {
 void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOptions& options,
-    const std::filesystem::path& dataDirectory, PortMenuVideoState& video, int& exitCode)
+    const std::filesystem::path& dataDirectory, UserSettings& settings, const std::filesystem::path& settingsPath, int& exitCode,
+    const continuation::Checkpoint* checkpoint)
 {
 #ifdef EXTREMIS_DEBUG_MENU
     platform::sdl::video_profiling::FrameProfiler profiler;
-    FirstPersonRenderer firstPerson(renderer,&video.render,&profiler);
+    FirstPersonRenderer firstPerson(renderer,&settings.render,&profiler);
 #else
-    FirstPersonRenderer firstPerson(renderer,&video.render);
+    FirstPersonRenderer firstPerson(renderer,&settings.render);
 #endif
     if (data) {
         firstPerson.enableRenderWorkers();
@@ -40,7 +42,9 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
     game_lab::Level emptyLevel;
     DoorControl doorControl(collisionWorld, levelDoors, data ? data->level : emptyLevel);
     PlayerInput playerInput(window, doorControl);
+    playerInput.setClassicControls(settings.classicControls);
     GameAudio gameAudio;
+    gameAudio.setMasterGain(settings.audioGain());
     if (data) gameAudio.load(std::filesystem::path(options.labPath).parent_path() / "DATA");
     std::optional<player::DeathPresentation> deathPresentation;
     if(data && originalHud) {
@@ -55,8 +59,10 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
     }
 #endif
     VictorySession victory;
+    extremis::PowerSurge powerSurge;
     std::optional<ItemSession::Travel> shuttleTravel;
     bool running = true;
+    bool terminalMenu = false;
     bool showPolygons = false;
     bool show3D = camera.has_value();
     Uint64 previousTicks = SDL_GetTicks();
@@ -76,6 +82,40 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
 #ifdef EXTREMIS_DEBUG_MENU
         profiler.beginFrame();
 #endif
+        if (pendingDisclosure) {
+            if (!presentFrame(renderer,firstPerson,survival.hudState(),enemySystem?&*enemySystem:nullptr,
+                              show3D,showPolygons,true,{}
+#ifdef EXTREMIS_DEBUG_MENU
+                              ,debugMenu,fps.value(),profiler
+#endif
+                              )) {
+                exitCode=1;
+                break;
+            }
+            bool dismiss=false;
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type==SDL_EVENT_QUIT ||
+                    (event.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+                     event.window.windowID==SDL_GetWindowID(window))) running=false;
+                if (event.type==SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+                    event.key.windowID==SDL_GetWindowID(window)) dismiss=true;
+            }
+            if (!running) break;
+            if (dismiss) {
+                pendingDisclosure=nullptr;
+                gameAudio.confirmItemSelection();
+                SDL_ResetKeyboard();
+                playerInput.invalidateContext();
+                items.clearInput();
+                doorControl.beginFrame(false);
+                previousTicks=SDL_GetTicks();
+                continue;
+            }
+            SDL_Delay(16);
+            continue;
+        }
+
         bool restartRequested=false;
         auto* activeEnemies=enemySystem?&*enemySystem:nullptr;
         bool debugPaused=false;
@@ -86,9 +126,19 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
         const bool wasItemModal=items.modal();
         mapSession.beginFrame(data?data->level.zoneIndex:0);
         EventBatch events{true, false, false, showPolygons, activeEnemies};
-        if (!shuttleTravel) {
-            events=pollEvents(window,renderer,options,dataDirectory,video,exitCode,previousTicks,
-                playerInput,gameAudio,deathPresentation ? &*deathPresentation : nullptr,
+        if (checkpoint) {
+            events.checkpoint=std::exchange(checkpoint,nullptr);
+            events.restartRequested=true;
+        } else if (terminalMenu) {
+            openMenu(window,renderer,dataDirectory,settings,settingsPath,exitCode,previousTicks,playerInput,gameAudio,false,events);
+            terminalMenu=false;
+#ifdef EXTREMIS_DEBUG_MENU
+            profiler.reset();
+            fps.resetInterval();
+#endif
+        } else if (!shuttleTravel) {
+            events=pollEvents(window,renderer,options,dataDirectory,settings,settingsPath,exitCode,previousTicks,
+                playerInput,gameAudio,doorControl,deathPresentation ? &*deathPresentation : nullptr,
                 victory,show3D,events
 #ifdef EXTREMIS_DEBUG_MENU
                 , debugMenu,profiler,fps
@@ -111,7 +161,8 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
             const auto death=advanceDeathPresentation(window,renderer,firstPerson,*deathPresentation,
                 gameAudio,playerInput,doorControl,victory,elapsedSeconds,events.deathKey);
             if (death==DeathFrame::Error) { exitCode=1; break; }
-            if (death==DeathFrame::Presented) continue;
+            if (death==DeathFrame::Finished) terminalMenu=true;
+            if (death!=DeathFrame::Inactive) continue;
         }
 #ifdef EXTREMIS_DEBUG_MENU
         debugPaused=debugMenu.open();
@@ -119,12 +170,18 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
 #endif
         const bool inputActive = camera && show3D && !debugPaused && SDL_GetKeyboardFocus() == window;
         // Resolve context changes before polling continuous WASD/Shift state.
-        items.update(camera ? &*camera : nullptr,!shuttleTravel && inputActive && !mapSession.blocksSimulation(),
+        if (!restartRequested) items.update(camera ? &*camera : nullptr,!shuttleTravel && inputActive && !mapSession.blocksSimulation(),
                      doorControl.movementWorld(),survival,gameAudio,&doorControl,elapsedSeconds);
+        if (items.takeBombPlacement() && data && camera && camera->sector) {
+            const auto index = *camera->sector;
+            const auto& sector = data->level.sectors.at(index);
+            placedBomb.place(index,static_cast<std::uint16_t>(std::lround(camera->x)-sector.gx),
+                                   static_cast<std::uint16_t>(std::lround(camera->y)-sector.gy));
+            survival.postMessage(messages::Id::BombWarning);
+        }
         const bool arrivingByShuttle=shuttleTravel.has_value();
         auto travel=items.takeTravel();
         if(shuttleTravel) { travel=shuttleTravel;shuttleTravel.reset(); }
-        if(restartRequested) travel=ItemSession::Travel{0,{0,300,320,180}};
 #ifdef EXTREMIS_DEBUG_MENU
         if (auto requested=debugMenu.takeTravel()) {
             travel=requested;
@@ -134,14 +191,25 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
             mapSession=original_map::Session{};
         }
 #endif
+        if(restartRequested) {
+            powerSurge = {};
+            placedBomb = {};
+            bombFrame = {};
+            bombScene.objects.clear();
+            generatorTicks = 0;
+            travel=events.checkpoint
+                ? ItemSession::Travel{events.checkpoint->zone,events.checkpoint->start}
+                : ItemSession::Travel{0,{0,300,320,180}};
+        }
         if (travel) {
             transferLevel(window, renderer, options, *travel, restartRequested, arrivingByShuttle,
                 running, firstPerson, doorControl, playerInput, gameAudio,
-                deathPresentation ? &*deathPresentation : nullptr, victory
+                deathPresentation ? &*deathPresentation : nullptr, victory,events.checkpoint
 #ifdef EXTREMIS_DEBUG_MENU
                 , debugMenu
 #endif
             );
+            if (restartRequested && !running) exitCode=1;
             previousTicks=SDL_GetTicks();
             continue; // Never simulate with elapsed time or input from the old world.
         }
@@ -155,10 +223,14 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
         if (spriteScene && simulationActive) decorativeAnimation.update(*spriteScene, elapsedSeconds);
         const Camera beforeMovement=camera.value_or(Camera{});
         playerInput.setAudioEnabled(gameAudio.enabled());
+        const bool coloredLights=settings.render.preferences.coloredLights;
+        auto lamp = data && camera ? extremis::lampTint(data->level,camera->sector.value_or(~0u),
+                                                        camera->x,camera->y,coloredLights) : extremis::PaletteTint{};
         playerInput.setObjectConstraint([&](const Camera& before, Camera& candidate) {
             if (!data) return;
             const auto location = collision::locate(data->level,{before.x,before.y},before.sector);
             if (!location) return;
+            lamp = extremis::lampTint(data->level,location->sector,candidate.x,candidate.y,coloredLights);
             const auto corrected = collision::constrainObjets(data->level,location->sector,
                 {before.x,before.y},{candidate.x,candidate.y},spriteScene ? &*spriteScene : nullptr);
             candidate.x = corrected.x; candidate.y = corrected.y;
@@ -172,6 +244,8 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
 
         const bool doorReady=doorControl.beginFrame(simulationActive && survival.alive() && playerInput.fireReady());
         const auto gameplayTicks=doorReady?doorControl.gameplayTicks():std::uint16_t(0);
+        if (doorReady && activeEnemies && camera && data)
+            activeEnemies->updateGenerators(data->level,*camera,gameplayTicks,generatorTicks);
         if (activeEnemies && camera && data)
             activeEnemies->update(data->level,*camera,doorControl.movementWorld(),survival.vitals(),
                 elapsedSeconds,simulationActive && survival.alive(),
@@ -187,9 +261,10 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
                     activeEnemies->constrainPlayer(data->level,before,*camera,doorControl.staticWorld());
                 },levelDoors,spriteScene ? &*spriteScene : nullptr);
         if(activeEnemies && activeEnemies->terminalDefeated()) {
-            const auto result=playVictory(window,renderer,options.labPath,firstPerson,
-                gameAudio,playerInput,doorControl,*activeEnemies,
-                deathPresentation ? &*deathPresentation : nullptr,victory);
+            const auto result=victory.update(true,[&]() {
+                return playVictory(window,renderer,options.labPath,firstPerson,
+                    gameAudio,playerInput,doorControl,*activeEnemies);
+            },[&]() { terminalMenu=true; });
             previousTicks=SDL_GetTicks();
             SDL_ResetKeyboard(); items.clearInput(); playerInput.invalidateContext();
             if(result!=StartupCreditsResult::Continue) {
@@ -208,13 +283,23 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
         }
         const double effectiveMovement=camera ? std::hypot(camera->x-beforeMovement.x,camera->y-beforeMovement.y) : 0;
         if (activeEnemies) for (const auto sound:activeEnemies->takeSounds()) gameAudio.enemyEffect(sound);
+        if (doorReady && data && camera) {
+            try { updateBomb(dataDirectory,gameAudio,gameplayTicks); }
+            catch (const std::exception& error) {
+                SDL_Log("Bomb presentation failed: %s",error.what());
+                exitCode=1;
+                break;
+            }
+        }
         if (survival.update(elapsedSeconds,simulationActive,gameAudio,playerInput.running() && effectiveMovement>0,
-                            deathPresentation.has_value()))
+                            deathPresentation.has_value(),gameplayTicks))
             SDL_SetWindowTitle(window,survival.windowTitle(texturePreview.windowTitle()).c_str());
         const bool destructionRunning=doorReady && simulationActive && survival.alive() &&
             !items.busy() && items.selfDestruction().active();
         items.updateSelfDestruction(gameplayTicks,destructionRunning);
-        gameAudio.destructionAlarm(destructionRunning && !items.selfDestruction().expired());
+        const bool surgeAlarm = simulationActive && survival.alive() && powerSurge.update(gameplayTicks);
+        if (surgeAlarm) survival.postMessage(messages::Id::PowerSurge);
+        gameAudio.destructionAlarm((doorReady && bombFrame.alarm) || surgeAlarm || (destructionRunning && !items.selfDestruction().expired()));
         if(destructionRunning) survival.postDestruction(items.selfDestruction().remaining());
         if(simulationActive && survival.alive() && !items.busy() && data && camera &&
            communication::trigger(data->level,camera->sector.value_or(~0u))) {
@@ -240,7 +325,8 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
         const auto death=beginDeathPresentation(renderer,options.labPath,firstPerson,
             deathPresentation ? &*deathPresentation : nullptr,gameAudio,playerInput,doorControl);
         if (death==DeathFrame::Error) { exitCode=1; break; }
-        if (death==DeathFrame::Presented) continue;
+        if (death==DeathFrame::Finished) terminalMenu=true;
+        if (death!=DeathFrame::Inactive) continue;
         const auto trigger=playerInput.takeFireTrigger();
         const bool weaponsActive=simulationActive && survival.alive() && playerInput.fireReady() &&
                                  originalHud && weaponGraphicsReady;
@@ -263,7 +349,8 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
         gameAudio.update(data ? data->level : emptyLevel, levelDoors, playerInput.footsteps(),doorReady);
         doorControl.resetCounter(); // Separate from the earlier read; rendering belongs to the next interval.
         if (!presentFrame(renderer,firstPerson,hudState,activeEnemies,
-                          show3D,showPolygons,modalBlocked
+                          show3D,showPolygons,modalBlocked,extremis::ambientTint(lamp,powerSurge.tint(),
+                              survival.inventory().batteryMode()==player::BatteryMode::Optics)
 #ifdef EXTREMIS_DEBUG_MENU
                           ,debugMenu,fps.value(),profiler
 #endif

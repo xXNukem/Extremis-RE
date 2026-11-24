@@ -173,6 +173,118 @@ void testPlayerDeviceTransitions()
     }
     check(!SDL_GetWindowRelativeMouseMode(window.get()), "PlayerInput destruction left the cursor captured");
 }
+
+void testClassic()
+{
+    const std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> window(
+        SDL_CreateWindow("Classic controls", 64, 64, 0), SDL_DestroyWindow);
+    check(bool(window) && SDL_GetKeyboardFocus() == window.get(), "Classic window has no focus");
+    const auto id = SDL_GetWindowID(window.get());
+    game_lab::Level level{};
+    game_lab::Sector sector{};
+    sector.vertices = {{100,200},{100,0}};
+    sector.walls = {{0,1,0x3205,0x2064}};
+    level.sectors.push_back(sector);
+    const collision::World walls;
+    const std::vector<doors::Door> doors;
+    DoorControl control(walls,doors,level);
+    PlayerInput input(window.get(),control);
+    Camera camera{0,100,0};
+    constexpr double tick = 1.0 / 18;
+    input.setClassicControls(true);
+    check(input.update(&camera,true,0) && input.fireReady(), "Classic waited for relative capture");
+    const auto key = [&](SDL_Scancode scan, bool down=true, bool gameplay=true) {
+        auto event = keyEvent(down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP,scan);
+        event.key.windowID = id;
+        return input.handleEvent(event,gameplay);
+    };
+    SDL_Event mouse{};
+    mouse.type = SDL_EVENT_MOUSE_MOTION;
+    mouse.motion.windowID = id;
+    mouse.motion.xrel = 1000;
+    input.handleEvent(mouse);
+    mouse = {};
+    mouse.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    mouse.button.windowID = id;
+    mouse.button.button = SDL_BUTTON_LEFT;
+    input.handleEvent(mouse);
+    key(SDL_SCANCODE_W);
+    check(input.update(&camera,true,tick) && !SDL_GetWindowRelativeMouseMode(window.get()) &&
+          camera.x == 0 && camera.angle == 0 && !input.takeFireTrigger().held,
+          "Classic accepted Modern movement or the mouse");
+
+    key(SDL_SCANCODE_UP);
+    input.update(&camera,true,tick);
+    const auto walked = camera.x;
+    check(walked > 0, "Up did not advance");
+    key(SDL_SCANCODE_LALT);
+    input.update(&camera,true,tick);
+    check(input.running() && camera.x - walked > walked, "Left Alt did not run");
+    key(SDL_SCANCODE_LALT,false);
+    key(SDL_SCANCODE_UP,false);
+    const auto beforeReverse = camera.x;
+    key(SDL_SCANCODE_DOWN);
+    input.update(&camera,true,tick);
+    check(camera.x < beforeReverse, "Down did not reverse");
+    key(SDL_SCANCODE_DOWN,false);
+    key(SDL_SCANCODE_LEFT);
+    input.update(&camera,true,tick);
+    check(camera.angle > 0, "DOS left turn must increase the heading");
+    const auto leftHeading = camera.angle;
+    key(SDL_SCANCODE_RIGHT);
+    input.update(&camera,true,tick*2);
+    check(camera.angle < 0 && camera.angle < leftHeading, "DOS right turn must win when both arrows are held");
+    key(SDL_SCANCODE_LEFT,false);
+    key(SDL_SCANCODE_RIGHT,false);
+    key(SDL_SCANCODE_SPACE);
+    input.update(&camera,true,tick);
+    check(camera.postureHeight < Camera::eyeHeight, "Space did not crouch");
+    key(SDL_SCANCODE_SPACE,false);
+
+    check(!key(SDL_SCANCODE_LCTRL), "Ctrl alone fired");
+    check(key(SDL_SCANCODE_UP), "Ctrl + Up did not arm");
+    key(SDL_SCANCODE_UP,false);
+    key(SDL_SCANCODE_LCTRL,false);
+    const auto tap = input.takeFireTrigger();
+    check(tap.pressed && !tap.held, "Short Classic chord was lost in the event pump");
+    player::WeaponFire weapon;
+    SurvivalSession player;
+    weapon.update(camera,walls,player.inventory(),{},true,tick);
+    const auto ammunition = player.inventory().ammunition();
+    check(weapon.update(camera,walls,player.inventory(),tap,true,tick) == player::FireResult::Fired &&
+          player.inventory().ammunition() == ammunition - 1, "Classic chord did not fire the equipped weapon");
+    check(key(SDL_SCANCODE_RETURN) && input.takeFireTrigger().held,
+          "Classic keyboard fallback did not arm");
+    key(SDL_SCANCODE_RETURN,false);
+
+    ItemSession items;
+    GameAudio audio;
+    items.load(level);
+    camera = {50,100,0};
+    key(SDL_SCANCODE_UP);
+    check(key(SDL_SCANCODE_LCTRL) && items.requestContextualAction(camera,walls),
+          "Classic chord failed to select a reachable panel");
+    input.suppressClassicFire();
+    items.update(&camera,true,walls,player,audio);
+    const auto suppressed = input.takeFireTrigger();
+    check(items.modal() && !suppressed.pressed && !suppressed.held,
+          "A panel interaction also armed the weapon");
+    input.update(&camera,false,tick);
+    key(SDL_SCANCODE_UP,false,false);
+    key(SDL_SCANCODE_LCTRL,false,false);
+    key(SDL_SCANCODE_UP,true,false);
+    key(SDL_SCANCODE_LCTRL,true,false);
+    check(input.update(&camera,true,0) && !input.takeFireTrigger().held,
+          "Modal input leaked into Classic gameplay");
+
+    input.setClassicControls(false);
+    check(input.update(&camera,true,0) && !input.fireReady() &&
+          input.update(&camera,true,0) && input.fireReady() &&
+          SDL_GetWindowRelativeMouseMode(window.get()), "Modern capture failed after switching profiles");
+    input.setClassicControls(true);
+    check(!SDL_GetWindowRelativeMouseMode(window.get()) && !input.takeFireTrigger().held,
+          "Switching to Classic kept Modern capture or shooting state");
+}
 } // namespace
 
 int main()
@@ -183,7 +295,7 @@ int main()
         check(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE),
               "Cannot select dummy video driver");
         check(SDL_InitSubSystem(SDL_INIT_VIDEO), "SDL video initialization failed");
-        testPlayerDeviceTransitions();
+        testPlayerDeviceTransitions(); testClassic();
         SDL_Quit();
         std::cout << "Modal ownership, gameplay device transitions and E exclusion from ordinary doors passed.\n";
     } catch (const std::exception& error) {

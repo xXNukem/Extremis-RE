@@ -1,5 +1,6 @@
 #include "extremis/render/first_person/camera/camera_start.h"
 #include "extremis/ui/original_hud.h"
+#include "extremis/ui/localization.h"
 #include "extremis/gameplay/player/weapon_fire.h"
 #include "extremis/gameplay/enemies/enemy_system.h"
 #include "extremis/render/first_person/presentation/first_person_view.h"
@@ -34,6 +35,8 @@ hud::Resources fixture()
         const int h = i < 26 ? sizes[i][1] : i < 36 ? 6 : 10;
         r.casque.push_back({w,h,0,0,std::vector<std::uint8_t>(w*h,std::uint8_t(i+1))});
     }
+    for (int i=13;i<=15;++i)
+        r.casque[i].anchorX=r.casque[i].anchorY=r.casque[i].width/2;
     for (int i = 0; i < 256; ++i) r.palette[i] = {std::uint8_t(i),0,0};
     r.casque[36] = {18,38,0,0,std::vector<std::uint8_t>(18*38,37)};
     r.casque[37] = {7,10,0,0,std::vector<std::uint8_t>(7*10,38)};
@@ -61,13 +64,21 @@ void radarComposition()
     state.detector.phase=4; state.detector.count=1; state.detector.contacts[0]={24,188,0};
     std::vector<std::uint32_t> pixels(320*200,0);
     check(renderer.draw(pixels,state),"Detector HUD composition failed");
-    check(pixels[188*320+24]==color(14),"Native5x5 detector marker not at its original coordinates");
-    state.detector.contacts[0]={-3,199,0};
+    check(pixels[186*320+22]==color(14) && pixels[190*320+26]==color(14),
+          "Native 5x5 detector marker is not centered on its anchor");
+    state.detector.contacts[0]={-1,199,0};
     renderer.draw(pixels,state);
     check(pixels[199*320]==color(14),"Radar clipping lost partially visible marker");
     state.detector.phase.reset(); state.detector.count=10;
     renderer.draw(pixels,state);
     check(pixels[188*320+24]==color(5),"Off radar retained a stale detection");
+    state.batteryCharge=144000;
+    renderer.draw(pixels,state);
+    check(pixels[156*320+222]==color(41),"Idle battery icon differs");
+    state.batteryInUse=true; // Optics uses the active icon with no radar contacts.
+    renderer.draw(pixels,state);
+    check(pixels[156*320+222]==color(42) && pixels[188*320+24]==color(5),
+          "Shared battery icon enabled a radar contact");
 }
 void slimeComposition()
 {
@@ -295,6 +306,7 @@ void pickupPresentation(const std::filesystem::path& directory)
     VideoRenderSettings video;
     video.preferences.fisheyeEnabled=true;
     FirstPersonRenderer view(renderer.get(),&video), reference(renderer.get());
+    view.enableRenderWorkers();
     const game_lab::Level level{};
     const auto clear=[&] {
         check(SDL_SetRenderDrawColor(renderer.get(),0,0,0,255) &&
@@ -315,9 +327,10 @@ void pickupPresentation(const std::filesystem::path& directory)
         }
         return true;
     };
-    const auto draw=[&](const interaction::State* state) {
+    const auto draw=[&](const interaction::State* state,extremis::PaletteTint tint={}) {
         clear();
-        check(view.draw(level,{},nullptr,nullptr,nullptr,nullptr,nullptr,&visor,{},&interfaces,state),
+        check(view.draw(level,{},nullptr,nullptr,nullptr,nullptr,nullptr,&visor,{},&interfaces,state,
+                        nullptr,nullptr,nullptr,nullptr,nullptr,tint),
               "Pickup view draw failed");
         return capture();
     };
@@ -339,6 +352,15 @@ void pickupPresentation(const std::filesystem::path& directory)
             video.mode={std::max(1,scale),scale==0,size.x,size.y,{}};
             auto normal=draw(nullptr);
             check(normal->w==size.x && normal->h==size.y,"Pickup drawable size did not change");
+            auto optical=draw(nullptr,{0,{},true});
+            bool hasGreen=false;
+            for (int y=0;y<optical->h;y+=11) for (int x=0;x<optical->w;x+=11) {
+                Uint8 r,g,b,a;
+                check(SDL_ReadSurfacePixel(optical.get(),x,y,&r,&g,&b,&a) && r==0 && b==0,
+                      "Optics did not cover the full scaled presentation");
+                hasGreen |= g>0;
+            }
+            check(hasGreen && equal(*normal,*draw(nullptr)),"Optics output or color restoration failed");
             for(auto phase:{interaction::Phase::MovieIn,interaction::Phase::Movie,interaction::Phase::MovieOut}) {
                 interaction::State state;
                 state.phase=phase;
@@ -390,6 +412,17 @@ void originals(const std::filesystem::path& directory)
               resources.palette[i].g == (palette[3*i+1]*255+31)/63 &&
               resources.palette[i].b == (palette[3*i+2]*255+31)/63,"HUD palette differs from PAL1");
     const hud::Renderer hudRenderer(resources);
+    localization::Language language=localization::Language::English;
+    localization::bind(&language);
+    hud::State localizedState;localizedState.message="ATTENTION: AN ALIEN IS NEAR!!";
+    std::vector<std::uint32_t> english(64000),spanish(64000),french(64000);
+    check(hudRenderer.draw(english,localizedState),"English HUD rendering failed");
+    language=localization::Language::Spanish;
+    check(hudRenderer.draw(spanish,localizedState),"Spanish HUD rendering failed");
+    language=localization::Language::French;
+    check(hudRenderer.draw(french,localizedState),"French HUD rendering failed");
+    check(english!=spanish && english!=french && spanish!=french,"Localized HUD did not change pixels");
+    localization::bind(nullptr);
     const auto level = game_lab::loadLevel1(directory.parent_path()/"GAME.LAB").level;
     const auto materials = wall_textures::load(directory,1,1);
     const auto planes = wall_textures::loadPlanes(directory,1,1);
@@ -456,7 +489,7 @@ void originals(const std::filesystem::path& directory)
     const Camera deathView{4100,2400,-1.5707963267948966};
     enemies.hit(0,4,0); enemies.update(level,deathView,world,vitals,0,true);
     for(unsigned tick=0;tick<8;++tick) enemies.update(level,deathView,world,vitals,1./18,true);
-    preview.batteryCharge=144000; preview.detectorEnabled=true;
+    preview.batteryCharge=144000; preview.batteryInUse=true;
     for(unsigned stage=0;stage<=42;++stage) {
         if(stage) enemies.update(level,deathView,world,vitals,1./18,true);
         preview.slimePhase=enemies.effects().slimePhase();
@@ -474,7 +507,7 @@ void originals(const std::filesystem::path& directory)
     check(view.draw(level,initialCamera(level),nullptr,&materials,&doors,&planes,&scene,&hudRenderer,preview,
                     nullptr,nullptr,nullptr,&enemies.scene()) && SDL_RenderPresent(renderer.get()),"Native detector level view failed");
     check(SDL_SaveBMP(surface.get(),"build/hud-debug/step204-radar.bmp"),"Cannot save native radar");
-    preview.detector={}; preview.batteryCharge=-1; preview.detectorEnabled=false;
+    preview.detector={}; preview.batteryCharge=-1; preview.batteryInUse=false;
     player::WeaponFire muzzle; muzzle.loadGraphics(directory,1); player::Inventory muzzleAmmo;
     const collision::World target{{{800,-1000},{800,1000}}};
     for(unsigned stage=0;stage<6;++stage) {

@@ -1,4 +1,5 @@
 #include "extremis/resources/anm_format.h"
+#include "extremis/resources/vga_palette.h"
 #include <fstream>
 #include <stdexcept>
 
@@ -48,14 +49,11 @@ Animation decode(const std::vector<std::uint8_t>& bytes)
     const unsigned count=word(bytes,4);
     if(!count || count>1000) throw std::runtime_error("Invalid ANM frame count");
     Animation result;
-    for(unsigned i=0;i<256;++i) {
-        std::uint32_t rgba=0;
-        for(unsigned c=0;c<3;++c) {
-            const unsigned v=bytes[6+3*i+c];
-            if(v>63) throw std::runtime_error("Invalid ANM VGA palette");
-            rgba=(rgba<<8)|((v*255+31)/63);
-        }
-        result.palette[i]=(rgba<<8)|255;
+    const auto palette = vga_palette::decode(bytes.data() + 6, "Invalid ANM VGA palette");
+    for (std::size_t i = 0; i < palette.size(); ++i) {
+        const auto& rgb = palette[i];
+        result.palette[i] = (std::uint32_t(rgb[0]) << 24) | (std::uint32_t(rgb[1]) << 16) |
+                            (std::uint32_t(rgb[2]) << 8) | 255;
     }
     result.palette[0]=255; // Player 0x1477b forces the first palette entry black.
     std::size_t offset=774;

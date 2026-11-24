@@ -26,15 +26,20 @@ set(startup_credits_sources
 
 set(startup_credits_sources "${startup_credits_sources}" PARENT_SCOPE)
 
+add_library(port_menu STATIC startup/port_menu.cpp startup/port_menu_state.cpp startup/port_menu_view.cpp
+    startup/user_settings.cpp ${PROJECT_SOURCE_DIR}/src/extremis/ui/original_font.cpp)
+target_link_libraries(port_menu PUBLIC original_hud player_inventory SDL3::SDL3 PRIVATE audio_data extremis_render)
+target_compile_features(port_menu PUBLIC cxx_std_17)
+set_target_properties(port_menu PROPERTIES CXX_EXTENSIONS NO)
+
 add_executable(InExtremisPort main.cpp
     startup/launch_options.cpp startup/initial_level.cpp startup/startup_sequence.cpp
     session/app_session.cpp session/destination_level.cpp session/session_cinematics.cpp
-    session/session_frame.cpp session/session_travel.cpp
+    session/session_frame.cpp session/session_travel.cpp session/session_bomb.cpp
     session/session_events.cpp session/session_death.cpp
     diagnostics/map_view.cpp
     ${PROJECT_SOURCE_DIR}/src/extremis/render/first_person/materials/texture_preview.cpp ${PROJECT_SOURCE_DIR}/src/extremis/render/first_person/materials/plane_appearance.cpp ${startup_credits_sources}
-    ${PROJECT_SOURCE_DIR}/src/extremis/ui/original_font.cpp ${PROJECT_SOURCE_DIR}/src/extremis/cinematics/original_intro_player.cpp
-    startup/port_menu.cpp startup/port_menu_state.cpp startup/port_menu_view.cpp)
+    ${PROJECT_SOURCE_DIR}/src/extremis/cinematics/original_intro_player.cpp)
 target_sources(InExtremisPort PRIVATE
     $<$<CONFIG:Debug>:diagnostics/debug_menu.cpp>
     $<$<CONFIG:Debug>:diagnostics/gameplay_fps.cpp>)
@@ -47,5 +52,5 @@ set_target_properties(InExtremisPort PROPERTIES
 target_link_libraries(InExtremisPort PRIVATE
     shuttle_session level22_communication victory_session
     original_ending_player original_elevator original_intro
-    extremis_render weapon_fire enemies session_interfaces player_control wall_animation
+    port_menu extremis_render weapon_fire enemies session_interfaces player_control wall_animation
     wall_material sprites Vortex::CPU SDL3::SDL3 sdl_input sdl_audio)

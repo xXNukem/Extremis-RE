@@ -1,4 +1,5 @@
 #include "extremis/cinematics/original_presentation.h"
+#include "extremis/ui/localization.h"
 #include <algorithm>
 #include <iostream>
 #include <limits>
@@ -118,11 +119,30 @@ void malformed() {
     try {Presentation p(std::move(r));throw std::logic_error("Accepted incomplete credit canvas");}
     catch(const std::runtime_error&) {}
 }
+void localizedCards(const std::filesystem::path& data) {
+    using localization::Language;
+    Language language=Language::English;
+    localization::bind(&language);
+    Presentation english(loadResources(data));
+    reach(english,Screen::Presente,Phase::FadeIn);
+    const auto original=english.indices();
+    language=Language::Spanish;
+    Presentation spanish(loadResources(data));
+    reach(spanish,Screen::Presente,Phase::FadeIn);
+    check(spanish.screen()==english.screen() && spanish.phase()==english.phase() &&
+          spanish.brightness()==english.brightness(),"Localized credit changed timing");
+    check(spanish.indices()!=original,"Spanish credit was not overlaid");
+    language=Language::French;
+    Presentation french(loadResources(data));
+    reach(french,Screen::Presente,Phase::FadeIn);
+    check(french.indices()==original,"French original credit changed");
+    localization::bind(nullptr);
+}
 }
 int main(int argc,char** argv) {
     try {
         fullSequence(fixture());timingAndGraphics();keyboard();malformed();
-        if(argc>1) fullSequence(loadResources(argv[1]));
+        if(argc>1) {fullSequence(loadResources(argv[1]));localizedCards(argv[1]);}
         std::cout<<"Original startup order/frames/fades/timing/keyboard tests passed"<<(argc>1?" with original resources":"")<<"\n";
     } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
 }

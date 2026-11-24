@@ -22,6 +22,9 @@ public:
     std::optional<ShotHit> trace(const Camera& view, collision::Point origin,
                                 collision::Point direction, double range) const;
     void hit(std::size_t enemy, unsigned weapon, double angle);
+    void updateGenerators(const game_lab::Level& level, const Camera& camera, std::uint16_t ticks,
+                          std::uint16_t& campaignAccumulator);
+    std::vector<unsigned> blast(game_lab::Level& level, game_lab::Vertex origin);
     void constrainPlayer(const game_lab::Level& level, const Camera& before, Camera& after,
                          const collision::World& walls) const;
     std::vector<unsigned> takeSounds();

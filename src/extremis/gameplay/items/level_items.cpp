@@ -28,6 +28,13 @@ World::World(const game_lab::Level& level)
 
 const std::vector<Panel>& World::panels() const { return panels_; }
 
+void World::storePanelContents(game_lab::Level& level) const
+{
+    for (const auto& panel : panels_) {
+        level.sectors.at(panel.sector).walls.at(panel.wall).extra = panel.contents;
+    }
+}
+
 std::optional<double> World::reachable(const Panel& panel, const Camera& camera,
                                       const collision::World& obstacles) const
 {
@@ -71,12 +78,12 @@ std::optional<std::size_t> World::target(const Camera& camera, const collision::
     return chosen;
 }
 
-player::Transfer World::take(std::size_t index, player::Inventory& inventory)
+player::Transfer World::take(std::size_t index, player::Inventory& inventory, bool exchangeChargedBattery)
 {
     if (index>=panels_.size()) return player::Transfer::Unsupported;
     auto& panel=panels_[index];
     if (panel.cardReader || panel.codePanel || panel.codeReader || panel.elevator || panel.securityPanel) return player::Transfer::Unsupported;
-    return panel.weapon ? inventory.exchangeWeapon(panel.contents) : inventory.takeSupply(panel.contents);
+    return panel.weapon ? inventory.exchangeWeapon(panel.contents) : inventory.takeSupply(panel.contents,exchangeChargedBattery);
 }
 player::Transfer World::replaceCard(std::size_t index, player::Inventory& inventory, unsigned slot)
 {

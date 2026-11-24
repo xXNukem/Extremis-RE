@@ -61,12 +61,12 @@ class MenuAudio {
         SDL_AudioStream* stream=nullptr;
     };
 public:
-    explicit MenuAudio(const std::filesystem::path& dataDirectory) {
+    MenuAudio(const std::filesystem::path& dataDirectory, float gain) {
         if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) return;
         initialized_=true;
         const SDL_AudioSpec hoverSpec{SDL_AUDIO_F32,1,48000};
         stream_=SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&hoverSpec,nullptr,nullptr);
-        if (stream_ && !SDL_ResumeAudioStreamDevice(stream_)) {
+        if (stream_ && (!SDL_SetAudioStreamGain(stream_,gain) || !SDL_ResumeAudioStreamDevice(stream_))) {
             SDL_DestroyAudioStream(stream_); stream_=nullptr;
         }
         if (dataDirectory.empty()) return;
@@ -86,15 +86,15 @@ public:
                 const auto& pcm=effect.sample.pcm;
                 sound.pcm.reserve(pcm.size());
                 // Same bank volume and fade ramps as the DOS audio player.
-                const float gain=float(effect.volume)/256.f;
+                const float sampleGain=float(effect.volume)/256.f;
                 for (std::size_t i=0;i<pcm.size();++i) {
                     const float rise=std::min(1.f,float(i+1)/32.f);
                     const float fall=std::min(1.f,float(pcm.size()-i)/32.f);
-                    sound.pcm.push_back(pcm[i]*gain*std::min(rise,fall));
+                    sound.pcm.push_back(pcm[i]*sampleGain*std::min(rise,fall));
                 }
                 const SDL_AudioSpec spec{SDL_AUDIO_F32,1,int(effect.sample.rate)};
                 sound.stream=SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&spec,nullptr,nullptr);
-                if (sound.stream && !SDL_ResumeAudioStreamDevice(sound.stream)) {
+                if (sound.stream && (!SDL_SetAudioStreamGain(sound.stream,gain) || !SDL_ResumeAudioStreamDevice(sound.stream))) {
                     SDL_DestroyAudioStream(sound.stream); sound.stream=nullptr;
                 }
                 if (!sound.stream) SDL_Log("Port menu original BANK[%zu] failed: %s",id,SDL_GetError());
@@ -108,6 +108,11 @@ public:
             if (sound.stream) SDL_DestroyAudioStream(sound.stream);
         if (stream_) SDL_DestroyAudioStream(stream_);
         if (initialized_) SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    }
+    void setVolume(float gain) {
+        if (stream_) SDL_SetAudioStreamGain(stream_,gain);
+        for (auto& sound : originalSounds_)
+            if (sound.stream) SDL_SetAudioStreamGain(sound.stream,gain);
     }
     void hover() {
         if (SDL_GetTicksNS() < transitionProtectedUntil_) return;
@@ -150,7 +155,7 @@ private:
 
 // Returns physical pixels; SDL3 desktop modes use logical size plus
 // pixel_density on Retina / high-DPI screens.
-std::pair<int,int> activeDisplaySize(SDL_Window* window)
+static std::pair<int,int> activeDisplaySize(SDL_Window* window)
 {
     const SDL_DisplayID display=SDL_GetDisplayForWindow(window);
     const SDL_DisplayMode* mode=display?SDL_GetDesktopDisplayMode(display):nullptr;
@@ -168,7 +173,7 @@ std::pair<int,int> activeDisplaySize(SDL_Window* window)
 // Do not cache SDL_DisplayMode pointers, which belong to temporary SDL arrays.
 // Pixel dimensions are taken from the display currently containing the
 // window, not the primary monitor. SDL Retina density is applied exactly once.
-std::vector<PortVideoMode> availableVideoModes(SDL_Window* window,unsigned aspectChoice)
+static std::vector<PortVideoMode> availableVideoModes(SDL_Window* window,unsigned aspectChoice)
 {
     const SDL_DisplayID display=SDL_GetDisplayForWindow(window);
     auto [maxW,maxH]=activeDisplaySize(window);
@@ -194,7 +199,7 @@ std::vector<PortVideoMode> availableVideoModes(SDL_Window* window,unsigned aspec
     // A DOS framebuffer of 320x200 corresponds to 4:3 after CRT pixel
     // correction. n x DOS uses 240*n physical lines at 4:3 on screen.
     const double fittingHeight=std::min(double(maxH),double(maxW)/aspect);
-    const int integerMaximum=std::clamp(int(fittingHeight/240.0),1,24);
+    const int integerMaximum=std::clamp(int(fittingHeight/240.0),1,maxDosResolutionScale);
     std::vector<PortVideoMode> result;
     for(int scale=2;scale<=integerMaximum;++scale)
         result.push_back({320*scale,200*scale,1.f,false,true});
@@ -204,28 +209,11 @@ std::vector<PortVideoMode> availableVideoModes(SDL_Window* window,unsigned aspec
     return result;
 }
 
-bool sameVideoMode(const PortVideoMode& a,const PortVideoMode& b)
-{
-    return a.width==b.width && a.height==b.height &&
-           a.nativeMax==b.nativeMax && a.dosPreset==b.dosPreset &&
-           std::abs(a.density-b.density)<.01f;
-}
-
-static void publishVideoMode(const PortMenuState& state, VideoRenderMode& output)
-{
-    const auto* mode=state.selectedVideoMode();
-    const auto [width,height]=state.videoDimensions();
-    const bool nativeMax=mode && mode->nativeMax;
-    output={mode && !nativeMax ? std::max(1,mode->height/200) : 1,
-            nativeMax, nativeMax ? mode->width : 0, nativeMax ? mode->height : 0,
-            {width,height}};
-}
-
 // The monitor stays in desktop fullscreen. The selected value controls
 // CPU-rendered 3D detail, not the physical scanout mode.
 // Internal resolution is intentionally NOT a hardware display-mode switch.
 // Even 320x200 runs in desktop fullscreen; only CPU scene detail changes.
-bool applyVideoWindowSize(SDL_Window* window,PortMenuState& state,
+static bool applyVideoWindowSize(SDL_Window* window,PortMenuState& state,
                           VideoRenderMode& output)
 {
     if(SDL_GetWindowFullscreenMode(window)) {
@@ -235,18 +223,39 @@ bool applyVideoWindowSize(SDL_Window* window,PortMenuState& state,
             return false;
         }
     }
-    publishVideoMode(state,output);
+    int outputWidth=0,outputHeight=0;
+    if (SDL_GetWindowSizeInPixels(window,&outputWidth,&outputHeight))
+        state.setAppliedVideoSize(outputWidth,outputHeight);
+    output=state.selectedRenderMode();
     const auto [displayW,displayH]=activeDisplaySize(window);
-    state.setAppliedVideoSize(displayW,displayH);
     SDL_Log("VORTEX VIDEO: selected %d x %d %s; renderer scale=%d; display max=%d x %d",
             output.requestedSize.width,output.requestedSize.height,
             output.nativeMax?"(MAX)":"(DOS pixels)",output.renderScale,displayW,displayH);
     return true;
 }
 
-PortMenuChoice showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
+static void configureVideoModes(SDL_Window* window, PortMenuState& state)
+{
+    const auto [width,height]=activeDisplaySize(window);
+    state.setDisplaySize(width,height);
+    int outputWidth=0,outputHeight=0;
+    if (SDL_GetWindowSizeInPixels(window,&outputWidth,&outputHeight))
+        state.setAppliedVideoSize(outputWidth,outputHeight);
+    state.setAvailableVideoModes(availableVideoModes(window,state.aspectChoice()));
+    state.restoreResolution();
+}
+
+void initializePortVideo(SDL_Window* window, SDL_Renderer* renderer, UserSettings& settings)
+{
+    PortMenuState state(false,settings,renderer);
+    configureVideoModes(window,state);
+    settings.render.mode=state.selectedRenderMode();
+    applyPreferredVSync(renderer,settings);
+}
+
+PortMenuResult showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
                             const std::filesystem::path& dataDirectory,bool inGame,
-                            PortMenuVideoState& video)
+                            UserSettings& settings, const std::filesystem::path& settingsPath)
 {
     if (!window || !renderer) return PortMenuChoice::Error;
     RenderRestore restore(renderer);
@@ -262,36 +271,21 @@ PortMenuChoice showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
         try {font=std::make_unique<original_font::Font>(renderer,dataDirectory/"CASQUE.SPR");}
         catch (const std::exception& e) {SDL_Log("Port menu font fallback: %s",e.what());}
     }
-    MenuAudio audio(dataDirectory);
+    MenuAudio audio(dataDirectory,settings.audioGain());
     const auto windowId=SDL_GetWindowID(window);
-    // Remember the exact logical mode/density, not an index that might
-    // change if SDL3 enumerates modes in a different order next time.
-    auto& preferences=video.render.preferences;
-    PortMenuState state(inGame,renderer);
-    state.setFisheyeEnabled(preferences.fisheyeEnabled);
-    const auto [desktopWidth,desktopHeight]=activeDisplaySize(window);
-    state.setDisplaySize(desktopWidth,desktopHeight);
-    state.setAvailableVideoModes(availableVideoModes(window,preferences.aspectChoice));
-    unsigned selectedResolution=PortMenuState::automaticResolution;
-    if(video.selectedMode) {
-        for(unsigned i=1;i<=state.availableModeCount();++i) {
-            state.setVideoChoices(preferences.aspectChoice,i);
-            if(const auto* mode=state.selectedVideoMode();
-               mode && sameVideoMode(*mode,*video.selectedMode)) {
-                selectedResolution=i;break;
-            }
-        }
-    }
-    state.setVideoChoices(preferences.aspectChoice,selectedResolution);
-    // Restore the selected detail after opening or moving to another monitor.
-    publishVideoMode(state,video.render.mode);
-    state.setVideoModeAvailable(true);
+    PortMenuState state(inGame,settings,renderer);
+    configureVideoModes(window,state);
+    auto& mode=settings.render.mode;
+    const auto storedMode=mode;
+    mode=state.selectedRenderMode();
+    if (storedMode.renderScale!=mode.renderScale || storedMode.nativeMax!=mode.nativeMax)
+        saveUserSettings(settingsPath,settings);
+    unsigned selectedResolution=state.resolutionChoice();
+    unsigned selectedAspect=state.aspectChoice();
     double seconds=0.,selectionChangedAt=0.;
     const std::uint32_t effectSeed=hash32(std::uint32_t(SDL_GetTicksNS()));
     std::uint32_t selectionSeed=hash32(effectSeed ^ 0x51409a6du);
     unsigned selectionCount=0;
-    // Comparing displayed option values catches keys, mouse clicks and language
-    // selection without adding settings or real effects to the gameplay model.
     const auto valuesOnPage=[&]() {
         std::string labels;
         for (unsigned row=0;row<state.rowCount();++row) {
@@ -303,36 +297,26 @@ PortMenuChoice showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
     const auto selectionChanged=[&](PortMenuPage previousPage,unsigned previousSelection,
                                     const std::string& previousValues) {
         const bool changedPage=state.page()!=previousPage;
-        // A requested aspect must not force an exclusive hardware resolution.
-        // It is still an unimplemented wide-FOV view choice, shown as such.
-        if(state.page()==PortMenuPage::Video) {
-            const bool aspectChanged=state.aspectChoice()!=preferences.aspectChoice;
-            if(aspectChanged) {
-                const auto* previous=state.selectedVideoMode();
-                const bool wasMax=previous && previous->nativeMax;
-                const unsigned oldChoice=state.resolutionChoice();
-                state.setAvailableVideoModes(availableVideoModes(window,state.aspectChoice()));
-                state.setVideoChoices(state.aspectChoice(),wasMax
-                    ? state.availableModeCount()
-                    : std::min(oldChoice,state.availableModeCount()));
-            }
-            preferences.aspectChoice=state.aspectChoice();
-            preferences.fisheyeEnabled=state.fisheyeEnabled();
-            if(state.resolutionChoice()!=selectedResolution || aspectChanged) {
-                const bool supported=applyVideoWindowSize(window,state,video.render.mode);
+        if (state.page()==PortMenuPage::Video) {
+            const bool aspectChanged=state.aspectChoice()!=selectedAspect;
+            if (aspectChanged) configureVideoModes(window,state);
+            if (state.resolutionChoice()!=selectedResolution || aspectChanged) {
+                const bool supported=applyVideoWindowSize(window,state,mode);
                 state.setVideoModeAvailable(supported);
-                if(supported) {
+                if (supported) {
+                    selectedAspect=state.aspectChoice();
                     selectedResolution=state.resolutionChoice();
-                    if(const auto* mode=state.selectedVideoMode()) {
-                        video.selectedMode=*mode;
-                    } else video.selectedMode.reset();
                 } else {
-                    SDL_Log("VIDEO: real display mode switch failed; keeping prior selection");
-                    state.setVideoChoices(preferences.aspectChoice,selectedResolution);
+                    state.setVideoChoices(selectedAspect,selectedResolution);
+                    configureVideoModes(window,state);
                 }
             }
         }
         const bool changedValue=!changedPage && valuesOnPage()!=previousValues;
+        if (changedValue && state.page()!=PortMenuPage::Password) {
+            if (state.page()==PortMenuPage::Audio) audio.setVolume(settings.audioGain());
+            saveUserSettings(settingsPath,settings);
+        }
         if (!changedPage && !changedValue && state.selection()==previousSelection) return;
         selectionChangedAt=seconds;
         selectionSeed=hash32(effectSeed ^ ++selectionCount*0x9e3779b9u ^
@@ -347,6 +331,18 @@ PortMenuChoice showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
         } else if (changedValue) audio.adjust();
         else audio.hover();
     };
+    struct PasswordInput {
+        SDL_Window* window;
+        bool active = false;
+        void set(bool enabled) {
+            if (enabled==active) return;
+            active=enabled;
+            if (enabled) SDL_StartTextInput(window);
+            else SDL_StopTextInput(window);
+        }
+        ~PasswordInput() { set(false); }
+    } passwordInput{window};
+    std::optional<Uint64> responseStarted;
     bool focused=(SDL_GetWindowFlags(window)&SDL_WINDOW_INPUT_FOCUS)!=0;
     auto previous=SDL_GetTicksNS();
     while (true) {
@@ -359,6 +355,8 @@ PortMenuChoice showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
                 focused=false;
             if (event.type==SDL_EVENT_WINDOW_FOCUS_GAINED && event.window.windowID==windowId)
                 focused=true;
+            if (event.type==SDL_EVENT_RENDER_DEVICE_RESET && event.render.windowID==windowId)
+                applyPreferredVSync(renderer,settings);
             if (!focused) continue;
             if (event.type==SDL_EVENT_KEY_DOWN && event.key.windowID==windowId) {
                 const auto old=state.selection();
@@ -367,6 +365,9 @@ PortMenuChoice showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
                 const auto choice=state.key(event.key.scancode,event.key.repeat);
                 if (choice!=PortMenuChoice::None) return choice;
                 selectionChanged(oldPage,old,oldValues);
+                passwordInput.set(state.page()==PortMenuPage::Password && !state.passwordSubmitted());
+            } else if (event.type==SDL_EVENT_TEXT_INPUT && event.text.windowID==windowId) {
+                state.typePassword(event.text.text);
             } else if (event.type==SDL_EVENT_MOUSE_MOTION && event.motion.windowID==windowId) {
                 if (SDL_ConvertEventToRenderCoordinates(renderer,&event)) {
                     const auto oldPage=state.page();
@@ -384,10 +385,20 @@ PortMenuChoice showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
                     const auto choice=state.pointerClick(event.button.x,event.button.y);
                     selectionChanged(oldPage,old,oldValues);
                     if (choice!=PortMenuChoice::None) return choice;
+                    passwordInput.set(state.page()==PortMenuPage::Password && !state.passwordSubmitted());
                 }
             }
         }
         const auto now=SDL_GetTicksNS();
+        if (state.passwordSubmitted()) {
+            if (!responseStarted) responseStarted=now;
+            // Approximate the DOS hold of 140 VGA retraces at 70 Hz.
+            if (now-*responseStarted>=2000000000ull) {
+                if (const auto* checkpoint=state.finishPasswordResponse())
+                    return {PortMenuChoice::Continue,checkpoint};
+                responseStarted.reset();
+            }
+        }
         if (focused) seconds+=std::min(double(now-previous)*1e-9,.06);
         previous=now;
         if (!renderPortMenu(renderer,font.get(),state,seconds,seconds-selectionChangedAt,

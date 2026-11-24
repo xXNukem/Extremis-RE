@@ -273,6 +273,42 @@ static Level1 decodeLevel(const std::vector<std::uint8_t>& bytes, unsigned zoneI
         for (unsigned i=0;i<count;++i) level.codeTargets.push_back(code.u16());
     }
     const auto tableEnd = readSectors(bytes, begin, end, level);
+    const auto generatorOffset = codeHeader.u16();
+    if (generatorOffset) {
+        std::size_t firstSector = end - begin;
+        for (const auto& sector : level.sectors)
+            firstSector = std::min<std::size_t>(firstSector, sector.localOffset);
+        if (generatorOffset < tableEnd || generatorOffset >= firstSector)
+            throw std::runtime_error("Invalid generator table offset");
+        Reader generators(bytes, begin + generatorOffset, begin + firstSector, "Generator table");
+        const auto count = generators.u16();
+        if (count) {
+            level.generatorHealth = generators.u16();
+            generators.require(2u * count);
+            for (unsigned i = 0; i < count; ++i) {
+                const auto sector = generators.u16();
+                if (sector >= level.sectors.size()) throw std::runtime_error("Invalid generator sector");
+                level.generatorSectors.push_back(sector);
+            }
+        }
+    }
+
+    // The DOS bomb retains the source sector number after travel. Keep only
+    // the pseudo-origin words reachable from a valid sector in this LAB.
+    std::size_t maxSectors = level.sectors.size();
+    for (unsigned zone = 0; zone < result.header.levelCount; ++zone) {
+        const auto start = result.header.offsets[zone];
+        const auto stop = result.header.offsets[zone + 1];
+        if (stop - start >= 0x14) {
+            const auto n = bytes[start+0x12] | (unsigned(bytes[start+0x13]) << 8);
+            maxSectors = std::max<std::size_t>(maxSectors,n);
+        }
+    }
+    Reader trailing(bytes, begin + tableEnd, end, "Cross-level bomb coordinates");
+    for (auto i = level.sectors.size(); i < maxSectors && end - trailing.position() >= 6; ++i) {
+        trailing.u16();
+        level.trailingOrigins.push_back({trailing.u16(),trailing.u16()});
+    }
     Reader routeHeader(bytes, begin + 8, end, "Sector route offsets");
     const auto routeOffset = routeHeader.u16();
     const auto routeEnd = routeHeader.u16();
@@ -314,6 +350,29 @@ static Level1 decodeLevel(const std::vector<std::uint8_t>& bytes, unsigned zoneI
         }
     }
     return result;
+}
+
+std::optional<Vertex> bombOrigin(const Level& level, unsigned sector, std::uint16_t x, std::uint16_t y)
+{
+    Vertex origin{};
+    if (sector < level.sectors.size()) {
+        origin = {level.sectors[sector].gx, level.sectors[sector].gy};
+    } else {
+        const auto trailing = sector - level.sectors.size();
+        if (trailing >= level.trailingOrigins.size()) return std::nullopt;
+        origin = level.trailingOrigins[trailing];
+    }
+    return Vertex{std::uint16_t(origin.x + x),std::uint16_t(origin.y + y)};
+}
+
+unsigned blastStrength(Vertex origin, Vertex target)
+{
+    const auto axis = [](unsigned a, unsigned b) {
+        const auto delta = std::uint16_t(a - b);
+        return std::min<unsigned>(delta, std::uint16_t(0u - delta));
+    };
+    const unsigned distance = std::max(axis(origin.x,target.x),axis(origin.y,target.y));
+    return distance >= 800 ? 0 : 100 - distance * 100 / 800;
 }
 
 Level1 loadLevel(const std::filesystem::path& path, unsigned zoneIndex)

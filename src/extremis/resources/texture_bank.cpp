@@ -1,5 +1,6 @@
 #include "extremis/resources/texture_bank.h"
 #include "extremis/resources/spr_format.h"
+#include "extremis/resources/vga_palette.h"
 
 #include <array>
 #include <fstream>
@@ -38,17 +39,10 @@ std::vector<std::uint8_t> readExactFile(const std::filesystem::path& path,
 std::array<Rgb, 256> loadPalette(const std::filesystem::path& path)
 {
     const auto bytes = readExactFile(path, 768);
+    const auto decoded = vga_palette::decode(bytes.data(), "Invalid 6-bit palette component in " + path.string());
     std::array<Rgb, 256> palette{};
     for (std::size_t i = 0; i < palette.size(); ++i) {
-        std::array<std::uint8_t, 3> rgb{};
-        for (std::size_t channel = 0; channel < rgb.size(); ++channel) {
-            const auto value = bytes[i * 3 + channel];
-            if (value > 63) {
-                throw std::runtime_error("Invalid 6-bit palette component in " + path.string());
-            }
-            // Same full-range rounding as the research extractor; 63 gives 255.
-            rgb[channel] = static_cast<std::uint8_t>((value * 255 + 31) / 63);
-        }
+        const auto& rgb = decoded[i];
         palette[i] = {rgb[0], rgb[1], rgb[2]};
     }
     return palette;

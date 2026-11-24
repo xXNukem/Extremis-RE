@@ -26,10 +26,11 @@ class World {
 public:
     explicit World(const game_lab::Level& level);
     const std::vector<Panel>& panels() const;
+    void storePanelContents(game_lab::Level& level) const;
     Collection collect(const Camera& camera, bool alive, player::Inventory& inventory,
                        const collision::World& obstacles);
     std::optional<std::size_t> target(const Camera& camera, const collision::World& obstacles) const;
-    player::Transfer take(std::size_t index, player::Inventory& inventory);
+    player::Transfer take(std::size_t index, player::Inventory& inventory, bool exchangeChargedBattery = false);
     player::Transfer replaceCard(std::size_t index, player::Inventory& inventory, unsigned slot);
 private:
     std::optional<double> reachable(const Panel& panel, const Camera& camera,

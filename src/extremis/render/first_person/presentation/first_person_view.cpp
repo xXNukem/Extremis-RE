@@ -177,7 +177,8 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
                                const hud::Renderer* hudRenderer, const hud::State& hudState,
                                const interaction::Renderer* interactionRenderer,
                                const interaction::State* interactionState, const sprites::Scene* projectileScene, const sprites::Scene* enemyScene, const std::vector<sprites::Instance>* enemyEffects,
-                               const original_map::Renderer* map, const original_map::State* mapState)
+                               const original_map::Renderer* map, const original_map::State* mapState,
+                               extremis::PaletteTint tint, const sprites::Scene* bomb)
 {
     auto* grid = rayGrid_ && rayGrid_->matches(level) ? rayGrid_.get() : nullptr;
     if (!provisionalTexture && !materials && !planes && !spriteScene && !projectileScene && !hudRenderer) {
@@ -241,18 +242,19 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
     style.wallContext = &walls;
     style.ceilingColor = vortex::packOpaqueRgb(20, 23, 32);
     style.floorColor = vortex::packOpaqueRgb(45, 39, 34);
-    style.planes = planes;
+    style.planes = video_.preferences.floorAndCeiling ? planes : nullptr;
     style.planeRepeat = wall_textures::solRepeatPeriod;
 
-    std::array<cpu::SpriteLayer, 4> layers{{
+    std::array<cpu::SpriteLayer, 5> layers{{
         {spriteScene ? &spriteScene->bank : nullptr, spriteScene ? &spriteScene->objects : nullptr},
         {enemyScene ? &enemyScene->bank : nullptr, enemyScene ? &enemyScene->objects : nullptr},
         {enemyScene ? &enemyScene->bank : nullptr, enemyEffects},
+        {bomb ? &bomb->bank : nullptr, bomb ? &bomb->objects : nullptr},
         {projectileScene ? &projectileScene->bank : nullptr,
          projectileScene ? &projectileScene->objects : nullptr},
     }};
     style.layers = layers.data();
-    style.layerCount = spriteScene || enemyScene || projectileScene ? layers.size() : 0;
+    style.layerCount = spriteScene || enemyScene || projectileScene || bomb ? layers.size() : 0;
 
     ShotCapture capture{layers.size() - 1, {}};
     const bool traceShots = extremis::shot_trace::pixels && projectileScene &&
@@ -327,7 +329,7 @@ bool FirstPersonRenderer::draw(const game_lab::Level& level, const Camera& camer
         }
     }
     frameReady_=true;
-    return presentFrame(hudRenderer != nullptr,outputWidth,outputHeight,hudRenderer);
+    return presentFrame(hudRenderer != nullptr,outputWidth,outputHeight,hudRenderer,tint);
 }
 
 const std::vector<std::uint32_t>& FirstPersonRenderer::frame() const

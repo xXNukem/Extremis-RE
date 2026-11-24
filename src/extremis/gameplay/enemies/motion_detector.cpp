@@ -37,8 +37,8 @@ Reading scan(const game_lab::Level& level, const std::vector<game_lab::EnemyReco
         const double dx=double(sector.gx)+enemy.x-std::round(camera.x);
         const double dy=double(sector.gy)+enemy.y-std::round(camera.y);
         if (std::abs(dx)>=32768 || std::abs(dy)>=32768) continue;
-        // Native Q14 rotation, then arithmetic shift6. Preserve the native X sign.
-        const int x=int(std::floor((dy*s-dx*c)/1048576.0));
+        // EXE 0x11196–0x111a4 subtracts DY*sin from DX*cos before the shifts.
+        const int x=int(std::floor((dx*c-dy*s)/1048576.0));
         const int y=int(std::floor((dy*c+dx*s)/1048576.0));
         if (x< -27 || x>=27 || y< -3 || y>=32) continue;
         const unsigned sectorAngle=angle(-x,y)/60;

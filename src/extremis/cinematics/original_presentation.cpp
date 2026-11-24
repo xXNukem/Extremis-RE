@@ -1,5 +1,7 @@
 #include "extremis/world/pit_clock.h"
 #include "extremis/cinematics/original_presentation.h"
+#include "extremis/ui/localization.h"
+#include "extremis/ui/cinematic_text.h"
 #include "vortex/core/graphics/color.h"
 #include "extremis/resources/texture_bank.h"
 #include <algorithm>
@@ -20,6 +22,7 @@ Resources loadResources(const std::filesystem::path& directory) {
     r.title=anm_format::load(directory/"TITRE.ANM");
     constexpr const char* names[]{"PRESENTE.VGA","WHO1.VGA","WHO2.VGA","WHO3.VGA","WHO4.VGA"};
     for(unsigned i=0;i<5;++i) r.cards[i]=anm_format::loadVga(directory/names[i]);
+    r.creditFont=spr_format::load(directory/"CASQUE.SPR");
     return r;
 }
 Presentation::Presentation(Resources resources):resources_(std::move(resources)) {
@@ -30,6 +33,7 @@ Presentation::Presentation(Resources resources):resources_(std::move(resources))
     };
     validate(resources_.concept,24);validate(resources_.title,18);
     for(const auto& a:resources_.cards) validate(a,1);
+    if(!resources_.creditFont.empty() && resources_.creditFont.size()!=86) throw std::runtime_error("Invalid credit font");
     const auto& s=resources_.conceptSprite;
     if(s.width<=0 || s.height<=0 || s.width>320 || s.height>200 ||
        s.anchorX<0 || s.anchorX>320 || s.anchorY<0 || s.anchorY>200 ||
@@ -57,7 +61,33 @@ void Presentation::enter(Screen screen) {
     default: {
         phase_=Phase::FadeIn;brightness_=0;
         const unsigned card=screen==Screen::Presente?0:1+unsigned(screen)-unsigned(Screen::Who1);
-        palette_=resources_.cards[card].palette;canvas_=resources_.cards[card].frames[0];break;
+        palette_=resources_.cards[card].palette;canvas_=resources_.cards[card].frames[0];
+        if(localization::current()==localization::Language::Spanish && !resources_.creditFont.empty()) {
+            const std::string id=card?"intro.who.0"+std::to_string(card):"intro.presente";
+            const auto translated=localization::cinematicById(id,localization::current());
+            if(!translated.empty()) {
+                const int first=card?77:83,last=card?92:103;
+                for(int y=first;y<last;++y) for(int x=45;x<275;++x) {
+                    const auto v=canvas_[y*320+x];const auto c=palette_[v];
+                    if((c>>24)>180 && ((c>>16)&255)>180 && ((c>>8)&255)>180) canvas_[y*320+x]=0;
+                }
+                const auto map=[](unsigned char c)->int {
+                    if(c>='a'&&c<='z') c=static_cast<unsigned char>(c-'a'+'A');
+                    if(c>='A'&&c<='Z') return 42+c-'A';
+                    if(c>='0'&&c<='9') return 68+c-'0';
+                    return -1;
+                };
+                std::uint8_t white=1;unsigned brightness=0;
+                for(unsigned i=1;i<256;++i) {
+                    const auto c=palette_[i];const unsigned value=(c>>24)+((c>>16)&255)+((c>>8)&255);
+                    if(value>brightness) {brightness=value;white=std::uint8_t(i);}
+                }
+                const int w=localization::measureIndexed(resources_.creditFont,translated,map);
+                localization::drawIndexed(canvas_,resources_.creditFont,translated,1,1,
+                    std::max(0,(320-w)/2),card?79:88,320,card?93:104,11,map,false,white);
+            }
+        }
+        break;
     }
     }
     colors();

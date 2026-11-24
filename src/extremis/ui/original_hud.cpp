@@ -1,4 +1,6 @@
 #include "extremis/ui/original_hud.h"
+#include "extremis/ui/localization.h"
+#include "extremis/ui/utf8_glyph.h"
 #include "vortex/core/graphics/color.h"
 #include "extremis/gameplay/player/weapon_definitions.h"
 
@@ -229,14 +231,24 @@ void Renderer::weapon(std::vector<std::uint32_t>& pixels, const State& state) co
 int Renderer::message(std::vector<std::uint32_t>& pixels, std::string_view text, int y) const
 {
     int x = 8;
-    for (unsigned char character : text) {
+    const auto localized=localization::translate(text); text=localized;
+    for (std::size_t i=0;i<text.size();) {
+        const auto decoded=localization::glyph(text,i); i+=decoded.bytes;
+        const unsigned char character=decoded.base;
         if (y+10 > viewHeight) break;
         if (character == '\n') continue; // Original CR controls the newline.
         if (character == '\r') { x = 8; y += 11; continue; }
         if (character == ' ') { x += 9; }
         else if (const auto index = glyph(character)) {
             const auto& sprite = resources_.casque[*index];
-            image(pixels,sprite,x,y,true);
+            if(decoded.mark=='i') {
+                for(int row=0;row<sprite.height;++row) for(int col=0;col<sprite.width;++col) {
+                    const auto index=sprite.indices[(sprite.height-1-row)*sprite.width+(sprite.width-1-col)];
+                    if(index && x+col>=0 && x+col<width && y+row>=0 && y+row<height)
+                        pixels[(y+row)*width+x+col]=colors_[index];
+                }
+            } else image(pixels,sprite,x,y,true);
+            if(decoded.mark && decoded.mark!='i') localization::markPixels(pixels,x,y,sprite.width,sprite.height,colors_[255],decoded.mark);
             x += sprite.width+1;
         }
         if (x > 312) { x = 8; y += 11; }
@@ -258,9 +270,12 @@ bool Renderer::draw(std::vector<std::uint32_t>& pixels, const State& state) cons
     if (state.detector.phase) for(unsigned i=0;i<std::min(state.detector.count,10u);++i) {
         const auto& contact=state.detector.contacts[i];
         const auto& dot=resources_.casque[13+std::min(contact.intensity,2u)];
-        if (contact.x < -dot.width || contact.x>45 || contact.y<171-dot.height || contact.y>199) continue;
+        // DOS blitter 0x233f–0x2346 applies the SPR anchor before clipping.
+        if (contact.x<=dot.anchorX-dot.width || contact.x>45+dot.anchorX ||
+            contact.y<=171+dot.anchorY-dot.height || contact.y>199+dot.anchorY) continue;
+        const int left=contact.x-dot.anchorX,top=contact.y-dot.anchorY;
         for(int y=0;y<dot.height;++y) for(int x=0;x<dot.width;++x) {
-            const int px=contact.x+x,py=contact.y+y;
+            const int px=left+x,py=top+y;
             if (px>=0 && px<=45 && py>=171 && py<=199) {
                 const auto index=dot.indices[y*dot.width+x];
                 if (index) pixels[py*width+px]=colors_[index];
@@ -286,7 +301,7 @@ bool Renderer::draw(std::vector<std::uint32_t>& pixels, const State& state) cons
 void Renderer::equipment(std::vector<std::uint32_t>& pixels, const State& state) const
 {
     // EXE 0x1420e..0x14305; coordinate tables at file 0x14379 and 0x14391.
-    if (state.batteryCharge>=0) image(pixels,resources_.casque[state.detectorEnabled?41:40],222,156,true);
+    if (state.batteryCharge>=0) image(pixels,resources_.casque[state.batteryInUse?41:40],222,156,true);
     if (state.oxygenBottle) image(pixels,resources_.casque[36],184,157,true);
     const unsigned cards = std::min(state.cards,3u), injectors = std::min(state.injectors,2u);
     constexpr int cardY[3][3] = {{171,0,0},{161,181,0},{157,171,185}};

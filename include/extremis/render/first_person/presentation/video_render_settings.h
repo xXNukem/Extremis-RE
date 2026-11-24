@@ -5,7 +5,11 @@
 struct VideoPreferences {
     unsigned aspectChoice = 3; // AUTO
     bool fisheyeEnabled = false;
+    bool floorAndCeiling = true;
+    bool coloredLights = true;
 };
+
+inline constexpr int maxDosResolutionScale = 24;
 
 struct VideoRenderMode {
     int renderScale = 1;

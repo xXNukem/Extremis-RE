@@ -11,7 +11,7 @@ The reconstructed [`Inventory`](../../include/extremis/gameplay/player/player_in
 | Cards | **3** | Selection and replacement; not just an unordered keyring |
 | Injectors | **2** | Restore health when used |
 | Oxygen reserve | **1** | Exchange oxygen values with the main tank |
-| Mine | **1** | Stored as an inventory item; use mechanics still being investigated |
+| Mine | **1** | Inventory bomb. DOS places it at the player’s current local position on confirmation |
 | Battery | **1** | Supplies the detector or optical equipment system |
 | Equipped weapon | **1** | Current weapon plus ammunition |
 
@@ -53,14 +53,24 @@ Zone access codes and their target lists are part of the level data. The loader 
 
 Those are separate pieces of state. They can affect one another without becoming the same variable.
 
-## Battery, detector and the optics question
+## Battery, detector and optics
 
-The original new-game template begins with the battery slot absent (`-1`). A working battery can be assigned to the motion detector; the original interface also contains an optical-device choice. The original control logic found so far switches between these uses rather than enabling both simultaneously through that menu.
+NEW GAME starts without a battery. The first stock battery is in level 2, sector 13 (zero-based). With a charged battery, open inventory with **I**, select **Battery** and press **E**. Use **W/S** or **↑/↓** to select a mode, turn the current one off, or leave it unchanged. **E** confirms and returns to play. Both modes consume the same charge at the same rate and shut off at zero. Either mode lights the battery indicator, and radar is the one that displays contacts.
+
+Optics changes the gameplay image and HUD to green by doubling the green palette channel up to the VGA limit. A palette entry with zero green appears black. Optics suppresses colored lamp tint. Power Surging can darken the green image while the battery still has charge.
+
+Open a battery cabinet and confirm the pickup. When the installed battery
+still has charge, choose **Take battery** or **Keep battery** and press **E**.
+Taking it puts the old battery in the cabinet with its charge rounded down
+to the cabinet's storage unit. An empty installed battery leaves zero. The
+cabinet empties when the player had no battery. [Optic system, charge rules and cabinet locations](../reference/exe/colored-lights.md#optic-system-and-battery).
 
 The detector shows up to ten enemy contacts in its own HUD area. It doesn't require direct line of sight: a target can be behind a wall and still register. See [Enemies](enemies.md) and [Interfaces](interfaces.md).
 
-## What still needs work?
+## Inventory bomb
 
-Inventory-full replacement cases, mine placement and explosion, some special reader sequences and a few endgame interactions are still under investigation. The existence of a mine item or a possible alien nest is **not proof** that every guessed explosion rule is correct.
+DOS consumes the bomb slot when the inventory choice is accepted. After the arming animation the fuse advances in gameplay and warns of five seconds. The charge flashes and shakes the view at detonation. A blast within 207 horizontal map units on each axis disables an eligible generator and leaves its broken sprite in place. DOS stores that variant in the working LAB when travelling. An armed fuse follows the saved sector index and local coordinates into the destination level. The port implements placement, damage and generator persistence. The DOS arming animation and live timing comparison remain pending. [Bomb timing, damage and generator data](../reference/exe/nests-and-bomb.md).
+
+Inventory-full replacement cases, some reader sequences and other endgame interactions are still under investigation.
 
 **Where to look:** [`player_inventory.h`](../../include/extremis/gameplay/player/player_inventory.h), [`level_items.cpp`](../../src/extremis/gameplay/items/level_items.cpp), [`item_session.cpp`](../../src/app/session/item_session.cpp), [`original_interactions.cpp`](../../src/extremis/ui/original_interactions.cpp). Original case studies include the C001/door-7 flow and the map-transfer panel; they are not templates for every panel in the game.

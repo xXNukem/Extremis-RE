@@ -10,11 +10,18 @@
 
 std::optional<ItemSession::Travel> ItemSession::takeTravel() { return std::exchange(travel_,std::nullopt); }
 
+bool ItemSession::takeBombPlacement() { return std::exchange(bombPlacement_, false); }
+
+void ItemSession::storePanelContents(game_lab::Level& level) const
+{
+    if (world_ && level.zoneIndex == zone_) world_->storePanelContents(level);
+}
+
 void ItemSession::load(const game_lab::Level& level)
 {
     if (level.zoneIndex>=plans_.size()) throw std::runtime_error("Invalid map zone");
     animationTime_=planTicks_=0; resumeAnimation_=false; pendingCard_.reset();
-    zone_=level.zoneIndex; travel_.reset();
+    zone_=level.zoneIndex; travel_.reset(); bombPlacement_=false;
     world_.emplace(level); accessCode_=level.accessCode; authorized_=false;
     codeTargets_=level.codeTargets;
     interface_.reset(); panel_.reset(); take_=injector_=oxygen_=false; action_=Action::None;
@@ -100,14 +107,15 @@ void ItemSession::navigate(Action action)
         if (horizontal) return;
         const int delta=action==Action::Up?-1:1;
         if (s.inventoryUse) {
-            const int last=s.selection==2 && s.injectors[0]>0 && s.injectors[1]>0?2:1;
+            const int last=s.selection==0 || (s.selection==2 && s.injectors[0]>0 && s.injectors[1]>0) ? 2 : 1;
             s.useSelection=unsigned(std::clamp(int(s.useSelection)+delta,0,last));
         }
         else s.selection=unsigned(std::clamp(int(s.selection)+delta,0,5));
         blink_=0; s.blinkVisible=true; return;
     }
     if ((s.screen==interaction::Screen::Cards || s.screen==interaction::Screen::Codes) && horizontal) return;
-    if ((s.screen==interaction::Screen::Supply || s.screen==interaction::Screen::Weapon) && !horizontal) return;
+    if ((s.screen==interaction::Screen::Supply || s.screen==interaction::Screen::Weapon) &&
+        !horizontal && !s.replacing) return;
     if (s.screen!=interaction::Screen::Codes) s.notice.clear();
     const int delta=(action==Action::Left || action==Action::Up)?-1:1;
     if (s.screen==interaction::Screen::Code) {
@@ -234,7 +242,8 @@ void ItemSession::confirm(SurvivalSession& player, GameAudio& audio, DoorControl
     }
     case Screen::Inventory:
         audio.interfaceKey();
-        if (interface_->selection==5) audio.interfaceMotor();
+        if (interface_->selection==5 || (interface_->selection==0 && interface_->inventoryUse))
+            audio.interfaceMotor();
         confirmInventory(player); return;
     case Screen::Codes:
         audio.interfaceKey();
@@ -251,7 +260,7 @@ void ItemSession::confirm(SurvivalSession& player, GameAudio& audio, DoorControl
     }
     audio.confirmItemSelection(); // Original confirmation precedes both Yes and No branches.
     if (interface_->selection) { closePanel(audio); return; }
-    const auto result=world_->take(*panel_,player.inventory());
+    const auto result=world_->take(*panel_,player.inventory(),interface_->replacing);
     if (result==player::Transfer::Taken || result==player::Transfer::Exchanged) {
         interface_->contentTaken=true;
         closePanel(audio);
@@ -261,12 +270,18 @@ void ItemSession::confirm(SurvivalSession& player, GameAudio& audio, DoorControl
         interface_->screen=Screen::Cards; interface_->cards=player.inventory().cards();
         interface_->selection=0; interface_->replacing=true;
     } else if ((interface_->contents>>12)==6) interface_->notice="ALREADY HAVE A MINE";
-    else if ((interface_->contents>>12)==0) interface_->notice="ALREADY HAVE A BATTERY";
-    else interface_->notice=(interface_->contents>>12)==1?
+    else if (result==player::Transfer::Capacity && interface_->screen==Screen::Supply &&
+             (interface_->contents>>12)==0) {
+        interface_->replacing=true;
+        interface_->batteryCharge=player.inventory().batteryCharge();
+        interface_->selection=0;
+        blink_=0;
+    } else interface_->notice=(interface_->contents>>12)==1?
         "ALREADY HAVE AN OXYGEN BOTTLE":"ALREADY HAVE TWO INJECTORS";
 }
 void ItemSession::update(const Camera* camera, bool active, const collision::World& obstacles,
-                         SurvivalSession& player, GameAudio& audio, DoorControl* security, double seconds)
+                         SurvivalSession& player, GameAudio& audio, DoorControl* security, double seconds,
+                         bool enemyInConnectedSet)
 {
     const bool inventory=std::exchange(inventoryRequested_,false);
     const bool take=std::exchange(take_,false), injector=std::exchange(injector_,false);
@@ -294,7 +309,7 @@ void ItemSession::update(const Camera* camera, bool active, const collision::Wor
         }
         return;
     }
-    if (inventory && available_) {
+    if (inventory && available_ && !enemyInConnectedSet) {
         player.clearMessages(); // EXE 0x6f17 clears the queue before inventory mode 0.
         panel_.reset(); interface_.emplace(); blink_=0;
         interface_->screen=interaction::Screen::Inventory;
@@ -333,15 +348,26 @@ void ItemSession::refreshInventory(const SurvivalSession& player)
     auto& s=*interface_;
     s.cards=player.inventory().cards(); s.injectors=player.inventory().injectors();
     s.oxygenReserve=player.inventory().oxygenReserve(); s.mine=player.inventory().mine();
-    s.batteryCharge=player.inventory().batteryCharge(); s.detectorEnabled=player.inventory().detectorEnabled();
+    s.batteryCharge=player.inventory().batteryCharge(); s.batteryMode=player.inventory().batteryMode();
 }
 void ItemSession::confirmInventory(SurvivalSession& player)
 {
     auto& s=*interface_;
     if (s.selection==5) { interface_.reset(); return; }
     if (s.inventoryUse) {
+        if (s.selection==4 && !s.useSelection && player.inventory().useMine()) {
+            bombPlacement_=true;
+            interface_.reset();
+            return;
+        }
         if (s.selection==0) {
-            if (!s.useSelection) player.inventory().toggleDetector();
+            using Mode=player::BatteryMode;
+            if (s.useSelection==0)
+                player.inventory().setBatteryMode(s.batteryMode==Mode::Off ? Mode::Radar : Mode::Off);
+            else if (s.useSelection==1)
+                player.inventory().setBatteryMode(s.batteryMode==Mode::Optics ? Mode::Radar : Mode::Optics);
+            interface_.reset();
+            return;
         } else if (s.selection==2 && s.injectors[0]>0 && s.injectors[1]>0) {
             if (s.useSelection<2) player.inventory().useInjector(player.vitals(),s.useSelection);
         } else if (!s.useSelection) {
@@ -350,7 +376,7 @@ void ItemSession::confirmInventory(SurvivalSession& player)
         }
         s.inventoryUse=false; refreshInventory(player); return;
     }
-    if ((s.selection==0 && s.batteryCharge>0) || (s.selection==1 && s.oxygenReserve>0) ||
+    if ((s.selection==4 && s.mine>=0) || (s.selection==0 && s.batteryCharge>0) || (s.selection==1 && s.oxygenReserve>0) ||
         (s.selection==2 && std::any_of(s.injectors.begin(),s.injectors.end(),[](int i){return i>0;}))) {
         s.inventoryUse=true; s.useSelection=0;
     }

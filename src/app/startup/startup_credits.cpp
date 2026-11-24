@@ -7,7 +7,7 @@
 #include <exception>
 
 StartupCreditsResult showStartupCredits(SDL_Window* window, SDL_Renderer* renderer,
-                                        const std::filesystem::path& resourceDirectory)
+                                        const std::filesystem::path& resourceDirectory, float gain)
 {
     using namespace startup_credits;
 
@@ -43,7 +43,7 @@ StartupCreditsResult showStartupCredits(SDL_Window* window, SDL_Renderer* render
     }
 
     CreditsAudio audio;
-    if (result==StartupCreditsResult::Continue) audio.start();
+    if (result==StartupCreditsResult::Continue) audio.start(gain);
 
     const auto windowId=SDL_GetWindowID(window);
     auto previous=SDL_GetTicksNS();

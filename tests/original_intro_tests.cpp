@@ -1,4 +1,5 @@
 #include "extremis/cinematics/original_intro.h"
+#include "extremis/ui/localization.h"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -157,10 +158,24 @@ void invalidResources() {
         check(rejected,"Invalid resource accepted");
     }
 }
+void localizedRadar() {
+    localization::Language language=localization::Language::English;
+    localization::bind(&language);
+    Presentation english(fixture());reach(english,Scene::Radar);
+    english.advance(9*tick);
+    const auto source=english.indices();
+    const auto position=english.textPosition(),frame=english.frame();
+    language=localization::Language::Spanish;
+    Presentation spanish(fixture());reach(spanish,Scene::Radar);
+    spanish.advance(9*tick);
+    check(spanish.frame()==frame && spanish.textPosition()==position,"Intro localization changed source clock");
+    check(spanish.indices()!=source,"Spanish radar text was not rendered");
+    localization::bind(nullptr);
+}
 }
 int main(int argc,char** argv) {
     try {
-        sequence(fixture());textAndTiming();escapeBoundaries();graphics();invalidResources();
+        sequence(fixture());textAndTiming();escapeBoundaries();graphics();invalidResources();localizedRadar();
         if(argc==2) sequence(loadResources(argv[1]));
         std::cout<<"Original intro sequence/text/input/graphics tests passed"<<(argc==2?" (including local original resources)":"")<<"\n";
         return 0;

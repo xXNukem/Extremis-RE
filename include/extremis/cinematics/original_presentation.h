@@ -10,6 +10,7 @@ struct Resources {
     anm_format::Animation concept, title;
     // PRESENTE, WHO1, WHO2, WHO3, WHO4.
     std::array<anm_format::Animation,5> cards;
+    std::vector<spr_format::Image> creditFont;
 };
 Resources loadResources(const std::filesystem::path& directory);
 enum class Screen { LogoIn, LogoMovie, LogoHold, LogoOut, Presente, Title,

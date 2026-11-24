@@ -5,10 +5,12 @@
 
 #include <filesystem>
 
-struct PortMenuVideoState;
+struct UserSettings;
+namespace continuation { struct Checkpoint; }
 
 namespace app {
 StartupCreditsResult playStartupSequence(SDL_Window* window, SDL_Renderer* renderer,
     const LaunchOptions& options, const std::filesystem::path& dataDirectory,
-    bool hasLevel, PortMenuVideoState& video, int& exitCode);
+    bool hasLevel, UserSettings& settings, const std::filesystem::path& settingsPath, int& exitCode,
+    const continuation::Checkpoint*& checkpoint);
 }

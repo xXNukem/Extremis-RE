@@ -1,4 +1,5 @@
 #pragma once
+#include "extremis/ui/ambient_effects.h"
 
 #include "extremis/resources/game_lab.h"
 #include "extremis/resources/texture_bank.h"
@@ -54,12 +55,13 @@ public:
               const sprites::Scene* projectiles = nullptr,
               const sprites::Scene* enemies = nullptr,
               const std::vector<sprites::Instance>* enemyEffects = nullptr,
-              const original_map::Renderer* map = nullptr, const original_map::State* mapState = nullptr);
+              const original_map::Renderer* map = nullptr, const original_map::State* mapState = nullptr,
+              extremis::PaletteTint tint = {}, const sprites::Scene* bomb = nullptr);
 
 private:
     bool resizeFrame(int width, int height, bool withHud);
     bool presentFrame(bool withHud, int outputWidth, int outputHeight,
-                      const hud::Renderer* hudRenderer = nullptr);
+                      const hud::Renderer* hudRenderer = nullptr, extremis::PaletteTint tint = {});
 
     SDL_Renderer* renderer_;
     const VideoRenderSettings& video_;
@@ -69,6 +71,7 @@ private:
     platform::sdl::FrameTexture pickupTexture_;
     std::vector<std::uint32_t> pixels_;
     std::vector<std::uint32_t> composed_;
+    std::vector<std::uint32_t> tinted_;
     // Widescreen composition: extended world with the original 320x200 HUD
     // overlaid in the middle; cinematics still use their native 4:3 frame.
     std::vector<std::uint32_t> wideComposed_;

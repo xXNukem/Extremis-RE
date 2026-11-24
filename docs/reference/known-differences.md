@@ -42,15 +42,17 @@ The individual sprite, enemy, weapon, map and player collision tests in that run
 | **Door fidelity** | Original 0–90–0 state cycle integrated; compare trigger distance, player stall, exact scheduling and special connections against DOS |
 | **Elevator texture leakage** | Some cabin textures appear on adjoining corridor walls |
 | **Headbob impact table** | Normal bob table recovered, special hit-height table not yet installed |
-| **Player death presentation** | Original MORT0/MORT1 graphics, GAMEOVER and new-game menu path integrated; host-paced retrace/unpaced loops remain adapted. Native OPTIONS/password continuation are unavailable. Green GOUTTE is a separate enemy effect. See [evidence](exe/player-death.md). |
-| **Mines** | Placement, arming, consumption, explosion and damage need complete verification |
-| **Alien nests** | Even **which levels contain them** is not yet established; no invented list |
-| **`ATTENTION: POWER IS SURGING`** | Determine trigger, whole-level flicker mechanism and gameplay consequences |
+| **Player death presentation** | Original MORT0/MORT1 graphics and GAMEOVER are integrated. Health, oxygen, ship destruction and victory return to the custom menu. Host pacing remains adapted. Green GOUTTE is a separate enemy effect. See [evidence](exe/player-death.md). |
+| **Bomb inventory slot** | The port implements placement, fuse, explosion and damage. DOS runs a separate arming animation and shares its RNG with movement during the shock. See [port comparison](exe/nests-and-bomb.md#port-comparison-and-remaining-checks). |
+| **Alien nests** | The port reuses enemy slots, changes the sprite after a close blast and persists the mutation on travel. It uses the current connected-sector set, where DOS uses the previous one. Live DOS comparison is pending. See [generator evidence](exe/nests-and-bomb.md#reusing-enemy-slots). |
+| **Colored proximity lights and optics** | The port applies lamps, optics and transient tints to composed RGBA pixels quantized to RGB6. DOS programs an indexed VGA palette. The port discards the first resumed gameplay interval after a blocking interface. DOS sets the first delta after ordinary inventory return to 1. [Evidence and validation](exe/colored-lights.md#port-status-and-verification-boundary). |
+| **Motion detector cadence** | The port advances the sweep at the 18 Hz enemy simulation rate. DOS advances it once per gameplay loop. [Projection, marker placement and timing evidence](exe/motion-detector.md). |
+| **`ATTENTION: POWER IS SURGING`** | Original global timer, full DAC darkening, text and audio recovered. Port effect integrated with an independent random stream. DOS observation pending. See [evidence](exe/power-surging.md). |
 | **Greyscale modal background** | Check original locker/elevator palette behaviour before adding an effect |
 | **Map and transfer audio** | Confirm sound triggers and reproduce them accurately |
 | **Inventory full** | Complete original replacement/selection behaviour |
 | **Endgame and MONS9** | Verify final triggers and special reader sequence |
-| **Save/load** | Full state persistence and cross-level restoration still need a finished, tested solution |
+| **Password continuation** | LOAD GAME uses the [16 preset checkpoints](exe/password-continuation.md) and starts from a pristine world. The menu response uses host time and the arrival notice uses the port overlay. DOS uses VGA retrace timing and palette transitions. |
 | **Campaign playthrough** | Manual verification of all 30 levels and their transitions |
 | **Performance / aspect ratios** | Plane renderer cost and proper 4:3, 16:9, 21:9 handling |
 

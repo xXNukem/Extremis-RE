@@ -1,5 +1,7 @@
 #include "extremis/world/pit_clock.h"
 #include "extremis/cinematics/player_death.h"
+#include "extremis/ui/localization.h"
+#include "extremis/ui/cinematic_text.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -51,9 +53,6 @@ DeathResources loadDeathResources(const std::filesystem::path& directory)
     r.oxygen=anm_format::load(directory/"MORT1.ANM");
     r.gameOver=anm_format::loadVga(directory/"GAMEOVER.VGA");
     r.font=spr_format::load(directory/"TYPOOVER.SPR");
-    r.menu=anm_format::loadVga(directory/"MENU_F.VGA");
-    r.menuFont=spr_format::load(directory/"CON_VUET.SPR");
-    r.menuArt=spr_format::load(directory/"MENU2.SPR");
     // Keep original localized prose external. Bounded read from the audited EXE.
     std::ifstream exe(directory.parent_path()/"EXTREMIS.EXE",std::ios::binary);
     exe.seekg(0x21b96);
@@ -67,36 +66,16 @@ DeathResources loadDeathResources(const std::filesystem::path& directory)
         if(!exe) throw std::runtime_error("Missing original game-over text");
         r.lines.push_back(line);
     }
-    for(auto table:{0x2369e,0x236be}) for(unsigned i=0;i<3;++i) {
-        exe.seekg(table+4*i);
-        unsigned pointer=0;
-        for(unsigned byte=0;byte<4;++byte) {
-            const int value=exe.get();
-            if(value<0) throw std::runtime_error("Missing menu text pointer");
-            pointer|=unsigned(value)<<(byte*8);
-        }
-        if(pointer<0x23400 || pointer>0x23500) throw std::runtime_error("Unsupported menu text table");
-        exe.seekg(pointer+512);
-        std::string line; char c;
-        while(exe.get(c) && c) {
-            if(line.size()>=100) throw std::runtime_error("Invalid menu text");
-            line+=c;
-        }
-        if(!exe) throw std::runtime_error("Missing menu text");
-        r.menuLines.push_back(line);
-    }
     return r;
 }
 DeathPresentation::DeathPresentation(DeathResources resources):resources_(std::move(resources))
 {
-    for(const auto* movie:{&resources_.health,&resources_.oxygen,&resources_.gameOver,&resources_.menu})
+    for(const auto* movie:{&resources_.health,&resources_.oxygen,&resources_.gameOver})
         if(movie->frames.empty() || std::any_of(movie->frames.begin(),movie->frames.end(),
             [](const auto& f){return f.size()!=64000;})) throw std::runtime_error("Invalid death framebuffer");
-    if(resources_.body.size()!=6 || resources_.font.size()<69 || resources_.lines.size()!=8 ||
-       resources_.menuFont.size()<69 || resources_.menuArt.size()!=3 || resources_.menuLines.size()!=6 ||
-       resources_.menuArt[2].width!=62 || resources_.menuArt[2].height!=43)
+    if(resources_.body.size()!=6 || resources_.font.size()<69 || resources_.lines.size()!=8)
         throw std::runtime_error("Invalid death sprite/text resources");
-    for(const auto* bank:{&resources_.body,&resources_.font,&resources_.menuFont,&resources_.menuArt}) for(const auto& s:*bank)
+    for(const auto* bank:{&resources_.body,&resources_.font}) for(const auto& s:*bank)
         if(s.width<=0 || s.height<=0 || s.width>320 || s.height>200 ||
            s.indices.size()!=std::size_t(s.width)*s.height) throw std::runtime_error("Invalid death sprite");
 }
@@ -112,11 +91,6 @@ void DeathPresentation::reset()
 {
     stage_=Stage::Inactive; cause_=DeathCause::None; step_=frame_=characters_=0;
     ticks_=0; soundStart_=soundStop_=released_=false; pixels_.clear(); background_.clear();
-    selection_=0; runMenu_=false;
-}
-void DeathPresentation::beginMenu()
-{
-    reset(); enter(Stage::MenuReveal); compose();
 }
 void DeathPresentation::enter(Stage stage) { stage_=stage; step_=0; ticks_=0; }
 void DeathPresentation::begin(DeathCause cause,const std::vector<std::uint32_t>& background)
@@ -132,7 +106,7 @@ bool DeathPresentation::takeSoundStart() { const bool b=soundStart_; soundStart_
 bool DeathPresentation::takeSoundStop() { const bool b=soundStop_; soundStop_=false; return b; }
 void DeathPresentation::advance(double seconds,bool keyPressed,bool keyHeld)
 {
-    if(!active() || !std::isfinite(seconds) || seconds<0) return;
+    if(!active() || stage_==Stage::Finished || !std::isfinite(seconds) || seconds<0) return;
     ticks_+=seconds*(extremis::pit::rate);
     switch(stage_) {
     case Stage::Tint:
@@ -182,57 +156,12 @@ void DeathPresentation::advance(double seconds,bool keyPressed,bool keyHeld)
         else if(keyPressed || ticks_>=1601) enter(Stage::GameOverFade);
         break;
     case Stage::GameOverFade: if(++step_==101) enter(Stage::Finished); break;
-    case Stage::Finished: enter(Stage::MenuReveal); break;
-    case Stage::MenuReveal: if(++step_==51) enter(Stage::Menu); break;
-    case Stage::Menu: ++step_; break;
     default: break;
     }
     compose();
 }
-DeathPresentation::Request DeathPresentation::menuInput(int direction,bool confirm)
-{
-    if(stage_!=Stage::Menu) return Request::None;
-    selection_=unsigned(std::clamp(int(selection_)+direction,0,2));
-    if(confirm) {
-        if(selection_==1) return Request::Unsupported; // Native options/password systems are separate.
-        if(runMenu_) {
-            if(selection_==0) return Request::Restart;
-            runMenu_=false;
-        } else {
-            if(selection_==2) return Request::Exit;
-            runMenu_=true;
-        }
-        selection_=0; step_=0;
-    }
-    compose();
-    return Request::None;
-}
 void DeathPresentation::compose()
 {
-    if(stage_==Stage::MenuReveal || stage_==Stage::Menu) {
-        auto indices=resources_.menu.frames[0];
-        const auto& art=resources_.menuArt[2];
-        for(unsigned y=0;y<43;++y) for(unsigned x=0;x<62;++x) {
-            const auto rotation=stage_==Stage::MenuReveal?2:2*(step_+1);
-            const auto index=art.indices[y*62+(x+rotation)%62];
-            if(index) indices[(y+9)*320+x+251]=index;
-        }
-        for(unsigned row=0;row<3;++row) {
-            if(stage_==Stage::Menu && (step_&7)>=4 && selection_==row) continue;
-            const auto& line=resources_.menuLines[row+(runMenu_?3:0)];
-            int width=0; for(unsigned char c:line) width+=::player::advance(resources_.menuFont,c);
-            int x=39+(149-width)/2;
-            for(unsigned char c:line) {
-                const int g=glyph(c);
-                if(g>=0) blit(indices,resources_.menuFont[g],x,84+40*row,0,200);
-                x+=::player::advance(resources_.menuFont,c);
-            }
-        }
-        pixels_.resize(64000);
-        for(unsigned i=0;i<64000;++i) pixels_[i]=stage_==Stage::MenuReveal ?
-            color(resources_.menu.palette[indices[i]],step_*2,0,true):resources_.menu.palette[indices[i]];
-        return;
-    }
     if(stage_==Stage::Tint) {
         pixels_=background_;
         const unsigned amount=cause_==DeathCause::Oxygen?75+step_:step_*4;
@@ -258,6 +187,27 @@ void DeathPresentation::compose()
         for(int y=26;y<=173;++y) std::copy_n(work.begin()+y*320+55,210,indices.begin()+y*320+55);
     }
     if(end && stage_!=Stage::GameOverReveal) {
+        const auto language=localization::current();
+        if(language!=localization::Language::English) {
+            std::array<std::string_view,8> lines;
+            unsigned originalCount=0,translatedCount=0;
+            for(unsigned i=0;i<8;++i) {
+                originalCount+=unsigned(resources_.lines[i].size());
+                const std::string id="ending.game_over.line.0"+std::to_string(i+1);
+                lines[i]=localization::cinematicById(id,language);
+                if(lines[i].empty()) lines[i]=resources_.lines[i];
+                for(std::size_t j=0;j<lines[i].size();) {j+=localization::glyph(lines[i],j).bytes;++translatedCount;}
+            }
+            unsigned remaining=originalCount?unsigned((std::uint64_t(translatedCount)*std::min(characters_,originalCount)+originalCount-1)/originalCount):0;
+            const auto map=[](unsigned char c){return glyph(c);};
+            for(unsigned i=0;i<8;++i) {
+                unsigned count=0;for(std::size_t j=0;j<lines[i].size();) {j+=localization::glyph(lines[i],j).bytes;++count;}
+                const int width=localization::measureIndexed(resources_.font,lines[i],map);
+                localization::drawIndexed(indices,resources_.font,lines[i],std::min(remaining,count),std::max(1u,count),
+                    std::max(0,(320-width)/2),60+10*int(i),320,70+10*int(i),10,map);
+                remaining=remaining>count?remaining-count:0;
+            }
+        } else {
         unsigned remaining=characters_;
         int y=60;
         for(const auto& line:resources_.lines) {
@@ -270,6 +220,7 @@ void DeathPresentation::compose()
                 x+=::player::advance(resources_.font,c);
             }
             y+=10;
+        }
         }
     }
     pixels_.resize(64000);

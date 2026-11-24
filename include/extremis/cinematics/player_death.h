@@ -6,10 +6,9 @@
 
 namespace player {
 struct DeathResources {
-    anm_format::Animation health, oxygen, gameOver, menu, explosion;
-    std::vector<spr_format::Image> body, font, menuFont, menuArt;
+    anm_format::Animation health, oxygen, gameOver, explosion;
+    std::vector<spr_format::Image> body, font;
     std::vector<std::string> lines;
-    std::vector<std::string> menuLines;
 };
 DeathResources loadDeathResources(const std::filesystem::path& directory);
 // Recovered iteration counts, not fixed-second movie durations. A presentation
@@ -17,16 +16,13 @@ DeathResources loadDeathResources(const std::filesystem::path& directory);
 class DeathPresentation {
 public:
     enum class Stage { Inactive, Tint, Body, MovieReveal, Movie, Hold, Fade,
-                       GameOverReveal, Text, Wait, GameOverFade, Finished, MenuReveal, Menu };
-    enum class Request { None, Restart, Exit, Unsupported };
+                       GameOverReveal, Text, Wait, GameOverFade, Finished };
     explicit DeathPresentation(DeathResources resources);
     void begin(DeathCause cause, const std::vector<std::uint32_t>& background);
     void reset();
     void loadExplosion(const std::filesystem::path& directory);
     DeathCause cause() const;
-    void beginMenu();
     void advance(double seconds, bool keyPressed=false, bool keyHeld=false);
-    Request menuInput(int direction, bool confirm);
     Stage stage() const;
     bool active() const;
     bool takeSoundStart();
@@ -41,8 +37,6 @@ private:
     unsigned step_=0, frame_=0, characters_=0;
     double ticks_=0;
     bool soundStart_=false, soundStop_=false, released_=false;
-    unsigned selection_=0;
-    bool runMenu_=false;
     std::vector<std::uint32_t> background_,pixels_;
 };
 }

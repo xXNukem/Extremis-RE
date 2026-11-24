@@ -20,12 +20,16 @@ public:
 
     void stopEffects();
     void pause(bool paused);
+    void setMasterGain(float gain);
+    void toggleEffects();
+    float outputGain() const;
     bool enabled() const;
     enum class DeathSound { Health, Oxygen, SelfDestruction };
     void destructionAlarm(bool requested);
     void load(const std::filesystem::path& directory);
     void update(const game_lab::Level& level, const std::vector<doors::Door>& doors,
                 unsigned footsteps = 0, bool active = true);
+    void bombExplosion();
     void beginDeath(DeathSound cause);
     void endDeath();
     void confirmItemSelection();
@@ -46,6 +50,8 @@ private:
     bool doorRequested_ = false, destructionAlarmRequested_ = false;
     std::uint64_t reportedCompletions_ = 0;
     bool enabled_ = false;
+    bool effectsMuted_ = false;
+    float masterGain_ = 1.f;
     std::optional<DeathSound> death_;
     void updateDoors(const game_lab::Level& level, const std::vector<doors::Door>& doors, bool active);
     void updateFootsteps(unsigned footsteps);

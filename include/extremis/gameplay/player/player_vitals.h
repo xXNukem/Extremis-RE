@@ -13,7 +13,8 @@ public:
     int oxygen() const;
     DeathCause deathCause() const;
     bool alive() const;
-    void reset(); // Verified new-game template; not a save/load implementation.
+    void reset(); // Verified new-game defaults.
+    void startWith(int health, int oxygen);
     void update(double seconds, bool simulationActive, bool increasedOxygenUse = false);
     void applyDamage(int internalUnits); // Caller supplies damage; no invented attack formula.
     void restoreHealth(); // Original injector operation restores to full.

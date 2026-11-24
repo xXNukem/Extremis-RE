@@ -5,6 +5,8 @@
 #include "extremis/world/door_control.h"
 #include "vortex/input/sdl_input.h"
 
+#include <array>
+
 struct SDL_Window;
 union SDL_Event;
 
@@ -14,7 +16,10 @@ public:
     PlayerInput(SDL_Window* window, DoorControl& doors);
     PlayerInput(const PlayerInput&) = delete;
     PlayerInput& operator=(const PlayerInput&) = delete;
-    void handleEvent(const SDL_Event& event, bool gameplay = true);
+    // Returns a fresh Classic fire press so gameplay can give a panel priority.
+    bool handleEvent(const SDL_Event& event, bool gameplay = true);
+    void setClassicControls(bool classic);
+    void suppressClassicFire();
     void invalidateContext();
     void releaseRelativeMouse();
     bool update(Camera* camera, bool view3D, double seconds, bool deferMovement = false);
@@ -28,8 +33,15 @@ public:
     player::FireTrigger takeFireTrigger();
     bool fireReady() const;
 private:
+    bool classicFireHeld() const;
+    SDL_Window* window_;
     vortex::input::SDLInput devices_;
     DoorControl& doors_;
+    std::array<bool, SDL_SCANCODE_COUNT> classicKeys_{};
+    bool classicControls_ = false;
+    bool classicReady_ = false;
+    bool classicFirePressed_ = false;
+    bool classicFireSuppressed_ = false;
     double movementDistance_ = 0;
     unsigned footsteps_ = 0;
     bool audioEnabled_ = false;

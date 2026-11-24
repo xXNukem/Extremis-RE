@@ -92,26 +92,8 @@ void testDecodeAndSwitch(const std::filesystem::path& root)
     }
     PlaneAppearance appearance;
     appearance.load(root / "DATA", 1, 1);
-    check(!appearance.enabled() && !appearance.materials(), "Original CFG off state ignored");
-    SDL_Event event{};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.windowID = 31;
-    event.key.scancode = SDL_SCANCODE_F;
-    check(appearance.handleEvent(event, 31) && appearance.materials(), "F did not enable both planes");
-    const auto* original = appearance.materials();
-    event.key.repeat = true;
-    check(!appearance.handleEvent(event, 31) && appearance.materials() == original, "F repeat toggled state");
-    event.key.repeat = false;
-    check(!appearance.handleEvent(event, 32), "Wrong-window F toggles state");
-    appearance.handleEvent(event, 31);
-    check(!appearance.enabled() && !appearance.materials(), "F did not restore flat mode");
-    appearance.handleEvent(event, 31);
-    check(appearance.materials() == original, "Re-enabling F replaced/lost original materials");
-    event.type = SDL_EVENT_KEY_UP;
-    check(!appearance.handleEvent(event, 31), "F release toggled state");
-    std::filesystem::remove(root / "EXTREMIS.CFG");
-    appearance.load(root / "DATA", 1, 1);
-    check(appearance.enabled() && appearance.materials(), "Missing CFG provisional enabled default failed");
+    check(appearance.materials() && appearance.materials()->floor.pixels.size() == bank.floor.pixels.size(),
+          "Level did not retain the decoded SOL materials");
 }
 
 void testRender(const wall_textures::PlaneBank& bank)
@@ -123,7 +105,8 @@ void testRender(const wall_textures::PlaneBank& bank)
         std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)> renderer(
             SDL_CreateSoftwareRenderer(surface.get()), SDL_DestroyRenderer);
         check(bool(renderer), "Cannot create plane test renderer");
-        FirstPersonRenderer view(renderer.get());
+        VideoRenderSettings video;
+        FirstPersonRenderer view(renderer.get(),&video);
         game_lab::Level empty{};
         const auto pixel = [&](int y) {
             Uint8 r, g, b, a;
@@ -133,9 +116,12 @@ void testRender(const wall_textures::PlaneBank& bank)
         check(view.draw(empty, {}, nullptr, nullptr, nullptr, &bank) && SDL_RenderPresent(renderer.get()),
               "Planes without wall textures failed");
         const auto textured = pixel(size.y - 1);
-        check(view.draw(empty, {}) && SDL_RenderPresent(renderer.get()), "Flat plane fallback failed");
+        video.preferences.floorAndCeiling = false;
+        check(view.draw(empty, {}, nullptr, nullptr, nullptr, &bank) && SDL_RenderPresent(renderer.get()),
+              "Disabling floor and ceiling did not reach the renderer");
         check(pixel(size.y - 1) == 0x2d2722ff && pixel(0) == 0x141720ff,
               "Disabled planes changed original flat colors");
+        video.preferences.floorAndCeiling = true;
         check(view.draw(empty, {}, nullptr, nullptr, nullptr, &bank) && SDL_RenderPresent(renderer.get()) &&
               pixel(size.y - 1) == textured, "Texture restoration or resize failed");
         game_lab::Sector sector{};

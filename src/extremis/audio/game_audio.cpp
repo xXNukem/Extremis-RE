@@ -20,6 +20,7 @@ void GameAudio::load(const std::filesystem::path& directory)
         return;
     }
     enabled_ = true;
+    setMasterGain(masterGain_);
     std::cout << "Audio: " << player_->effectCount() << " original effects; 5000 Hz mono, "
                  "4 voices. Door movement: BANK[27]; footsteps: BANK[7].\n";
 }
@@ -32,6 +33,11 @@ void GameAudio::destructionAlarm(bool requested)
     destructionAlarmRequested_=requested;
 }
 
+void GameAudio::bombExplosion()
+{
+    player_->play(29,false,audio::Playback::Once);
+}
+
 void GameAudio::beginDeath(DeathSound cause)
 {
     if (death_) return;
@@ -41,6 +47,21 @@ void GameAudio::beginDeath(DeathSound cause)
     player_->play(cause == DeathSound::Oxygen ? 26 : cause == DeathSound::SelfDestruction ? 29 : 25);
 }
 void GameAudio::pause(bool paused) { player_->pause(paused); }
+
+void GameAudio::setMasterGain(float gain)
+{
+    masterGain_ = std::clamp(gain,0.f,1.f);
+    player_->setVolume(audio::mixerConfig.masterVolume * outputGain());
+}
+
+void GameAudio::toggleEffects()
+{
+    effectsMuted_ = !effectsMuted_;
+    setMasterGain(masterGain_);
+}
+
+float GameAudio::outputGain() const { return effectsMuted_ ? 0.f : masterGain_; }
+
 void GameAudio::stopEffects()
 {
     // 0x13090 stops all four native voices at entry and before GAMEOVER.

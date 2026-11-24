@@ -5,6 +5,7 @@
 #include <vector>
 namespace game_lab { struct Level; struct EnemyRecord; }
 namespace detector {
+// Marker anchor in native HUD coordinates.
 struct Contact { int x=0,y=0; unsigned intensity=0; };
 struct Reading {
     std::optional<unsigned> phase;

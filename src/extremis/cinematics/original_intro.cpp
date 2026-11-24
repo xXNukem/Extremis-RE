@@ -1,5 +1,7 @@
 #include "extremis/world/pit_clock.h"
 #include "extremis/cinematics/original_intro.h"
+#include "extremis/ui/localization.h"
+#include "extremis/ui/cinematic_text.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -156,8 +158,16 @@ void Presentation::sprite(Bank bank,int number,int x,int y,int w,int h,bool anch
         }
 }
 void Presentation::drawText(unsigned which) {
-    int x=10,y=10;
     const auto& text=resources_.text[which];
+    const auto localized=localization::cinematicById(which?"intro.pseq6.body":"intro.pseq3.body",localization::current());
+    if(!localized.empty()) {
+        const auto& font=resources_.sprites[index(Bank::Font)];
+        localization::drawIndexed(canvas_,font,localized,textPosition_,unsigned(text.size()),
+            10,10,310,195,11,[](unsigned char c){return glyph(c)-1;},true);
+        textPosition_=std::min<unsigned>(textPosition_+2,text.size());
+        return;
+    }
+    int x=10,y=10;
     for(unsigned i=0;i<std::min<unsigned>(textPosition_,text.size());++i) {
         const unsigned char c=text[i];
         if(c=='\n') continue;

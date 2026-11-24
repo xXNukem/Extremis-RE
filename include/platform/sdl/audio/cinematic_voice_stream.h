@@ -17,7 +17,7 @@ public:
     CinematicVoiceStream& operator=(const CinematicVoiceStream&) = delete;
 
     // Index zero is the stop sentinel. The caller opens the stream once.
-    void open(audio::Bank bank, const char* title);
+    void open(audio::Bank bank, const char* title, float gain);
     void pause(bool paused);
     bool voice0Active();
 

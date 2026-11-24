@@ -20,7 +20,7 @@ audio::Bank loadVoices(const std::filesystem::path& directory)
 } // namespace
 
 StartupCreditsResult showOriginalEnding(SDL_Window* window,SDL_Renderer* renderer,
-    const std::filesystem::path& directory,original_ending::EntryImage entry) {
+    const std::filesystem::path& directory,original_ending::EntryImage entry,float gain) {
     try {
         original_ending::Presentation ending(original_ending::loadResources(directory),std::move(entry));
         platform::sdl::RenderState restore(renderer);
@@ -30,7 +30,7 @@ StartupCreditsResult showOriginalEnding(SDL_Window* window,SDL_Renderer* rendere
             SDL_CreateTexture(renderer,SDL_PIXELFORMAT_RGBA8888,SDL_TEXTUREACCESS_STREAMING,320,200),SDL_DestroyTexture);
         if(!texture || !SDL_SetTextureScaleMode(texture.get(),SDL_SCALEMODE_NEAREST)) throw std::runtime_error(SDL_GetError());
         platform::sdl::CinematicVoiceStream audio;
-        audio.open(loadVoices(directory), "Original ending");
+        audio.open(loadVoices(directory), "Original ending", gain);
         SDL_Log("Original ending: nominal PIT/70 Hz retrace timing; Escape disabled (see ending.md)");
         bool focused=(SDL_GetWindowFlags(window)&SDL_WINDOW_INPUT_FOCUS)!=0;
         audio.pause(!focused);

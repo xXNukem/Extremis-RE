@@ -121,10 +121,9 @@ The adjacent `0x16be0–0x16c52` is **not the destruction timer**. It independen
 decrements `[0x608f]`, queues a warning (text file `0x21a90`), requests the same
 BANK[14], and, if another palette effect is absent, sets a black RGB blend of
 amount `(rng & 63)+30`. Below -640 it reloads `(rng & 65535)+9600`.
-It has no `[0x60b7]` gate. Therefore intermittent darkening may coexist with
-the countdown, but is not evidence of a countdown-specific red flash, shaking,
-increasing alarm rate, or staged destruction. At expiry the white transition
-below is specific to the death branch.
+The surge runs independently of `[0x60b7]` and may darken the screen during
+self-destruction. The expiry transition below supplies the countdown-specific
+white effect. See [Power surge](power-surging.md).
 
 **Temporal limits:** PIT divisor **7457** (`0x184d–0x1857`) implies nominal
 ~160 interrupts/s. The handler increments `[0x1428]` only while `[0x142c]==0`
@@ -169,9 +168,9 @@ to unconditional initialization `0x6b10–0x6b2d`: flags/count zero, time 48000.
 The 16-entry table at file `0x1d600` includes a level-22 start record at
 `0x1d7a4` (zone word 21), but no destruction state. This explains what loading
 a native continuation preserves: **not the previous countdown or disabled
-security flags**. The LAB world-write mechanism must not be described as a
-full saved game restoring those globals. Third-party emulator snapshots are
-outside this native path.
+security flags**. The common initializer also creates a fresh working
+`GAME.LAB` from `DATA/DATA.LAB` before loading the checkpoint. See
+[checkpoint templates and level persistence](password-continuation.md#gamelab-during-and-between-sessions).
 
 ## Refusal, failure and retry
 

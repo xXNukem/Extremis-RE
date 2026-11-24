@@ -28,6 +28,6 @@ struct DestinationLevel {
     std::vector<doors::Door> doors;
 };
 
-DestinationLevel prepareDestination(const char* labPath, unsigned zone,
+DestinationLevel prepareDestination(const char* labPath, game_lab::Level1 levelData,
                                     const game_lab::PlayerStart& arrival);
 }

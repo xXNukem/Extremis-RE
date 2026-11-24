@@ -23,7 +23,7 @@ struct State {
     std::optional<unsigned> slimePhase; // GOUTTE counter0..29.
     detector::Reading detector;
     int batteryCharge=-1;
-    bool detectorEnabled=false;
+    bool batteryInUse=false;
     bool oxygenBottle = false;
     unsigned cards = 0, injectors = 0; // Occupied original slots, including empty injectors.
     std::string_view message; // Already visible text; no invented typewriter clock.

@@ -7,6 +7,7 @@
 #include "extremis/audio/game_audio.h"
 #include "extremis/cinematics/original_intro_player.h"
 #include "extremis/cinematics/player_death.h"
+#include "extremis/world/door_control.h"
 #include "platform/sdl/input/player_input.h"
 #include "platform/sdl/input/survival_input.h"
 #ifdef EXTREMIS_DEBUG_MENU
@@ -19,8 +20,9 @@
 namespace app {
 AppSession::EventBatch AppSession::pollEvents(SDL_Window* window, SDL_Renderer* renderer,
     [[maybe_unused]] const LaunchOptions& options, const std::filesystem::path& dataDirectory,
-    PortMenuVideoState& video, int& exitCode, std::uint64_t& previousTicks,
-    PlayerInput& playerInput, GameAudio& gameAudio, player::DeathPresentation* deathPresentation,
+    UserSettings& settings, const std::filesystem::path& settingsPath, int& exitCode, std::uint64_t& previousTicks,
+    PlayerInput& playerInput, GameAudio& gameAudio, const DoorControl& doorControl,
+    player::DeathPresentation* deathPresentation,
     const VictorySession& victory, bool show3D, EventBatch result
 #ifdef EXTREMIS_DEBUG_MENU
     , DebugMenu& debugMenu, platform::sdl::video_profiling::FrameProfiler& profiler,
@@ -28,8 +30,12 @@ AppSession::EventBatch AppSession::pollEvents(SDL_Window* window, SDL_Renderer* 
 #endif
 )
 {
+    const auto windowId=SDL_GetWindowID(window);
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+        if (event.type==SDL_EVENT_RENDER_DEVICE_RESET &&
+            event.render.windowID==windowId)
+            applyPreferredVSync(renderer,settings);
         if (extremis::shot_trace::mode &&
             (event.type==SDL_EVENT_MOUSE_BUTTON_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_UP) &&
             event.button.button==SDL_BUTTON_LEFT && event.button.windowID==SDL_GetWindowID(window)) {
@@ -39,65 +45,34 @@ AppSession::EventBatch AppSession::pollEvents(SDL_Window* window, SDL_Renderer* 
             extremis::shot_trace::event("input", "down=%d queue_ms=%.3f",
                 event.type==SDL_EVENT_MOUSE_BUTTON_DOWN,age);
         }
-        // Escape always opens the port menu, including when a terminal or
-        // inventory screen is open. It no longer cancels those screens.
-        if (event.type==SDL_EVENT_KEY_DOWN && !event.key.repeat &&
-            event.key.windowID==SDL_GetWindowID(window) &&
-            event.key.scancode==SDL_SCANCODE_ESCAPE) {
-            gameAudio.pause(true);
-            playerInput.releaseRelativeMouse();
-            const auto choice=showPortMenu(window,renderer,dataDirectory,true,video);
-            gameAudio.pause(false);
-            items.clearInput();mapSession.clearInput();playerInput.invalidateContext();
-            SDL_ResetKeyboard();
-            SDL_FlushEvents(SDL_EVENT_KEY_DOWN,SDL_EVENT_KEY_UP);
-            previousTicks=SDL_GetTicks(); // Never simulate time spent in the menu.
-#ifdef EXTREMIS_DEBUG_MENU
-            profiler.reset();
-#endif
-#ifdef EXTREMIS_DEBUG_MENU
-            // Menu time must not skew the gameplay FPS average.
-            fps.resetInterval();
-#endif
-            if (choice==PortMenuChoice::Exit || choice==PortMenuChoice::Error) {
-                if (choice==PortMenuChoice::Error) exitCode=1;
-                result.running=false;
-            } else if (choice==PortMenuChoice::NewGame && data) {
-                gameAudio.stopEffects();
-                auto intro=showOriginalPresentation(window,renderer,dataDirectory);
-                if (intro==StartupCreditsResult::Continue)
-                    intro=showOriginalIntro(window,renderer,dataDirectory);
-                if (intro==StartupCreditsResult::Quit || intro==StartupCreditsResult::Error) {
-                    if (intro==StartupCreditsResult::Error) exitCode=1;
-                    result.running=false;
-                } else result.restartRequested=true;
-                previousTicks=SDL_GetTicks();
-                SDL_ResetKeyboard();
-                SDL_FlushEvents(SDL_EVENT_KEY_DOWN,SDL_EVENT_KEY_UP);
-            }
-            break; // The old game never consumes menu keys in this frame.
-        }
         if(deathPresentation && deathPresentation->active()) {
             if(event.type==SDL_EVENT_QUIT || event.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED) result.running=false;
             if(event.type==SDL_EVENT_KEY_DOWN && event.key.windowID==SDL_GetWindowID(window) && !event.key.repeat) {
                 result.deathKey=true;
-                const int direction=event.key.scancode==SDL_SCANCODE_UP?-1:event.key.scancode==SDL_SCANCODE_DOWN?1:0;
-                const bool confirm=event.key.scancode==SDL_SCANCODE_RETURN;
-                if(deathPresentation->stage()==player::DeathPresentation::Stage::Menu && (direction || confirm)) {
-                    gameAudio.confirmItemSelection();
-                    const auto request=deathPresentation->menuInput(direction,confirm);
-                    if(request==player::DeathPresentation::Request::Restart) result.restartRequested=true;
-                    if(request==player::DeathPresentation::Request::Exit) result.running=false;
-                    if(request==player::DeathPresentation::Request::Unsupported)
-                        SDL_Log("Native OPTIONS/password continuation is not implemented; RUN / Make new party starts a fresh game.");
-                }
+                // Keep the opt-in diagnostic reset available during death.
+                if(event.key.scancode==SDL_SCANCODE_F10 && !victory.processed())
+                    survival.handleInput(platform::sdl::survivalInput(event,SDL_GetWindowID(window)));
             }
-            // Existing explicit F10 diagnostic reset remains available;
-            // ordinary UI/use/movement must not consume death-screen keys.
-            if(event.type==SDL_EVENT_KEY_DOWN && event.key.scancode==SDL_SCANCODE_F10 && !victory.processed())
-                survival.handleInput(platform::sdl::survivalInput(event,SDL_GetWindowID(window)));
             playerInput.handleEvent(event,false);
             continue;
+        }
+        // During play, Escape opens the port menu, including when a terminal or
+        // inventory screen is open. It no longer cancels those screens.
+        const bool pressed=event.type==SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.windowID==windowId;
+        const bool classicGameplay=settings.classicControls && show3D && survival.alive() &&
+            !items.busy() && !mapSession.blocksSimulation() && SDL_GetKeyboardFocus()==window
+#ifdef EXTREMIS_DEBUG_MENU
+            && !debugMenu.open()
+#endif
+            ;
+        if (pressed && (event.key.scancode==SDL_SCANCODE_ESCAPE ||
+            (classicGameplay && event.key.scancode==SDL_SCANCODE_P))) {
+            openMenu(window,renderer,dataDirectory,settings,settingsPath,exitCode,previousTicks,playerInput,gameAudio,true,result);
+#ifdef EXTREMIS_DEBUG_MENU
+            profiler.reset();
+            fps.resetInterval();
+#endif
+            break; // The old game never consumes menu keys in this frame.
         }
 #ifdef EXTREMIS_DEBUG_MENU
         if(options.shuttleDebug && data && data->level.zoneIndex==21 &&
@@ -152,12 +127,21 @@ AppSession::EventBatch AppSession::pollEvents(SDL_Window* window, SDL_Renderer* 
             items.handleEvent(event,SDL_GetWindowID(window));
         const bool modalEvent=mapEvent || itemEvent;
         // Observe releases even if the UI owns the event, but never arm UI clicks.
-        playerInput.handleEvent(event,!modalEvent && !items.modal() && !mapSession.blocksSimulation() && show3D && survival.alive());
+        const bool gameplay=!modalEvent && !items.modal() && !mapSession.blocksSimulation() && show3D && survival.alive();
+        if (playerInput.handleEvent(event,gameplay) && classicGameplay && camera &&
+            items.requestContextualAction(*camera,doorControl.movementWorld()))
+            playerInput.suppressClassicFire();
         if (modalEvent) continue;
         if ((event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_KEY_UP) &&
             event.key.windowID!=SDL_GetWindowID(window)) continue;
         survival.handleInput(platform::sdl::survivalInput(event,SDL_GetWindowID(window)));
-        planeAppearance.handleEvent(event, SDL_GetWindowID(window));
+        if (pressed && event.key.scancode==SDL_SCANCODE_F) {
+            auto& enabled=settings.render.preferences.floorAndCeiling;
+            enabled=!enabled;
+            saveUserSettings(settingsPath,settings);
+            SDL_Log("Floor/ceiling: %s",enabled ? "textured" : "flat colors");
+        }
+        if (pressed && classicGameplay && event.key.scancode==SDL_SCANCODE_S) gameAudio.toggleEffects();
 #ifdef EXTREMIS_DEBUG_MENU
         if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
             event.key.windowID==SDL_GetWindowID(window) &&
@@ -165,7 +149,7 @@ AppSession::EventBatch AppSession::pollEvents(SDL_Window* window, SDL_Renderer* 
             texturePreview.changeIndex(event.key.scancode == SDL_SCANCODE_PAGEUP ? 1 : -1);
             SDL_SetWindowTitle(window, survival.windowTitle(texturePreview.windowTitle()).c_str());
         }
-        if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_P &&
+        if (!settings.classicControls && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_P &&
             !event.key.repeat) {
             result.showPolygons = !result.showPolygons;
             SDL_Log("Polygon contours: %s", result.showPolygons ? "on" : "off");
@@ -177,5 +161,47 @@ AppSession::EventBatch AppSession::pollEvents(SDL_Window* window, SDL_Renderer* 
         }
     }
     return result;
+}
+
+void AppSession::openMenu(SDL_Window* window, SDL_Renderer* renderer,
+    const std::filesystem::path& dataDirectory, UserSettings& settings, const std::filesystem::path& settingsPath,
+    int& exitCode, std::uint64_t& previousTicks, PlayerInput& playerInput,
+    GameAudio& gameAudio, bool canResume, EventBatch& result)
+{
+    if (!canResume) {
+        gameAudio.stopEffects();
+        SDL_ResetKeyboard();
+        SDL_FlushEvents(SDL_EVENT_KEY_DOWN,SDL_EVENT_KEY_UP);
+    }
+    gameAudio.pause(true);
+    playerInput.releaseRelativeMouse();
+    const auto menu=showPortMenu(window,renderer,dataDirectory,canResume,settings,settingsPath);
+    const auto choice=menu.choice;
+    gameAudio.setMasterGain(settings.audioGain());
+    gameAudio.pause(false);
+    playerInput.setClassicControls(settings.classicControls);
+    items.clearInput();mapSession.clearInput();playerInput.invalidateContext();
+    SDL_ResetKeyboard();
+    SDL_FlushEvents(SDL_EVENT_KEY_DOWN,SDL_EVENT_KEY_UP);
+    previousTicks=SDL_GetTicks(); // Never simulate time spent in the menu.
+    if (choice==PortMenuChoice::Exit || choice==PortMenuChoice::Error) {
+        if (choice==PortMenuChoice::Error) exitCode=1;
+        result.running=false;
+    } else if (choice==PortMenuChoice::Continue && data) {
+        result.checkpoint=menu.checkpoint;
+        result.restartRequested=true;
+    } else if (choice==PortMenuChoice::NewGame && data) {
+        gameAudio.stopEffects();
+        auto intro=showOriginalPresentation(window,renderer,dataDirectory);
+        if (intro==StartupCreditsResult::Continue)
+            intro=showOriginalIntro(window,renderer,dataDirectory,settings.audioGain());
+        if (intro==StartupCreditsResult::Quit || intro==StartupCreditsResult::Error) {
+            if (intro==StartupCreditsResult::Error) exitCode=1;
+            result.running=false;
+        } else result.restartRequested=true;
+        previousTicks=SDL_GetTicks();
+        SDL_ResetKeyboard();
+        SDL_FlushEvents(SDL_EVENT_KEY_DOWN,SDL_EVENT_KEY_UP);
+    }
 }
 }

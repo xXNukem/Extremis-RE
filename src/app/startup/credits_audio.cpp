@@ -39,7 +39,7 @@ double logoStinger(double t, double grit)
 }
 } // namespace
 
-void CreditsAudio::start()
+void CreditsAudio::start(float gain)
 {
     if (!(SDL_WasInit(SDL_INIT_AUDIO)&SDL_INIT_AUDIO)) {
         if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) return;
@@ -77,7 +77,8 @@ void CreditsAudio::start()
         pcm[titleSample+std::size_t(j)]+=float(logoStinger(t,noise-lowNoise));
     }
     for (float& sample:pcm) sample=std::clamp(sample,-.75f,.75f);
-    if (!SDL_PutAudioStreamData(stream,pcm.data(),int(pcm.size()*sizeof(float))) ||
+    if (!SDL_SetAudioStreamGain(stream,gain) ||
+        !SDL_PutAudioStreamData(stream,pcm.data(),int(pcm.size()*sizeof(float))) ||
         !SDL_ResumeAudioStreamDevice(stream)) {
         SDL_DestroyAudioStream(stream);
         stream=nullptr;

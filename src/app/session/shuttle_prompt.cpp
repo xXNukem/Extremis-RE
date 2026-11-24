@@ -1,4 +1,6 @@
 #include "app/session/shuttle_session.h"
+#include "extremis/ui/localization.h"
+#include "extremis/ui/cinematic_text.h"
 #include "extremis/cinematics/playback_result.h"
 #include "extremis/resources/anm_format.h"
 #include "extremis/resources/spr_format.h"
@@ -76,6 +78,14 @@ StartupCreditsResult prompt(SDL_Window* window,SDL_Renderer* renderer,const std:
                 else x+=4;
             }
         };
+        const auto translatedLabel=[&](std::string_view id,const std::string& original,int y) {
+            const auto localized=localization::cinematicById(id,localization::current());
+            if(localized.empty()) {label(original,y);return;}
+            const auto map=[](unsigned char c){return glyph(c);};
+            const int w=localization::measureIndexed(font,localized,map);
+            localization::drawIndexed(canvas,font,localized,unsigned(original.size()),unsigned(original.size()),
+                std::max(0,(320-w)/2),y,320,y+11,11,map);
+        };
         bool yes=true,focused=SDL_GetKeyboardFocus()==window;
         // Require release across modal boundaries, including two queued confirmations.
         bool confirmHeld=SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_E] || SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_SPACE];
@@ -124,11 +134,11 @@ StartupCreditsResult prompt(SDL_Window* window,SDL_Renderer* renderer,const std:
             const auto& background=displayed==Step::Boarding?hangar:interior;
             canvas=background.frames[0];
             if(displayed!=Step::Boarding) image(instruments[88],0,39);
-            if(displayed==Step::MissingCard || displayed==Step::Securities) label(text[displayed==Step::MissingCard?4:5],20);
+            if(displayed==Step::MissingCard || displayed==Step::Securities) translatedLabel(displayed==Step::MissingCard?"shuttle.prompt.03":"shuttle.prompt.04",text[displayed==Step::MissingCard?4:5],20);
             else {
-                label(text[displayed==Step::Boarding?0:3],20);
-                if(!yes || blink<80) label(text[1],30);
-                if(yes || blink<80) label(text[2],40);
+                translatedLabel(displayed==Step::Boarding?"shuttle.prompt.01":"shuttle.prompt.02",text[displayed==Step::Boarding?0:3],20);
+                if(!yes || blink<80) translatedLabel("comm.yes",text[1],30);
+                if(yes || blink<80) translatedLabel("comm.no",text[2],40);
             }
             for(unsigned i=0;i<64000;++i) {
                 const auto c=background.palette[canvas[i]];

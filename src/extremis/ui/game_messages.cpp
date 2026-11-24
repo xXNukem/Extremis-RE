@@ -15,6 +15,12 @@ std::string_view text(Id id)
     case Id::MapBlocked: return "ATTENTION: AN ALIEN IS NEAR!!";
     case Id::MapUnavailable: return "ATTENTION:\r\n  ACCESS NOT POSSIBLE WITH CARD!!";
     case Id::SelfDestruction: return "ATTENTION:\r\n0M 00S UNTIL EXPLOSION!";
+    case Id::BombWarning: return "ATTENTION:\r\n  5 SECONDS BEFORE EXPLOSION!";
+    case Id::Shock: return "ATTENTION: SHOCKS   ";
+    case Id::PowerSurge: return "ATTENTION\r\n POWER IS SURGING!!!";
+    case Id::BatteryLow: return "ATTENTION:\r\n  NEW BATTERY HAS FAILED!!!!!!";
+    case Id::RadarExpired: return "ATTENTION: RADAR SENSOR WAS ACTIVATED";
+    case Id::OpticsExpired: return "ATTENTION: SENSORS ACTIVATED";
     case Id::EmptyPanel: return "THIS COMPARTMENT IS EMPTY!";
     }
     return {};

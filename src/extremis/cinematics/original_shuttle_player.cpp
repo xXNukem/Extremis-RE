@@ -13,7 +13,7 @@ namespace {
 // One explicitly owned cinematic voice, using the existing DSS reader and mixer.
 class ShuttleAudio {
 public:
-    explicit ShuttleAudio(const std::filesystem::path& directory)
+    ShuttleAudio(const std::filesystem::path& directory, float gain)
         : mixer_(audio::mixerConfig) {
         {
             audio::Bank bank(1); // index zero is the stop sentinel, never played
@@ -25,7 +25,7 @@ public:
         initialized_=true;
         const SDL_AudioSpec spec{SDL_AUDIO_F32,1,audio::sampleRate};
         stream_=SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&spec,feed,this);
-        if(!stream_ || !SDL_ResumeAudioStreamDevice(stream_)) {
+        if(!stream_ || !SDL_SetAudioStreamGain(stream_,gain) || !SDL_ResumeAudioStreamDevice(stream_)) {
             SDL_Log("Original shuttle audio device: %s",SDL_GetError());
             if(stream_) SDL_DestroyAudioStream(stream_);
             stream_=nullptr;
@@ -66,7 +66,7 @@ private:
 };
 }
 StartupCreditsResult showOriginalShuttle(SDL_Window* window,SDL_Renderer* renderer,
-    const std::filesystem::path& directory,bool inheritedAnmEscape) {
+    const std::filesystem::path& directory,bool inheritedAnmEscape,float gain) {
     try {
         original_shuttle::Presentation ending(original_shuttle::loadResources(directory),inheritedAnmEscape);
         platform::sdl::RenderState restore(renderer);
@@ -75,7 +75,7 @@ StartupCreditsResult showOriginalShuttle(SDL_Window* window,SDL_Renderer* render
         std::unique_ptr<SDL_Texture,decltype(&SDL_DestroyTexture)> texture(
             SDL_CreateTexture(renderer,SDL_PIXELFORMAT_RGBA8888,SDL_TEXTUREACCESS_STREAMING,320,200),SDL_DestroyTexture);
         if(!texture || !SDL_SetTextureScaleMode(texture.get(),SDL_SCALEMODE_NEAREST)) throw std::runtime_error(SDL_GetError());
-        ShuttleAudio audio(directory);
+        ShuttleAudio audio(directory,gain);
         SDL_Log("Original shuttle: nominal PIT, 70 Hz retrace and adapted 70 Hz CPU composition (see elevator-cinematics.md)");
         bool focused=(SDL_GetWindowFlags(window)&SDL_WINDOW_INPUT_FOCUS)!=0;
         audio.pause(!focused);

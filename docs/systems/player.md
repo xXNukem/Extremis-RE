@@ -12,22 +12,36 @@ The verified new-game start is **level 1, sector 0, local `(300, 320)`, angle `1
 
 ## Controls in the port
 
-| Input | Function |
-| --- | --- |
-| W / S | Forward / backward |
-| A / D | Strafe left / right |
-| Mouse | Horizontal look |
-| Left / right arrow | Turn |
-| Shift (held) | Run |
-| Alt (held) | Crouch |
-| Left mouse button | Fire equipped weapon |
-| E | Contextual action / confirmation |
-| I | Inventory |
-| Z / X | Use injector / oxygen reserve |
-| M or original physical map key | Open map, when allowed |
-| TAB in Debug builds | Developer menu; **not** a standard DOS control |
+The Control Scheme option applies to gameplay. Modern is the default.
 
-Modal screens consume their own controls; closing one should not send a stray action or leave the player walking because a key was held down. The port deliberately resets mouse deltas on focus/context changes.
+| Action | Modern | Classic |
+| --- | --- | --- |
+| Forward / reverse | W / S | Up / Down |
+| Strafe left / right | A / D | — |
+| Turn left / right | Left / Right or mouse | Left / Right |
+| Run | Either Shift | Left Alt |
+| Crouch | Either Alt | Space |
+| Fire equipped weapon | Left mouse button | Left Ctrl + Up or Enter |
+| Open a reachable panel | E | Left Ctrl + Up, Enter or E |
+| Confirm in a gameplay modal | E / Space | E / Space |
+| Open inventory | I | I |
+| Use injector / oxygen reserve | Z / X | Z / X |
+| Open map, when allowed | M or the physical AZERTY map key | M or the physical AZERTY map key |
+| Open the port pause menu | Esc | Esc or P |
+| Toggle floor and ceiling detail | F | F |
+| Toggle gameplay effects | — | S |
+| Developer menu in Debug | Tab | Tab |
+| Polygon outlines in Debug | P | — |
+
+The two profiles use the existing menu, password editor and modal inputs.
+Classic leaves the cursor free during play. The action chord takes priority
+at a reachable panel and opens it through the existing interaction path.
+Elsewhere it fires and Up retains its movement binding. Enter is a
+keyboard-only fallback for systems that reserve Ctrl + Up, including the
+default Mission Control shortcut on macOS. The EXE confirms the direction
+of the arrow turns and uses configurable action/run/crouch bindings.
+[Apple keyboard shortcuts](https://support.apple.com/en-gb/102650) ·
+[EXE evidence and port adaptations](../reference/exe/classic-controls.md).
 
 ## Walking, running and walls
 
@@ -45,7 +59,7 @@ The world collision system and the sector graph are related but not interchangea
 
 The original code adjusts eye height over successive updates: **165 standing**, dropping by 10 units per update toward **100 crouched**, then rising on release. Below a height of 150, running acceleration is no longer allowed. No separate, smaller collision footprint has been demonstrated, so don't invent one.
 
-The corresponding port logic is in `player_control.cpp`, with the crouch input in `player_input.cpp`.
+The corresponding port logic is in `player_control.cpp`. The selected profile supplies crouch input through `player_input.cpp`.
 
 ## The headbob has a few surprises
 
@@ -86,9 +100,10 @@ The posture limits, original health/oxygen scales, special impact direction and 
 Health death uses the original red transition and `MORT0.VGA`/six `MORT0.SPR`
 images; oxygen death uses a white transition and the 32-frame `MORT1.ANM`.
 Both lead to `GAMEOVER.VGA`, typed original text and a key/timeout fade back
-to the original menu artwork. RUN → Make new party reloads the first level,
-including enemies, doors, inventory and vitals. OPTIONS and password continuation
-are not implemented. The green enemy `GOUTTE.SPR` overlay is a separate effect.
+to the custom Extremis RE main menu. Ship destruction also returns there
+after its explosion and GAMEOVER. NEW GAME plays the opening and reloads
+the first level, including enemies, doors, inventory and vitals. LOAD GAME
+accepts the documented [continuation codes](../reference/exe/password-continuation.md). The green enemy `GOUTTE.SPR` overlay is a separate effect.
 
 See [exact evidence and limitations](../reference/exe/player-death.md): the host
 presentation cadence is **Adapted**, not an exact DOS duration. `F10` with
