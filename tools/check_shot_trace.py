@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check a single shot captured from the InExtremisPort gameplay loop."""
+"""Check a single shot captured from the EXTREMIS-RE gameplay loop."""
 
 import argparse
 import sys

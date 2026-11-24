@@ -175,7 +175,8 @@ void AppSession::openMenu(SDL_Window* window, SDL_Renderer* renderer,
     }
     gameAudio.pause(true);
     playerInput.releaseRelativeMouse();
-    const auto menu=showPortMenu(window,renderer,dataDirectory,canResume,settings,settingsPath);
+    const auto menu=showPortMenu(window,renderer,dataDirectory,canResume,settings,settingsPath,
+        [&](float gain) { gameAudio.setMasterGain(gain); });
     const auto choice=menu.choice;
     gameAudio.setMasterGain(settings.audioGain());
     gameAudio.pause(false);

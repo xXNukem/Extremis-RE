@@ -22,6 +22,14 @@ gameplay mixer. A volume of 0 silences output while playback cursors,
 voice lifetimes and bank-relative gains continue normally. Classic's S
 shortcut temporarily mutes game effects while retaining the saved volume.
 
+The November 2026 release audit found that launching without a LAB still
+opened the custom menu, where MASTER VOLUME changed despite the original
+bank and gameplay audio being absent. The startup now rejects missing or
+invalid original data before opening the menu. While the pause menu is open,
+volume changes also update the suspended gameplay mixer's gain immediately;
+the menu's own streams already receive the same gain on each change. This is
+port behavior, not a new finding about the DOS executable.
+
 | Sound/effect | Known reference | Note |
 | --- | --- | --- |
 | Footsteps | `BANK[7]` | Part of the original movement/camera cadence |

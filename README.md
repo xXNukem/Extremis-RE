@@ -97,7 +97,7 @@ Extremis RE is approaching its first public release. The major gameplay, renderi
 - Investigate remaining enemy AI edge cases, including the level 3 MONS5 diagnostic.
 - Validate outstanding audiovisual timing, bomb presentation and DOS fidelity details.
 - Visually review remaining localization layouts and three ambiguous narrative passages.
-- Perform native Windows testing, release builds and distribution packaging.
+- Perform native Windows testing and final release validation.
 - Optional future enhancement: modern full-state saving alongside original passwords.
 
 ## Build and run
@@ -115,10 +115,15 @@ cmake --build build/release -j4
 ctest --test-dir build/release --output-on-failure
 ```
 
-Start the game with the path to the original `GAME.LAB`:
+For a distribution, place the original `GAME.LAB`, `EXTREMIS.EXE` and
+`DATA` beside the executable or in a subfolder, then launch without arguments.
+The macOS package also accepts these files beside the `.app`. See the
+[distribution instructions](docs/distribution.md).
+
+For development, an explicit path is still supported:
 
 ```sh
-./build/release/InExtremisPort "/path/to/In_Extremis/GAME.LAB"
+./build/release/EXTREMIS-RE "/path/to/In_Extremis/GAME.LAB"
 ```
 
 The original `DATA` directory must be alongside `GAME.LAB`. Original game assets are **not** included in this repository.

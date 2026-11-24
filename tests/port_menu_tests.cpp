@@ -11,6 +11,7 @@
 #include <array>
 #include <string>
 #include <tuple>
+#include <vector>
 
 static void choose(PortMenuState& s,unsigned index)
 {
@@ -97,7 +98,10 @@ static void persistence(const std::filesystem::path& directory)
     queueClick(window,222); // CONTROLS
     queueKey(window,SDL_SCANCODE_RETURN);
     for (int i=0; i<3; ++i) queueKey(window,SDL_SCANCODE_ESCAPE);
-    assert(showPortMenu(window,renderer,{},true,settings,path).choice == PortMenuChoice::Resume);
+    std::vector<float> liveGains;
+    assert(showPortMenu(window,renderer,{},true,settings,path,
+        [&](float gain) { liveGains.push_back(gain); }).choice == PortMenuChoice::Resume);
+    assert(liveGains.size()==5 && liveGains.front()==.4f && liveGains.back()==0.f);
 
     SDL_DestroyRenderer(renderer);
     settings = loadUserSettings(path,cfg);
@@ -135,6 +139,20 @@ static void persistence(const std::filesystem::path& directory)
     assert(saveUserSettings(path,settings));
     auto max = loadUserSettings(path);
     assert(max.render.mode.nativeMax && max.masterVolume == 100 && max.audioGain() == 1.f);
+    PortMenuState volumeState(false,max,renderer);
+    choose(volumeState,2); // OPTIONS
+    choose(volumeState,1); // AUDIO
+    volumeState.key(SDL_SCANCODE_LEFT);
+    assert(max.masterVolume==90);
+    volumeState.key(SDL_SCANCODE_RIGHT);
+    assert(max.masterVolume==100);
+    volumeState.key(SDL_SCANCODE_RIGHT);
+    assert(max.masterVolume==100);
+    volumeState.key(SDL_SCANCODE_DOWN);
+    volumeState.key(SDL_SCANCODE_UP);
+    assert(volumeState.selection()==0);
+    volumeState.pointerClick(320,178);
+    assert(max.masterVolume==100);
     initializePortVideo(window,renderer,max);
     assert(max.render.mode.nativeWidth > 0 && max.render.mode.nativeHeight > 0);
     assert(max.render.mode.requestedSize.width <= max.render.mode.nativeWidth &&

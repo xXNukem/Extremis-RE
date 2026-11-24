@@ -3,19 +3,49 @@
 
 #include "session/app_session.h"
 #include "startup/startup_sequence.h"
+#include "startup/original_data.h"
 #include "app/startup/port_menu.h"
 #include "platform/sdl/video/render_state.h"
 
 int main(int argc, char* argv[])
 {
-    const auto options=app::parseLaunchOptions(argc,argv);
+    auto options=app::parseLaunchOptions(argc,argv);
     if (!options) return 1;
-
-    app::AppSession session(options->vitalsDebug);
-    if (!session.loadInitialLevel(*options)) return 1;
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL initialization failed: %s", SDL_GetError());
+        return 1;
+    }
+    const auto* base=SDL_GetBasePath();
+    const auto executableDirectory=base ? std::filesystem::u8path(base) : std::filesystem::path{};
+    std::string detectedPath;
+    if (!options->labPath && !executableDirectory.empty()) {
+        SDL_Log("Original data search base: %s",executableDirectory.u8string().c_str());
+        const auto found=app::findOriginalData(executableDirectory);
+        if (!found.empty()) {
+            detectedPath=found.u8string();
+            options->labPath=detectedPath.c_str();
+        }
+    }
+    std::string dataError;
+    if (!options->labPath || !app::validateOriginalData(options->labPath,dataError)) {
+        const std::string message=options->labPath
+            ? "The original In Extremis installation at:\n" + std::string(options->labPath) +
+              "\nis invalid:\n" + dataError
+            : "Extremis RE requires the original In Extremis files.\n"
+              "Place GAME.LAB and EXTREMIS.EXE beside the executable or in a subfolder, "
+              "with their original DATA folder beside GAME.LAB.\n"
+              "For a macOS .app, the same layout is accepted beside the .app.";
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Extremis RE: original data required",
+                                 message.c_str(),nullptr);
+        SDL_Log("%s",message.c_str());
+        SDL_Quit();
+        return 1;
+    }
+
+    app::AppSession session(options->vitalsDebug);
+    if (!session.loadInitialLevel(*options)) {
+        SDL_Quit();
         return 1;
     }
 

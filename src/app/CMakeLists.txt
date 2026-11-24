@@ -33,7 +33,7 @@ target_compile_features(port_menu PUBLIC cxx_std_17)
 set_target_properties(port_menu PROPERTIES CXX_EXTENSIONS NO)
 
 add_executable(InExtremisPort main.cpp
-    startup/launch_options.cpp startup/initial_level.cpp startup/startup_sequence.cpp
+    startup/launch_options.cpp startup/original_data.cpp startup/initial_level.cpp startup/startup_sequence.cpp
     session/app_session.cpp session/destination_level.cpp session/session_cinematics.cpp
     session/session_frame.cpp session/session_travel.cpp session/session_bomb.cpp
     session/session_events.cpp session/session_death.cpp
@@ -45,10 +45,25 @@ target_sources(InExtremisPort PRIVATE
     $<$<CONFIG:Debug>:diagnostics/gameplay_fps.cpp>)
 target_compile_definitions(InExtremisPort PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
 set_target_properties(InExtremisPort PROPERTIES
+    OUTPUT_NAME "EXTREMIS-RE"
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
 )
+if(APPLE AND EXTREMIS_MACOS_BUNDLE)
+    target_sources(InExtremisPort PRIVATE "${PROJECT_SOURCE_DIR}/assets/branding/extremis-re.icns")
+    set_source_files_properties("${PROJECT_SOURCE_DIR}/assets/branding/extremis-re.icns"
+        PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    set_target_properties(InExtremisPort PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "org.extremisre.game"
+        MACOSX_BUNDLE_BUNDLE_NAME "Extremis RE"
+        MACOSX_BUNDLE_ICON_FILE "extremis-re.icns")
+elseif(WIN32)
+    set_target_properties(InExtremisPort PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_include_directories(InExtremisPort PRIVATE "${PROJECT_SOURCE_DIR}/assets/branding")
+    target_sources(InExtremisPort PRIVATE "${PROJECT_SOURCE_DIR}/assets/branding/extremis-re.rc")
+endif()
 target_link_libraries(InExtremisPort PRIVATE
     shuttle_session level22_communication victory_session
     original_ending_player original_elevator original_intro

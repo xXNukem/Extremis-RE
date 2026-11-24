@@ -255,7 +255,8 @@ void initializePortVideo(SDL_Window* window, SDL_Renderer* renderer, UserSetting
 
 PortMenuResult showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
                             const std::filesystem::path& dataDirectory,bool inGame,
-                            UserSettings& settings, const std::filesystem::path& settingsPath)
+                            UserSettings& settings, const std::filesystem::path& settingsPath,
+                            const std::function<void(float)>& onVolumeChanged)
 {
     if (!window || !renderer) return PortMenuChoice::Error;
     RenderRestore restore(renderer);
@@ -314,7 +315,10 @@ PortMenuResult showPortMenu(SDL_Window* window,SDL_Renderer* renderer,
         }
         const bool changedValue=!changedPage && valuesOnPage()!=previousValues;
         if (changedValue && state.page()!=PortMenuPage::Password) {
-            if (state.page()==PortMenuPage::Audio) audio.setVolume(settings.audioGain());
+            if (state.page()==PortMenuPage::Audio) {
+                audio.setVolume(settings.audioGain());
+                if (onVolumeChanged) onVolumeChanged(settings.audioGain());
+            }
             saveUserSettings(settingsPath,settings);
         }
         if (!changedPage && !changedValue && state.selection()==previousSelection) return;
