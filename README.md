@@ -170,7 +170,7 @@ The [technical field guide](docs/README.md) describes the file formats, implemen
 | Death sequences | [Death sequence research](docs/reference/exe/player-death.md) |
 | Known differences | [Technical limitations](docs/reference/known-differences.md) |
 
-Development uses Ghidra, original DOS data, C++ implementation, automated tests and manual gameplay checks.
+Development uses Ghidra, AI-assisted tools, handwritten C++ code, original DOS data, automated tests and manual gameplay checks.
 
 ## Credits and rights
 
