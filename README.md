@@ -6,7 +6,7 @@
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-0b140d?style=for-the-badge&labelColor=173b26&color=48de78)](https://isocpp.org/)
 [![SDL3](https://img.shields.io/badge/SDL-3-0b140d?style=for-the-badge&labelColor=173b26&color=48de78)](https://www.libsdl.org/)
-![Work in progress](https://img.shields.io/badge/STATUS-WORK%20IN%20PROGRESS-151515?style=for-the-badge&labelColor=501119&color=fe4457)
+![Public Beta](https://img.shields.io/badge/STATUS-BETA-151515?style=for-the-badge&labelColor=173b26&color=f5c451)
 
 </div>
 
