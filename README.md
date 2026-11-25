@@ -48,11 +48,17 @@ The idea is to build a versatile engine that adapts to each game, rather than fo
 
 ## Development progress
 
-**Estimated completion: ~85%** (manual estimate, not a measured percentage of code or completed levels).
+**Porting progress: 100% — Public Beta.** The initial port is complete. This milestone does not imply that every level has been fully tested or that all remaining bugs have been resolved.
 
-**🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩⬛⬛⬛ &nbsp; 85%**
+**🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 &nbsp; 100%**
 
-Extremis RE is entering its first public beta release. The major gameplay, rendering, audio, survival and interface systems have been reconstructed. Original password continuation, persistent settings and multilingual support are operational. Full-campaign verification and Windows release testing remain outstanding.
+**Extremis RE has reached 100% of its initial porting milestone and is now available as a public beta for macOS and Windows x64.**
+
+The original game's main systems have been reconstructed, including its 30-level campaign data, rendering, combat, enemies, survival mechanics, interfaces, audio and cinematics.
+
+The project has now entered its **public testing phase**. Community feedback will help identify remaining bugs, compatibility issues and differences from the DOS original.
+
+Future development will also explore **gameplay improvements**, including more advanced enemy AI and many other potential enhancements. These features are not yet defined or scheduled and will be planned separately from beta bug fixes.
 
 ### Feature status
 
@@ -72,8 +78,8 @@ Extremis RE is entering its first public beta release. The major gameplay, rende
 | Password continuation | Implemented | All 16 DOS passwords, LOAD GAME and arrival notifications |
 | Port menu and settings | Implemented | Video, audio, controls and persistent settings.ini |
 | Localization | Functional | English, Spanish and French; three ambiguous narrative passages remain in English |
-| Full campaign | Not fully verified | All 30 levels require end-to-end gameplay testing |
-| Platform support and releases | Public beta | macOS package available; Windows x64 packaging through GitHub Actions, native gameplay validation pending |
+| Full campaign | Beta testing | Initial port complete; full end-to-end campaign verification remains |
+| Platform support and releases | Public beta | macOS and Windows x64 beta packages published; native Windows gameplay testing ongoing |
 
 **Automated regression tests:** CTest covers gameplay and engine systems. Passing these tests does not establish complete DOS fidelity or full-campaign verification.
 
@@ -91,14 +97,17 @@ Extremis RE is entering its first public beta release. The major gameplay, rende
 - Original-style localized inventory graphics composed without modifying DOS assets.
 - Automated regression tests and extensive executable-based reverse-engineering documentation.
 
-### Main work remaining
+### Public beta testing and future development
 
-- Complete an end-to-end playthrough of all 30 levels and verify progression and ending.
-- Investigate remaining enemy AI edge cases, including the level 3 MONS5 diagnostic.
-- Validate outstanding audiovisual timing, bomb presentation and DOS fidelity details.
-- Visually review remaining localization layouts and three ambiguous narrative passages.
-- Perform native Windows testing and final release validation.
-- Optional future enhancement: modern full-state saving alongside original passwords.
+- Collect public feedback and fix bugs discovered during beta testing.
+- Verify the complete 30-level campaign, including progression and ending.
+- Continue native Windows compatibility testing and DOS fidelity checks.
+- Refine audiovisual details, localization and remaining gameplay edge cases.
+- Plan future gameplay enhancements, particularly improved enemy AI and more sophisticated enemy behaviour.
+- Evaluate further gameplay, interface and quality-of-life improvements based on community feedback.
+- Consider optional modern save functionality alongside original password continuation.
+
+**Future enhancements are proposals, not implemented features or confirmed development commitments.** Their scope and priorities will be established after beta testing.
 
 ## Download
 
