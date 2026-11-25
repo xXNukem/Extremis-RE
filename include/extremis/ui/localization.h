@@ -5,7 +5,7 @@
 namespace localization {
 enum class Language : unsigned { French=0, English=1, Spanish=2 };
 struct Entry { std::string_view id,en,es,fr; };
-inline constexpr std::array<Entry,117> entries{{
+inline constexpr std::array<Entry,119> entries{{
     {"menu.new_game","NEW GAME","NUEVA PARTIDA","NOUVELLE PARTIE"},
     {"menu.load_game","LOAD GAME","CARGAR PARTIDA","CHARGER UNE PARTIE"},
     {"menu.options","OPTIONS","OPCIONES","OPTIONS"},
@@ -15,6 +15,8 @@ inline constexpr std::array<Entry,117> entries{{
     {"options.audio","AUDIO","AUDIO","AUDIO"},
     {"options.controls","CONTROLS","CONTROLES","COMMANDES"},
     {"options.language","LANGUAGE","IDIOMA","LANGUE"},
+    {"options.gameplay","GAMEPLAY","JUGABILIDAD","JOUABILITÉ"},
+    {"options.ignore_locker_codes","IGNORE LOCKER CODES","IGNORAR CÓDIGOS DE TAQUILLAS","IGNORER LES CODES DES CASIERS"},
     {"options.back","BACK","VOLVER","RETOUR"},
     {"options.aspect_ratio","ASPECT RATIO","RELACIÓN DE ASPECTO","FORMAT D’IMAGE"},
     {"options.resolution","RESOLUTION","RESOLUCIÓN","RÉSOLUTION"},

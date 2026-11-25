@@ -922,6 +922,17 @@ void mons5(const std::filesystem::path& directory)
     slow.update(level,far,walls,sv,1,true);
     check(slow.records()[0].x==paused.x && slow.records()[0].phase==paused.phase,
           "MONS5 advanced during pause/resume");
+    // Level 27 record 8 has both its position and home outside the navigation polygons.
+    level.enemies[0].x=level.enemies[0].homeX=4200;
+    level.enemies[0].behavior=1;
+    reset();
+    for (unsigned n=0;n<99;++n) tick(far);
+    check(system.records()[0].polygon==0xffff && system.records()[0].elevation==99*256 &&
+          system.sceneRecordIds().size()==1 && system.sceneRecordIds()[0]==0,
+          "MONS5 outside polygons vanished before the timeout");
+    tick(far);
+    check(system.records()[0].health==0xffff && system.sceneRecordIds().empty() &&
+          system.scene().objects.empty(),"MONS5 invalid-polygon timeout did not remove the instance");
     // Real cross-sector movement, including a grounded half-speed phase near the portal.
     level=arena(); level.monsBank=5; level.enemies[0].angle=0;
     level.sectors.push_back(level.sectors[0]); level.sectors[1].gx=1000;

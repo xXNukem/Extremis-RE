@@ -52,7 +52,7 @@ The idea is to build a versatile engine that adapts to each game, rather than fo
 
 **🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩⬛⬛⬛ &nbsp; 85%**
 
-Extremis RE is approaching its first public release. The major gameplay, rendering, audio, survival and interface systems have been reconstructed. Original password continuation, persistent settings and multilingual support are operational. Full-campaign verification and Windows release testing remain outstanding.
+Extremis RE is entering its first public beta release. The major gameplay, rendering, audio, survival and interface systems have been reconstructed. Original password continuation, persistent settings and multilingual support are operational. Full-campaign verification and Windows release testing remain outstanding.
 
 ### Feature status
 
@@ -73,9 +73,9 @@ Extremis RE is approaching its first public release. The major gameplay, renderi
 | Port menu and settings | Implemented | Video, audio, controls and persistent settings.ini |
 | Localization | Functional | English, Spanish and French; three ambiguous narrative passages remain in English |
 | Full campaign | Not fully verified | All 30 levels require end-to-end gameplay testing |
-| Platform support and releases | In progress | macOS development validated; native Windows testing and packaging pending |
+| Platform support and releases | Public beta | macOS package available; Windows x64 packaging through GitHub Actions, native gameplay validation pending |
 
-**Latest reported automated result (24 November 2026): 46/46 CTest tests passed in both Debug and Release.** This does not establish complete DOS fidelity or full-campaign verification.
+**Automated regression tests:** CTest covers gameplay and engine systems. Passing these tests does not establish complete DOS fidelity or full-campaign verification.
 
 ### Implemented so far
 
@@ -99,6 +99,21 @@ Extremis RE is approaching its first public release. The major gameplay, renderi
 - Visually review remaining localization layouts and three ambiguous narrative passages.
 - Perform native Windows testing and final release validation.
 - Optional future enhancement: modern full-state saving alongside original passwords.
+
+## Download
+
+The first public beta targets **macOS** and **Windows x64**.
+
+Release packages are available from [GitHub Releases](https://github.com/xXNukem/Extremis-RE/releases):
+
+- `Extremis-RE-macOS.zip` — macOS application with SDL3 bundled.
+- `Extremis-RE-Windows.zip` — Windows x64 executable with SDL3.dll.
+
+**Original game files are not included.** You must provide your own `GAME.LAB`, `EXTREMIS.EXE` and `DATA` directory.
+
+For installation and troubleshooting, see the [distribution instructions](docs/distribution.md).
+
+This is a beta release. Complete campaign verification and native Windows gameplay testing remain outstanding.
 
 ## Build and run
 

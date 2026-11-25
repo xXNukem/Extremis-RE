@@ -26,16 +26,23 @@ void ItemSession::load(const game_lab::Level& level)
     if (level.zoneIndex>=plans_.size()) throw std::runtime_error("Invalid map zone");
     animationTime_=planTicks_=0; resumeAnimation_=false; pendingCard_.reset();
     zone_=level.zoneIndex; travel_.reset(); bombPlacement_=false;
-    world_.emplace(level); accessCode_=level.accessCode; authorized_=false;
+    world_.emplace(level); accessCode_=level.accessCode;
     codeTargets_=level.codeTargets;
     interface_.reset(); panel_.reset(); take_=injector_=oxygen_=false; action_=Action::None;
     inventoryRequested_=false; keysDown_.fill(false);
-    SDL_Log("I: toggle inventory; E: interact/confirm; WASD/arrows: navigate; Z: heal; X: oxygen; Escape: port menu; Backspace: close interface.");
+    SDL_Log("I: toggle inventory; E: interact/confirm; WASD/arrows: navigate; Z: heal; X: oxygen; Escape: cancel zone keypad or open port menu; Backspace: close interface.");
 }
 bool ItemSession::modal() const { return interface_.has_value(); }
 bool ItemSession::planTransferred() const { return planTransferred(zone_); }
 bool ItemSession::planTransferred(unsigned zone) const { return zone<plans_.size() && plans_[zone]; }
-void ItemSession::resetPlans() { plans_.fill(false); securities_.fill(false); selfDestruction_=SelfDestruction{}; completedSecurities_=0; }
+void ItemSession::resetPlans()
+{
+    plans_.fill(false);
+    authorizedZones_.fill(false);
+    securities_.fill(false);
+    selfDestruction_=SelfDestruction{};
+    completedSecurities_=0;
+}
 bool ItemSession::securitiesComplete() const {
     return std::all_of(securities_.begin(),securities_.end(),[](bool disabled){return disabled;});
 }
@@ -63,12 +70,13 @@ void ItemSession::setAvailable(bool available)
     if (!available) { interface_.reset(); inventoryRequested_=take_=injector_=oxygen_=false; action_=Action::None; }
 }
 
-void ItemSession::open(std::size_t index, SurvivalSession& player)
+void ItemSession::open(std::size_t index, SurvivalSession& player, bool ignoreLockerCodes)
 {
     player.clearMessages();
     panel_=index;
     interface_.emplace(); blink_=0;
     const auto& panel=world_->panels()[index];
+
     interface_->contents=panel.contents;
     interface_->zoneName=interaction::original::codes[zone_].zone;
     interface_->securityPanel=panel.securityPanel;
@@ -77,11 +85,16 @@ void ItemSession::open(std::size_t index, SurvivalSession& player)
     interface_->elevatorIndex=panel.contents;
     interface_->elevatorZone=zone_;
     interface_->elevatorSector=unsigned(panel.sector);
-    if (panel.elevator || panel.cardReader || panel.codeReader || panel.securityPanel) showContents(player);
-    else {
+    if (panel.elevator || panel.cardReader || panel.codeReader || panel.securityPanel) {
+        showContents(player);
+    } else if (ignoreLockerCodes) {
+        showContents(player);
+        startPhase(interaction::Phase::PanelSlide);
+        return;
+    } else {
         interface_->screen=interaction::Screen::Code;
-        interface_->codeAccepted=authorized_;
-        if(authorized_) interface_->notice="CODE ZONE "+interface_->zoneName+" ALREADY SEIZED";
+        interface_->codeAccepted=authorizedZones_[zone_];
+        if(interface_->codeAccepted) interface_->notice="CODE ZONE "+interface_->zoneName+" ALREADY SEIZED";
     }
     startPhase(interaction::Phase::Opening);
 }
@@ -124,7 +137,10 @@ void ItemSession::navigate(Action action)
     const int delta=(action==Action::Left || action==Action::Up)?-1:1;
     if (s.screen==interaction::Screen::Code) {
         const int row=int(s.selection)/7, col=int(s.selection)%7;
-        if (action==Action::Left || action==Action::Right)
+        if (s.selection==interaction::keypadExit) {
+            if (action==Action::Up) s.selection=7;
+        } else if (row==1 && action==Action::Down) s.selection=interaction::keypadExit;
+        else if (horizontal)
             s.selection=unsigned(row*7+std::clamp(col+delta,0,6));
         else s.selection=unsigned(std::clamp(row+delta,0,1)*7+col);
     } else if (s.screen==interaction::Screen::Cards) {
@@ -256,7 +272,10 @@ void ItemSession::confirm(SurvivalSession& player, GameAudio& audio, DoorControl
             interface_->codeIndex=(interface_->codeIndex+1)%codeTargets_.size(); showCode();
         }
         return;
-    case Screen::Code: audio.interfaceKey(); confirmCode(player); return;
+    case Screen::Code:
+        if (interface_->selection==interaction::keypadExit) closePanel(audio);
+        else { audio.interfaceKey(); confirmCode(player); }
+        return;
     case Screen::Cards: audio.interfaceKey(); confirmCard(player,audio,security); return;
     case Screen::Reader: startPhase(interaction::Phase::CardWithdraw); return;
     case Screen::Plan: return;
@@ -285,7 +304,7 @@ void ItemSession::confirm(SurvivalSession& player, GameAudio& audio, DoorControl
 }
 void ItemSession::update(const Camera* camera, bool active, const collision::World& obstacles,
                          SurvivalSession& player, GameAudio& audio, DoorControl* security, double seconds,
-                         bool enemyInConnectedSet)
+                         bool enemyInConnectedSet, bool ignoreLockerCodes)
 {
     const bool inventory=std::exchange(inventoryRequested_,false);
     const bool take=std::exchange(take_,false), injector=std::exchange(injector_,false);
@@ -337,7 +356,7 @@ void ItemSession::update(const Camera* camera, bool active, const collision::Wor
                 player.postMessage(messages::Id::EmptyPanel);
             else {
                 if (panel.elevator) audio.interfaceMotor();
-                open(*target,player);
+                open(*target,player,ignoreLockerCodes);
                 if (interface_->screen!=interaction::Screen::Cards) audio.interfaceMotor();
             }
         }

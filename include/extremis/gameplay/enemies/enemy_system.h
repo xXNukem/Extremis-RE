@@ -44,6 +44,7 @@ public:
     const DeathEffects& effects() const;
     const sprites::Scene& scene() const;
     const std::vector<game_lab::EnemyRecord>& records() const;
+    const std::vector<std::uint16_t>& sceneRecordIds() const { return objectRecords_; }
 private:
     sprites::Scene scene_;
     // One entry per visible instance, in scene order. Removed records have no entry.

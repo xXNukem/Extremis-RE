@@ -32,7 +32,7 @@ public:
     bool requestContextualAction(const Camera& camera, const collision::World& obstacles);
     void update(const Camera* camera, bool active, const collision::World& obstacles,
                 SurvivalSession& player, GameAudio& audio, DoorControl* security = nullptr, double seconds = 1.0/70.0,
-                bool enemyInConnectedSet = false);
+                bool enemyInConnectedSet = false, bool ignoreLockerCodes = false);
     bool modal() const;
     bool securitiesComplete() const;
     unsigned completedSecurities() const;
@@ -57,7 +57,8 @@ private:
     std::optional<interaction::State> interface_;
     std::optional<std::uint16_t> accessCode_;
     std::vector<std::uint16_t> codeTargets_;
-    bool authorized_ = false, available_ = true;
+    bool available_ = true;
+    std::array<bool,30> authorizedZones_{};
     std::array<bool,30> plans_{};
     std::array<bool,16> securities_{};
     SelfDestruction selfDestruction_;
@@ -78,7 +79,7 @@ private:
     void finishPhase(SurvivalSession& player, GameAudio& audio, DoorControl* security);
     void usePendingCard(SurvivalSession& player, GameAudio& audio, DoorControl* security);
     std::array<bool, SDL_SCANCODE_COUNT> keysDown_{};
-    void open(std::size_t index, SurvivalSession& player);
+    void open(std::size_t index, SurvivalSession& player, bool ignoreLockerCodes);
     void showContents(const SurvivalSession& player);
     void navigate(Action action);
     void confirm(SurvivalSession& player, GameAudio& audio, DoorControl* security);

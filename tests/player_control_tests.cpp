@@ -125,8 +125,20 @@ void testHeadbob()
     check(player::update(silent,{1,0},9*tick,{},nullptr,false)==1 && silent.bobPhase==7,"Disabled cycle transition");
     Camera run{}; player::update(run,{1,0,0,0,true},tick);
     check(run.bobPhase==32 && run.viewHeight()==173,"Running increment");
-    Camera strafe{};player::update(strafe,{1,0},4*tick);
-    check(player::update(strafe,{0,1},20*tick)==0 && strafe.bobPhase==16,"Strafe reset");
+    Camera strafe{}, forward{};
+    player::update(strafe,{1,0},4*tick);
+    player::update(forward,{1,0},4*tick);
+    const auto lateralSteps=player::update(strafe,{0,1},20*tick);
+    const auto forwardSteps=player::update(forward,{1,0},20*tick);
+    check(lateralSteps==2 && lateralSteps==forwardSteps &&
+          strafe.bobPhase==forward.bobPhase &&
+          strafe.viewHeight()==forward.viewHeight(),
+          "Strafing must advance headbob and footsteps like forward movement");
+    Camera left{}, right{};
+    check(player::update(left,{0,-1},9*tick)==1 &&
+          player::update(right,{0,1},9*tick)==1 &&
+          left.bobPhase==right.bobPhase,
+          "Both lateral directions must produce footsteps");
     Camera crouch{};player::update(crouch,{1,0,0,0,false,true},7*tick);
     check(crouch.postureHeight==100 && crouch.viewHeight()==105,"Crouched bob");
     const collision::World wall{{{100,-1000},{100,1000}}};

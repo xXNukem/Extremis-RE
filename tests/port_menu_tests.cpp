@@ -5,12 +5,16 @@
 #include "app/startup/port_menu.h"
 #include <fstream>
 #include "app/startup/port_menu_state.h"
+#include "../src/app/startup/port_menu_layout.h"
+#include "../src/app/startup/port_menu_view.h"
+#include "extremis/ui/original_font.h"
 #include "extremis/ui/utf8_glyph.h"
 #include <SDL3/SDL.h>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
 #include <cassert>
+#include <algorithm>
 #include <array>
 #include <string>
 #include <tuple>
@@ -29,6 +33,63 @@ static void queueKey(SDL_Window* window, SDL_Scancode key)
     event.key.windowID = SDL_GetWindowID(window);
     event.key.scancode = key;
     assert(SDL_PushEvent(&event));
+}
+
+static void gameplayTranslations(SDL_Renderer* renderer, SDL_Surface* surface, const original_font::Font* font)
+{
+    using namespace app::menu_detail;
+    struct Labels { UserLanguage language; const char *page, *option, *on, *off, *back; };
+    for (const auto& text : std::array<Labels,3>{{
+        {UserLanguage::English,"GAMEPLAY","IGNORE LOCKER CODES","ON","OFF","BACK"},
+        {UserLanguage::Spanish,"JUGABILIDAD","IGNORAR CÓDIGOS DE TAQUILLAS","ACTIVADO","DESACTIVADO","VOLVER"},
+        {UserLanguage::French,"JOUABILITÉ","IGNORER LES CODES DES CASIERS","ACTIVÉ","DÉSACTIVÉ","RETOUR"}
+    }}) {
+        for (bool paused : {false,true}) {
+            UserSettings settings;
+            settings.language=text.language;
+            PortMenuState menu(paused,settings);
+            choose(menu,paused?3:2);
+            assert(menu.label(4)==text.page);
+            choose(menu,4);
+            assert(menu.page()==PortMenuPage::Gameplay && menu.pageTitle()==std::string_view(text.page));
+            assert(menu.rowCount()==2 && menu.label(1)==text.back);
+            const auto top=rowTop(0,menu.rowCount(),true);
+            for (bool enabled : {false,true}) {
+                assert(settings.ignoreLockerCodes==enabled);
+                assert(menu.label(0)==std::string(text.option)+" : "+(enabled?text.on:text.off));
+                menu.key(SDL_SCANCODE_DOWN); // Leave the option free of the selection effect.
+                assert(renderPortMenu(renderer,font,menu,0.,1.,0,0));
+                int first=surface->w, last=-1;
+                unsigned topStrokeCount=0;
+                for (int y=int(top)-5; y<int(top+rowHeight)+5; ++y) {
+                    unsigned strokes=0;
+                    bool previousInk=false;
+                    for (int x=0; x<surface->w; ++x) {
+                        Uint8 r,g,b,a;
+                        assert(SDL_ReadSurfacePixel(surface,x,y,&r,&g,&b,&a));
+                        if (r>=100 && !previousInk) ++strokes;
+                        previousInk=r>=100;
+                        if (r<100) continue;
+                        assert(y>=top && y<top+rowHeight);
+                        first=std::min(first,x);
+                        last=std::max(last,x);
+                    }
+                    if (!topStrokeCount) topStrokeCount=strokes;
+                }
+                assert(first>submenuLeft+13 && last<submenuRight-3 && last-first>150);
+                assert(std::abs(first+last-surface->w)<10);
+                // Acute marks sit above the capital letters on the first lit scanline.
+                if (text.language==UserLanguage::Spanish) assert(topStrokeCount==1); // CÓDIGOS
+                if (text.language==UserLanguage::French) assert(topStrokeCount==(enabled?1u:2u)); // ACTIVÉ / DÉSACTIVÉ
+                menu.pointerClick(320,top+rowHeight/2);
+            }
+            assert(!settings.ignoreLockerCodes);
+            choose(menu,1);
+            assert(menu.page()==PortMenuPage::Options);
+            menu.key(SDL_SCANCODE_ESCAPE);
+            assert(menu.page()==PortMenuPage::Main);
+        }
+    }
 }
 
 static void queueClick(SDL_Window* window, float y)
@@ -53,6 +114,7 @@ static void persistence(const std::filesystem::path& directory)
     std::ofstream(cfg,std::ios::binary) << std::string(13,'\0');
     std::ofstream(lab,std::ios::binary) << labContents;
     const auto defaults = loadUserSettings(path);
+    assert(!defaults.ignoreLockerCodes);
     assert(defaults.masterVolume == 80 && !defaults.classicControls && !defaults.vsync);
     assert(defaults.render.preferences.aspectChoice == 3 && !defaults.render.preferences.fisheyeEnabled &&
            defaults.render.preferences.floorAndCeiling && defaults.render.preferences.coloredLights);
@@ -67,6 +129,7 @@ static void persistence(const std::filesystem::path& directory)
                 "master_volume=50\n";
     }
     auto settings = loadUserSettings(path);
+    assert(!settings.ignoreLockerCodes); // Existing INI predating the preference.
     assert(settings.masterVolume == 50 && settings.audioGain() == .5f);
     assert(settings.render.preferences.aspectChoice == 3 && !settings.render.preferences.fisheyeEnabled &&
            settings.render.preferences.floorAndCeiling && settings.render.preferences.coloredLights);
@@ -87,7 +150,7 @@ static void persistence(const std::filesystem::path& directory)
     // Use the same blocking menu that the application opens from gameplay.
     SDL_FlushEvents(SDL_EVENT_FIRST,SDL_EVENT_LAST);
     queueClick(window,273); // OPTIONS from pause
-    queueClick(window,129); // VIDEO
+    queueClick(window,110); // VIDEO
     queueClick(window,98); // AUTO -> 4:3
     queueClick(window,137); // 1x -> 2x
     queueClick(window,174); // Fisheye on
@@ -95,19 +158,24 @@ static void persistence(const std::filesystem::path& directory)
     queueClick(window,251); // Lamps off
     queueClick(window,290); // VSync on
     queueKey(window,SDL_SCANCODE_ESCAPE);
-    queueClick(window,178); // AUDIO
+    queueClick(window,156); // AUDIO
     for (int i=0; i<5; ++i) queueKey(window,SDL_SCANCODE_LEFT);
     queueKey(window,SDL_SCANCODE_ESCAPE);
-    queueClick(window,222); // CONTROLS
+    queueClick(window,202); // CONTROLS
     queueKey(window,SDL_SCANCODE_RETURN);
+    queueKey(window,SDL_SCANCODE_ESCAPE);
+    queueClick(window,294); // GAMEPLAY
+    queueKey(window,SDL_SCANCODE_RIGHT);
     for (int i=0; i<3; ++i) queueKey(window,SDL_SCANCODE_ESCAPE);
     std::vector<float> liveGains;
     assert(showPortMenu(window,renderer,{},true,settings,path,
         [&](float gain) { liveGains.push_back(gain); }).choice == PortMenuChoice::Resume);
+    assert(settings.ignoreLockerCodes);
     assert(liveGains.size()==5 && liveGains.front()==.4f && liveGains.back()==0.f);
 
     SDL_DestroyRenderer(renderer);
     settings = loadUserSettings(path,cfg);
+    assert(settings.ignoreLockerCodes);
     assert(settings.render.preferences.aspectChoice == 0 && settings.render.preferences.fisheyeEnabled &&
            !settings.render.preferences.floorAndCeiling && !settings.render.preferences.coloredLights);
     assert(settings.render.mode.renderScale == 2 && !settings.render.mode.nativeMax);
@@ -135,6 +203,13 @@ static void persistence(const std::filesystem::path& directory)
     assert(continuation.choice == PortMenuChoice::Continue && continuation.checkpoint);
     assert(settings.classicControls && settings.render.mode.renderScale == 2 && settings.masterVolume == 0);
     assert(SDL_GetRenderVSync(renderer,&interval) && interval == 1);
+
+    queueClick(window,273); // OPTIONS from pause
+    queueClick(window,294); // GAMEPLAY
+    queueKey(window,SDL_SCANCODE_RETURN);
+    for (int i=0; i<3; ++i) queueKey(window,SDL_SCANCODE_ESCAPE);
+    assert(showPortMenu(window,renderer,{},true,settings,path).choice==PortMenuChoice::Resume);
+    assert(!settings.ignoreLockerCodes && !loadUserSettings(path).ignoreLockerCodes);
 
     settings.render.mode.nativeMax = true;
     settings.render.preferences.aspectChoice = 2;
@@ -217,7 +292,7 @@ int main(int argc,char** argv)
     }
     assert(localization::translate("ATTENTION:\r\n5M 00S UNTIL EXPLOSION!",UserLanguage::Spanish)==
            "ATENCIÓN:\r\n¡EXPLOSIÓN EN 5M 00S!");
-    assert(argc == 2);
+    assert(argc == 2 || argc == 3);
     UserSettings startSettings;
     PortMenuState start(false,startSettings);
     start.setAvailableVideoModes({{853,480,1.f},{1920,1080,1.f}});
@@ -229,18 +304,18 @@ int main(int argc,char** argv)
     assert(!start.pointerMove(320.f,217.f));
     assert(start.pointerClick(320.f,258.f)==PortMenuChoice::None);
     assert(start.page()==PortMenuPage::Options && start.selection()==0);
-    assert(start.rowCount()==5 && std::string(start.pageTitle())=="OPTIONS");
+    assert(start.rowCount()==6 && std::string(start.pageTitle())=="OPTIONS");
     // The submenu is wider and higher than the main-menu selector.
-    assert(start.pointerMove(96.f,131.f)==false); // Already on VIDEO.
-    assert(start.pointerMove(96.f,178.f));
+    assert(start.pointerMove(96.f,110.f)==false); // Already on VIDEO.
+    assert(start.pointerMove(96.f,156.f));
     assert(start.selection()==1);
-    assert(start.pointerMove(320.f,131.f));
+    assert(start.pointerMove(320.f,110.f));
     assert(start.label(0)=="VIDEO" && start.label(1)=="AUDIO");
     assert(start.label(2)=="CONTROLS" && start.label(3)=="LANGUAGE");
-    assert(start.label(4)=="BACK");
+    assert(start.label(4)=="GAMEPLAY" && start.label(5)=="BACK");
 
     // Seven VIDEO rows: the effect is independent of resolution and aspect.
-    assert(start.pointerClick(320.f,131.f)==PortMenuChoice::None);
+    assert(start.pointerClick(320.f,110.f)==PortMenuChoice::None);
     assert(start.page()==PortMenuPage::Video && start.rowCount()==7);
     assert(start.label(0)=="ASPECT RATIO : AUTO (16:9)");
     assert(start.videoDimensions()==std::make_pair(320,200));
@@ -305,7 +380,7 @@ int main(int argc,char** argv)
     assert(startSettings.language==UserLanguage::English);
     start.key(SDL_SCANCODE_ESCAPE);
     assert(start.page()==PortMenuPage::Options);
-    choose(start,4);
+    choose(start,5);
     assert(start.page()==PortMenuPage::Main);
     assert(start.key(SDL_SCANCODE_ESCAPE)==PortMenuChoice::None);
     assert(start.pointerClick(320.f,298.f)==PortMenuChoice::Exit);
@@ -411,6 +486,12 @@ int main(int argc,char** argv)
     assert(surface);
     auto* renderer=SDL_CreateSoftwareRenderer(surface);
     assert(renderer);
+    assert(SDL_SetRenderDrawBlendMode(renderer,SDL_BLENDMODE_BLEND));
+    gameplayTranslations(renderer,surface,nullptr);
+    if (argc==3) {
+        const original_font::Font font(renderer,std::filesystem::u8path(argv[2]));
+        gameplayTranslations(renderer,surface,&font);
+    }
     const auto openVideo=[](PortMenuState& menu) {
         choose(menu,3);
         choose(menu,0);

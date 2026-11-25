@@ -32,6 +32,20 @@ int spriteIndex(unsigned char c)
 }
 } // namespace
 
+bool drawAccent(SDL_Renderer* renderer, char mark, float middle, float y, float scale)
+{
+    switch (mark) {
+    case 'c': return SDL_RenderLine(renderer,middle,y+9*scale,middle-scale,y+11*scale);
+    case 'u': return SDL_RenderLine(renderer,middle-scale,y-scale,middle+scale,y-scale);
+    case 'a': return SDL_RenderLine(renderer,middle,y-2*scale,middle+scale,y-scale);
+    case 'g': return SDL_RenderLine(renderer,middle-scale,y-scale,middle,y-2*scale);
+    case 't': case 'e':
+        return SDL_RenderLine(renderer,middle-scale,y-scale,middle,y-2*scale) &&
+               SDL_RenderLine(renderer,middle,y-2*scale,middle+scale,y-scale);
+    default: return true;
+    }
+}
+
 Font::Font(SDL_Renderer* renderer, const std::filesystem::path& casqueSpr)
 {
     if (!renderer) throw std::invalid_argument("Original font requires an SDL renderer");
@@ -126,13 +140,7 @@ bool Font::draw(SDL_Renderer* renderer, std::string_view text, float x, float y,
         } else if (!SDL_RenderTexture(renderer,glyph.texture,nullptr,&destination)) return false;
         if (decoded.mark && decoded.mark!='i') {
             if (!SDL_SetRenderDrawColor(renderer,tint.r,tint.g,tint.b,alpha)) return false;
-            const float middle=x+glyph.width*scale*.5f;
-            if (decoded.mark=='c') { if (!SDL_RenderLine(renderer,middle,y+9*scale,middle-scale,y+11*scale)) return false; }
-            else if (decoded.mark=='u') { if (!SDL_RenderLine(renderer,middle-scale,y-scale,middle+scale,y-scale)) return false; }
-            else if (decoded.mark=='t') { if (!SDL_RenderLine(renderer,middle-scale,y-scale,middle,y-2*scale) || !SDL_RenderLine(renderer,middle,y-2*scale,middle+scale,y-scale)) return false; }
-            else if (decoded.mark=='a') { if (!SDL_RenderLine(renderer,middle,y-2*scale,middle+scale,y-scale)) return false; }
-            else if (decoded.mark=='g') { if (!SDL_RenderLine(renderer,middle-scale,y-scale,middle,y-2*scale)) return false; }
-            else if (decoded.mark=='e') { if (!SDL_RenderLine(renderer,middle-scale,y-scale,middle,y-2*scale) || !SDL_RenderLine(renderer,middle,y-2*scale,middle+scale,y-scale)) return false; }
+            if (!drawAccent(renderer,decoded.mark,x+glyph.width*scale*.5f,y,scale)) return false;
         }
         x+=(glyph.width+1)*scale;
     }

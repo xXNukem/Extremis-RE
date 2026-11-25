@@ -4,6 +4,7 @@
 
 #include "app/startup/port_menu_state.h"
 #include "extremis/ui/original_font.h"
+#include "extremis/ui/utf8_glyph.h"
 #include "port_menu_layout.h"
 
 #include <SDL3/SDL.h>
@@ -46,15 +47,31 @@ bool textAt(SDL_Renderer* r, const original_font::Font* font, std::string_view t
             float x,float y,float scale, SDL_Color tint,float opacity=1.f)
 {
     if (font) return font->draw(r,text,x,y,scale,tint,opacity);
-    // Asset-free fallback; source text is null-terminated before passing to SDL.
-    const std::string copy(text);
-    return ink(r,tint,Uint8(std::clamp(opacity,0.f,1.f)*255.f)) &&
-           SDL_RenderDebugText(r,x,y,copy.c_str());
+    // SDL's debug font draws ASCII. Use the same UTF-8 decoder and accent strokes as CASQUE.
+    if (!ink(r,tint,Uint8(std::clamp(opacity,0.f,1.f)*255.f)) ||
+        !SDL_SetRenderScale(r,scale,scale)) return false;
+    x/=scale;
+    y/=scale;
+    std::string base;
+    base.reserve(text.size());
+    bool drawn=true;
+    for (std::size_t i=0;i<text.size() && drawn;) {
+        const auto glyph=localization::glyph(text,i);
+        i+=glyph.bytes;
+        if (glyph.mark)
+            drawn=original_font::drawAccent(r,glyph.mark,x+8.f*float(base.size())+4.f,y,1.f);
+        base.push_back(char(glyph.base));
+    }
+    drawn=drawn && SDL_RenderDebugText(r,x,y,base.c_str());
+    return SDL_SetRenderScale(r,1.f,1.f) && drawn;
 }
 
 float textWidth(const original_font::Font* font,std::string_view s,float scale)
 {
-    return (font?font->measure(s):float(s.size())*8.f)*scale;
+    if (font) return font->measure(s)*scale;
+    unsigned count=0;
+    for (std::size_t i=0;i<s.size();i+=localization::glyph(s,i).bytes) ++count;
+    return float(count)*8.f*scale;
 }
 
 bool drawCRT(SDL_Renderer* r,double seconds,std::uint32_t seed)
@@ -288,7 +305,7 @@ bool drawOptions(SDL_Renderer* r,const original_font::Font* font,
             if (!drawSelectionECG(r,y,selectionAge,seed,left,right)) return false;
         }
         // Scale is fixed for the page; only horizontal centering follows the value.
-        const float fittedScale=std::min(glyphScale,(right-left-24.f)/std::max(1.f,textWidth(font,label,1.f)));
+        const float fittedScale=std::min(glyphScale,(width-32.f)/std::max(1.f,textWidth(font,label,1.f)));
         const float x=320.f-textWidth(font,label,fittedScale)*.5f;
         const float textY=y+(rowHeight-10.f*fittedScale)*.5f;
         if (selected && !textAt(r,font,label,x+2.f,textY+1.f,fittedScale,phosphor,.20f))

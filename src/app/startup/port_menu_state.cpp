@@ -25,7 +25,9 @@ using app::menu_detail::submenuRight;
 
 constexpr std::array<std::string_view,4> mainLabels{{"NEW GAME","LOAD GAME","OPTIONS","EXIT"}};
 constexpr std::array<std::string_view,5> inGameLabels{{"BACK TO GAME","NEW GAME","LOAD GAME","OPTIONS","EXIT"}};
-constexpr std::array<std::string_view,5> optionsLabels{{"VIDEO","AUDIO","CONTROLS","LANGUAGE","BACK"}};
+constexpr std::array<std::string_view,6> optionsLabels{{
+    "options.video","options.audio","options.controls","options.language","options.gameplay","options.back"
+}};
 constexpr std::array<std::string_view,4> aspectValues{{"4:3","16:9","21:9","AUTO"}};
 constexpr std::array<std::string_view,3> languageLabels{{"ENGLISH","ESPAÑOL","FRANÇAIS"}};
 constexpr std::array<UserLanguage,3> languageValues{{UserLanguage::English,UserLanguage::Spanish,UserLanguage::French}};
@@ -120,11 +122,11 @@ unsigned PortMenuState::rowCount() const
 {
     switch(page_) {
     case PortMenuPage::Main: return inGame_?5:4;
-    case PortMenuPage::Options: return 5;
+    case PortMenuPage::Options: return unsigned(optionsLabels.size());
     case PortMenuPage::Video: return 7;
-    case PortMenuPage::Audio: case PortMenuPage::Controls: return 2;
+    case PortMenuPage::Audio: case PortMenuPage::Controls: case PortMenuPage::Gameplay: return 2;
     case PortMenuPage::Language: return 4;
-    case PortMenuPage::Password: return 2;
+    case PortMenuPage::Password: return 3;
     }
     return 4;
 }
@@ -136,6 +138,7 @@ const char* PortMenuState::pageTitle() const
     case PortMenuPage::Video: return localization::byEnglish("VIDEO",settings_.language).data();
     case PortMenuPage::Audio: return localization::byEnglish("AUDIO",settings_.language).data();
     case PortMenuPage::Controls: return localization::byEnglish("CONTROLS",settings_.language).data();
+    case PortMenuPage::Gameplay: return localization::byId("options.gameplay",settings_.language).data();
     case PortMenuPage::Language: return localization::byEnglish("LANGUAGE",settings_.language).data();
     case PortMenuPage::Password: return localization::byEnglish("CONTINUATION CODE",settings_.language).data();
     case PortMenuPage::Main: break;
@@ -148,7 +151,7 @@ std::string PortMenuState::label(unsigned row) const
     if (row>=rowCount()) return "";
     switch(page_) {
     case PortMenuPage::Main: return std::string(localization::byEnglish(inGame_?inGameLabels[row]:mainLabels[row],settings_.language));
-    case PortMenuPage::Options: return std::string(localization::byEnglish(optionsLabels[row],settings_.language));
+    case PortMenuPage::Options: return std::string(localization::byId(optionsLabels[row],settings_.language));
     case PortMenuPage::Video: {
         const auto& video = settings_.render.preferences;
         switch(row) {
@@ -171,9 +174,14 @@ std::string PortMenuState::label(unsigned row) const
     }
     case PortMenuPage::Audio:
         return row==0?std::string(localization::byId("options.master_volume",settings_.language))+" : "+std::to_string(settings_.masterVolume):std::string(localization::byId("options.back",settings_.language));
+    case PortMenuPage::Gameplay:
+        if (row==1) return std::string(localization::byId("options.back",settings_.language));
+        return std::string(localization::byId("options.ignore_locker_codes",settings_.language))+" : "+
+               std::string(localization::byId(settings_.ignoreLockerCodes?"options.on":"options.off",settings_.language));
     case PortMenuPage::Controls:
         return row==0?std::string(localization::byId("options.control_scheme",settings_.language))+" : "+(settings_.classicControls?std::string(localization::byId("options.classic",settings_.language)):std::string(localization::byId("options.modern",settings_.language))):std::string(localization::byId("options.back",settings_.language));
     case PortMenuPage::Password:
+        if (row==2) return std::string(localization::byId("options.back",settings_.language));
         if (row==0) return password_ + std::string(8-password_.size(), '.');
         if (passwordSubmitted_) return checkpoint_ ? std::string(localization::byId("password.accepted",settings_.language)) : std::string(localization::byId("password.refused",settings_.language));
         return std::string(localization::byId("password.enter_confirm",settings_.language));
@@ -224,6 +232,9 @@ void PortMenuState::changeValue(int delta)
     case PortMenuPage::Controls:
         if(selection_==0) settings_.classicControls=!settings_.classicControls;
         break;
+    case PortMenuPage::Gameplay:
+        if(selection_==0) settings_.ignoreLockerCodes=!settings_.ignoreLockerCodes;
+        break;
     case PortMenuPage::Language:
         if (selection_<3) settings_.language=languageValues[selection_];
         break;
@@ -248,7 +259,7 @@ PortMenuChoice PortMenuState::activate()
         }
         break;
     case PortMenuPage::Options:
-        if(selection_==4) back();
+        if(selection_==optionsLabels.size()-1) back();
         else {
             page_=static_cast<PortMenuPage>(int(PortMenuPage::Video)+int(selection_));
             selection_=0;
@@ -261,10 +272,17 @@ PortMenuChoice PortMenuState::activate()
     case PortMenuPage::Video:
         if(selection_==6) back(); else changeValue(1);
         break;
-    case PortMenuPage::Audio: case PortMenuPage::Controls:
+    case PortMenuPage::Audio: case PortMenuPage::Controls: case PortMenuPage::Gameplay:
         if(selection_==1) back(); else changeValue(1);
         break;
-    case PortMenuPage::Password: break;
+    case PortMenuPage::Password:
+        if (selection_==2 && !passwordSubmitted_) {
+            page_=PortMenuPage::Main;
+            selection_=0;
+            password_.clear();
+            checkpoint_=nullptr;
+        }
+        break;
     case PortMenuPage::Language:
         if(selection_==3) back(); else changeValue(1);
         break;
@@ -286,7 +304,12 @@ int PortMenuState::hitTest(float x,float y,unsigned count,bool submenu)
 
 bool PortMenuState::pointerMove(float x,float y)
 {
-    if (page_==PortMenuPage::Password) return false;
+    if (page_==PortMenuPage::Password) {
+        const int hit=hitTest(x,y,rowCount(),true);
+        if (hit!=2 || selection_==2) return false;
+        selection_=2;
+        return true;
+    }
     const int hit=hitTest(x,y,rowCount(),page_!=PortMenuPage::Main);
     if (hit<0 || unsigned(hit)==selection_) return false;
     selection_=unsigned(hit);
@@ -295,7 +318,11 @@ bool PortMenuState::pointerMove(float x,float y)
 
 PortMenuChoice PortMenuState::pointerClick(float x,float y)
 {
-    if (page_==PortMenuPage::Password) return PortMenuChoice::None;
+    if (page_==PortMenuPage::Password) {
+        if (hitTest(x,y,rowCount(),true)!=2) return PortMenuChoice::None;
+        selection_=2;
+        return activate();
+    }
     const int hit=hitTest(x,y,rowCount(),page_!=PortMenuPage::Main);
     if (hit<0) return PortMenuChoice::None;
     selection_=unsigned(hit);
@@ -306,12 +333,25 @@ PortMenuChoice PortMenuState::key(SDL_Scancode pressed,bool repeated)
 {
     if (repeated) return PortMenuChoice::None;
     if (page_==PortMenuPage::Password) {
-        if (!passwordSubmitted_) {
-            if (pressed==SDL_SCANCODE_BACKSPACE && !password_.empty()) password_.pop_back();
-            if ((pressed==SDL_SCANCODE_RETURN || pressed==SDL_SCANCODE_KP_ENTER) && password_.size()==8) {
-                checkpoint_=continuation::find(password_);
-                passwordSubmitted_=true;
-            }
+        if (passwordSubmitted_) return PortMenuChoice::None;
+        if (pressed==SDL_SCANCODE_ESCAPE) {
+            page_=PortMenuPage::Main;
+            selection_=0;
+            password_.clear();
+            checkpoint_=nullptr;
+            return PortMenuChoice::None;
+        }
+        if (pressed==SDL_SCANCODE_UP || pressed==SDL_SCANCODE_DOWN) {
+            selection_=selection_==2 ? 0u : 2u;
+            return PortMenuChoice::None;
+        }
+        if (selection_==2 && (pressed==SDL_SCANCODE_RETURN ||
+                              pressed==SDL_SCANCODE_KP_ENTER))
+            return activate();
+        if (pressed==SDL_SCANCODE_BACKSPACE && !password_.empty()) password_.pop_back();
+        if ((pressed==SDL_SCANCODE_RETURN || pressed==SDL_SCANCODE_KP_ENTER) && password_.size()==8) {
+            checkpoint_=continuation::find(password_);
+            passwordSubmitted_=true;
         }
         return PortMenuChoice::None;
     }
@@ -339,7 +379,10 @@ void PortMenuState::typePassword(std::string_view text)
     if (page_!=PortMenuPage::Password || passwordSubmitted_) return;
     for (char c:text) {
         if (password_.size()==8) break;
-        if (const char normalized=continuation::normalize(c)) password_+=normalized;
+        if (const char normalized=continuation::normalize(c)) {
+            password_+=normalized;
+            selection_=0; // Typing always focuses the password, not Back.
+        }
     }
 }
 

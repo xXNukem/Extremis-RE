@@ -40,3 +40,8 @@ target_include_directories(level_render_benchmark PRIVATE
     ${PROJECT_SOURCE_DIR}/src/extremis/render/first_person/scene)
 target_compile_definitions(level_render_benchmark PRIVATE $<$<CONFIG:Debug>:EXTREMIS_DEBUG_MENU=1>)
 target_link_libraries(level_render_benchmark PRIVATE extremis_render enemies)
+
+add_executable(enemy_record_probe EXCLUDE_FROM_ALL enemy_record_probe.cpp)
+target_include_directories(enemy_record_probe PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/extremis/render/first_person/scene)
+target_link_libraries(enemy_record_probe PRIVATE extremis_render enemies)

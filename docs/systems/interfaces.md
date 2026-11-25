@@ -39,7 +39,15 @@ The original resources supply a range of surprisingly elaborate sequences: a pan
 The presentation logic is spread across [`original_interactions.cpp`](../../src/extremis/ui/original_interactions.cpp), [`interaction_animation.cpp`](../../src/extremis/ui/interaction_animation.cpp) and the stateful [`item_session.cpp`](../../src/app/session/item_session.cpp). They share resources, but they must not accidentally duplicate the inventory or door state.
 
 `ItemSession` advances its panel phases in [`item_animation.cpp`](../../src/app/session/item_animation.cpp).
+The [campaign terminal audit](../reference/exe/code-terminals.md) identifies every stock panel, card requirement and displayed zone code.
+
 The SDL event routing for those panels lives in [`item_input.cpp`](../../src/app/session/item_input.cpp).
+
+**Port adaptation.** Options → Gameplay → Ignore locker codes opens supply and weapon lockers directly. Map terminals still require the zone code and card readers still check their cards. Turning the option off restores the zone's earned authorization status. The title and pause menus save the change immediately as `ignore_locker_codes` in `settings.ini`. The default for new installations and older settings files is off.
+
+**Port-tested, 2026-11-24.** The setting reached `ItemSession::open`, but the opening animation drew the keypad and its code prompt during `PanelSlide` even when the locker had skipped code entry. The bypass now starts with the locker door sliding into view. The renderer slides a keypad out only after a keypad acceptance. On the original C200 supply locker (sector 8, wall 8, LAB offset `0xe38`) and weapon locker (sector 8, wall 6, `0xe28`), the regression compares every opening frame with a second rendering in which only the keypad sprite is marked. Both reach the contents prompt without code input or pickup. Switching the option off in the pause menu brings back the interactive keypad on the next visit. Switching it on again opens the same locker directly. The Debug gameplay loop also reproduced all three visits at the supply locker.
+
+Run `interaction_tests --locker <test-directory> <path/to/GAME.LAB>` to repeat with the reference LAB and its adjacent `DATA` directory. CTest runs the same checks with fixture resources. [Reference LAB hash and device inventory](../reference/exe/code-terminals.md)
 
 ### Pickup movie presentation
 
@@ -49,7 +57,9 @@ When a locker closes after a successful pickup, `ItemSession` runs `MovieIn`, `M
 
 ## One button, several meanings
 
-The contextual **E** action handles nearby panels and doors as appropriate; inside a modal it confirms. **I** opens and closes inventory; Escape cancels a modal. The input routing is designed so a key that opened the panel doesn't immediately confirm whatever happens to be selected.
+The contextual **E** action handles nearby panels and doors as appropriate; inside a modal it confirms. **I** opens and closes inventory. On the zone keypad, Escape and Backspace cancel immediately. As a port adaptation, pressing Down from any key in the bottom row selects EXIT (SALIR in Spanish, QUITTER in French). E starts the panel closing animation and discards the input. Escape opens the port menu on the other item screens. The input routing is designed so a key that opened the panel doesn't immediately confirm whatever happens to be selected.
+
+**Port-tested on macOS, 2026-11-24.** The input regression navigates to SALIR, returns to the letter grid, cancels with each control and reopens the keypad with empty input. The original-resource SDL software capture checks ink for each of the five Spanish glyphs in the final selected button at 640×480, 960×540 and 1260×540, across all four aspect choices and scales 1×–6× plus MAX. All 84 configurations passed in Debug and Release.
 
 With a charged battery, **E** on the battery slot opens its mode selector.
 Navigate with **W/S** or **↑/↓** and confirm with **E** to return to play.

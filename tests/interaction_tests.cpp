@@ -11,6 +11,8 @@
 #include "extremis/ui/utf8_glyph.h"
 #include "extremis/world/original_travel.h"
 #include "app/session/item_session.h"
+#include "app/startup/port_menu.h"
+#include "extremis/gameplay/player/continuation.h"
 #include "extremis/gameplay/player/survival_session.h"
 #include "extremis/audio/game_audio.h"
 #include "extremis/world/door_control.h"
@@ -103,6 +105,7 @@ struct Session {
     GameAudio audio;
     SurvivalSession player;
     ItemSession items;
+    UserSettings settings;
     Camera camera{50,100,0};
     collision::World obstacles;
     std::vector<doors::Door> doors{{7,{}}};
@@ -121,16 +124,21 @@ struct Session {
         }
         level.accessCode=90; level.codeTargets={0,1}; items.load(level);
     }
-    void tick(bool active=true) {items.update(&camera,active,obstacles,player,audio,&control);}
+    void tick(bool active=true) {
+        items.update(&camera,active,obstacles,player,audio,&control,1.0/70.0,false,settings.ignoreLockerCodes);
+    }
     void settle() {
         for(unsigned i=0;i<600 && items.modal() &&
             items.interfaceState()->phase!=interaction::Phase::Ready &&
             (items.interfaceState()->phase!=interaction::Phase::CardResult || items.interfaceState()->cardAccepted);++i) tick();
     }
-    void press(SDL_Scancode code) {
+    void tap(SDL_Scancode code) {
         SDL_Event e{}; e.type=SDL_EVENT_KEY_DOWN; e.key.windowID=17; e.key.scancode=code;
         items.handleEvent(e,17); tick();
         e.type=SDL_EVENT_KEY_UP; items.handleEvent(e,17);
+    }
+    void press(SDL_Scancode code) {
+        tap(code);
         settle();
     }
     void select(unsigned key) {
@@ -140,10 +148,245 @@ struct Session {
         while(items.interfaceState()->selection%7<key%7) press(SDL_SCANCODE_RIGHT);
     }
     void code(std::string_view value="IJEKAH") {
+        check(items.modal() && items.interfaceState()->screen==interaction::Screen::Code,
+              "Expected the zone keypad before entering a code");
         for(char c:value) {select(unsigned(c-'A')+(c>='G'?1:0)); press(SDL_SCANCODE_SPACE);}
         select(13); press(SDL_SCANCODE_SPACE);
     }
 };
+void zoneAuthorizations()
+{
+    using interaction::Screen;
+    const auto* checkpoint = continuation::find("ATILAHUN");
+    check(checkpoint && checkpoint->zone != 0, "Missing continuation in another zone");
+    Session s;
+    const auto openZone = [&](unsigned zone, Screen expected, const char* message) {
+        if (s.items.modal()) s.press(SDL_SCANCODE_BACKSPACE);
+        s.level.zoneIndex = zone;
+        s.level.accessCode = interaction::codeChecksum(interaction::original::codes[zone].letters);
+        s.items.load(s.level);
+        s.press(SDL_SCANCODE_E);
+        check(s.items.modal() && s.items.interfaceState()->screen == expected, message);
+    };
+    const auto other = checkpoint->zone;
+    openZone(0, Screen::Code, "New game started with its zone authorized");
+    s.code();
+    openZone(other, Screen::Code, "Authorization leaked to another zone");
+    s.code("AAAAAA");
+    openZone(0, Screen::Supply, "Returning to an authorized zone required its code again");
+    openZone(other, Screen::Code, "An incorrect code authorized the zone on return");
+    s.code(interaction::original::codes[other].letters);
+    openZone(0, Screen::Supply, "Authorizing a second zone revoked the first");
+    openZone(other, Screen::Supply, "Second zone lost its own authorization");
+
+    s.items.resetPlans();
+    openZone(0, Screen::Code, "Party reset retained the initial authorization");
+    s.code();
+    openZone(other, Screen::Code, "Party reset retained the second authorization");
+    s.code(interaction::original::codes[other].letters);
+
+    // A committed password start creates a fresh ItemSession and loads the checkpoint zone.
+    s.items = ItemSession{};
+    openZone(checkpoint->zone, Screen::Code, "Continuation inherited its starting zone's authorization");
+    openZone(0, Screen::Code, "Continuation inherited another zone's authorization");
+}
+void keypadExit()
+{
+    Session s;
+    for (const auto cancel : {SDL_SCANCODE_E,SDL_SCANCODE_ESCAPE,SDL_SCANCODE_BACKSPACE}) {
+        s.press(SDL_SCANCODE_E);
+        check(s.items.interfaceState()->entered.empty() && !s.items.interfaceState()->codeAccepted,
+              "Cancelled keypad retained input or authorization");
+        if (cancel!=SDL_SCANCODE_E) s.press(SDL_SCANCODE_E); // Partial code.
+        s.press(SDL_SCANCODE_S); s.press(SDL_SCANCODE_DOWN);
+        s.press(SDL_SCANCODE_RIGHT);
+        check(s.items.interfaceState()->selection==interaction::keypadExit,"Exit unreachable");
+        s.press(SDL_SCANCODE_W);
+        check(s.items.interfaceState()->selection==7,"Cannot return from Exit to second key row");
+        s.press(SDL_SCANCODE_DOWN); s.press(cancel);
+        check(!s.items.modal() && !s.items.planTransferred(),"Keypad cancellation failed");
+    }
+    // Even a complete valid entry must be discarded when the selected button is Exit.
+    s.press(SDL_SCANCODE_E);
+    for (char c : std::string("IJEKAH")) {
+        s.select(unsigned(c-'A')+(c>='G'));
+        s.press(SDL_SCANCODE_E);
+    }
+    s.select(13);
+    s.press(SDL_SCANCODE_DOWN);
+    SDL_Event confirm{};
+    confirm.type=SDL_EVENT_KEY_DOWN; confirm.key.windowID=17; confirm.key.scancode=SDL_SCANCODE_E;
+    s.items.handleEvent(confirm,17); s.tick();
+    check(s.items.modal() && s.items.interfaceState()->phase==interaction::Phase::Closing &&
+          !s.items.interfaceState()->codeAccepted,"Exit submitted the code or skipped closing animation");
+    confirm.type=SDL_EVENT_KEY_UP; s.items.handleEvent(confirm,17); s.settle();
+    s.press(SDL_SCANCODE_E);
+    check(s.items.modal() && s.items.interfaceState()->screen==interaction::Screen::Code &&
+          s.items.interfaceState()->entered.empty(),"Exit authorized the next visit");
+    auto r=fixture();
+    for (char c : std::string("SALIR")) r.smallFont[2+c-32]=0;
+    r.smallFont[98]=128;
+    const interaction::Renderer renderer(r);
+    auto language=localization::Language::Spanish;
+    localization::bind(&language);
+    interaction::State state;
+    std::vector<std::uint32_t> pixels(320*200);
+    for (auto key : {0u,interaction::keypadExit}) {
+        state.selection=key;
+        renderer.draw(pixels,state);
+        check(pixels[92*320+88]==color(key ? 102 : 220),"Exit focus border missing");
+        for (int i=0;i<5;++i) check(pixels[94*320+91+4*i]==color(102),"SALIR glyph missing");
+    }
+    localization::bind(nullptr);
+}
+void lockerCodePreference()
+{
+    using interaction::Screen;
+    for (const auto& [type,screen] : {std::pair{0x3205,Screen::Supply},std::pair{0x3104,Screen::Weapon}}) {
+        Session s(type,type==0x3104?0x11f4:0x2064);
+        s.settings.ignoreLockerCodes=true;
+        s.press(SDL_SCANCODE_E);
+        check(s.items.modal() && s.items.interfaceState()->screen==screen,"Locker bypass did not open contents");
+        s.press(SDL_SCANCODE_BACKSPACE);
+        s.settings.ignoreLockerCodes=false;
+        s.press(SDL_SCANCODE_E);
+        check(s.items.modal() && s.items.interfaceState()->screen==Screen::Code,"Bypass granted a zone authorization");
+        s.code();
+        s.press(SDL_SCANCODE_BACKSPACE);
+        s.settings.ignoreLockerCodes=true;
+        s.press(SDL_SCANCODE_E); s.press(SDL_SCANCODE_BACKSPACE);
+        s.settings.ignoreLockerCodes=false;
+        s.press(SDL_SCANCODE_E);
+        check(s.items.modal() && s.items.interfaceState()->screen==screen,"Toggle revoked an earned authorization");
+    }
+    for (const auto& [type,screen] : {std::pair{0x3606,Screen::Plan},std::pair{0x3508,Screen::Cards},
+            std::pair{0x3308,Screen::Cards},std::pair{0x3422,Screen::Cards},std::pair{0x3002,Screen::Cards}}) {
+        Session s(type,type==0x3308?0x0107:1); // Reader targets the fixture's locked door 7.
+        s.settings.ignoreLockerCodes=true;
+        s.press(SDL_SCANCODE_E);
+        check(s.items.modal() && s.items.interfaceState()->screen==screen,"Locker bypass affected another panel");
+    }
+}
+void lockerInteraction(const std::filesystem::path& directory, const std::filesystem::path& lab)
+{
+    using interaction::Phase;
+    using interaction::Screen;
+    std::filesystem::create_directories(directory);
+    const auto path=directory/"settings.ini";
+    SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy");
+    SDL_SetHint(SDL_HINT_AUDIO_DRIVER,"dummy");
+    check(SDL_Init(SDL_INIT_VIDEO),SDL_GetError());
+    auto* window=SDL_CreateWindow("Locker interaction",640,400,0);
+    check(window!=nullptr,SDL_GetError());
+    auto* video=SDL_CreateRenderer(window,"software");
+    check(video!=nullptr,SDL_GetError());
+    const auto toggleInPause=[&](UserSettings& settings) {
+        SDL_Event event{};
+        event.type=SDL_EVENT_WINDOW_FOCUS_GAINED;
+        event.window.windowID=SDL_GetWindowID(window);
+        check(SDL_PushEvent(&event),SDL_GetError());
+        const auto key=[&](SDL_Scancode code) {
+            SDL_Event e{}; e.type=SDL_EVENT_KEY_DOWN; e.key.windowID=SDL_GetWindowID(window);
+            e.key.scancode=code; check(SDL_PushEvent(&e),SDL_GetError());
+        };
+        for(int i=0;i<3;++i) key(SDL_SCANCODE_DOWN); // Pause → Options
+        key(SDL_SCANCODE_RETURN);
+        for(int i=0;i<4;++i) key(SDL_SCANCODE_DOWN); // Options → Gameplay
+        key(SDL_SCANCODE_RETURN);
+        key(SDL_SCANCODE_RETURN); // Ignore locker codes
+        for(int i=0;i<3;++i) key(SDL_SCANCODE_ESCAPE);
+        event={}; event.type=SDL_EVENT_QUIT; // Fail promptly if the menu didn't resume.
+        check(SDL_PushEvent(&event),SDL_GetError());
+        check(showPortMenu(window,video,{},true,settings,path).choice==PortMenuChoice::Resume,
+              "Pause menu did not resume the game");
+        SDL_FlushEvent(SDL_EVENT_QUIT);
+    };
+    auto resources=lab.empty()?fixture():interaction::load(lab.parent_path()/"DATA");
+    const interaction::Renderer original(resources);
+    // Change just the keypad background. Any visible part of it must change the frame.
+    for(auto& index:resources.keyboard[0].indices) index=index==0?102:0;
+    const interaction::Renderer marked(std::move(resources));
+    std::vector<std::uint32_t> pixels(64000), comparison(64000);
+    const auto keypadVisible=[&](const interaction::State& state) {
+        std::fill(pixels.begin(),pixels.end(),0);
+        comparison=pixels;
+        check(original.draw(pixels,state) && marked.draw(comparison,state),"Locker frame failed to render");
+        return pixels!=comparison;
+    };
+    for (bool weapon : {false,true}) {
+        const auto type=weapon?0x3104:0x3205, contents=weapon?0x11f4:0x2064;
+        UserSettings initial;
+        initial.ignoreLockerCodes=true;
+        check(saveUserSettings(path,initial),"Cannot prepare enabled locker preference");
+        Session s(type,contents);
+        s.settings=loadUserSettings(path);
+        check(s.settings.ignoreLockerCodes,"Session did not load the enabled locker preference");
+        if (!lab.empty()) {
+            s.level=game_lab::loadLevel(lab,0).level;
+            const auto wall=weapon?6u:8u; // C200 sector 8, adjacent weapon and supply lockers.
+            check(s.level.sectors.at(8).walls.at(wall).type==type,"Expected a stock C200 locker");
+            const items::World world(s.level);
+            const auto panel=std::find_if(world.panels().begin(),world.panels().end(),
+                [&](const auto& p){return p.sector==8 && p.wall==wall;});
+            check(panel!=world.panels().end() && panel->contents==contents,"Stock locker contents differ");
+            const auto& a=panel->face.a; const auto& b=panel->face.b;
+            const double dx=b.x-a.x, dy=b.y-a.y, length=std::hypot(dx,dy);
+            s.camera={(a.x+b.x)/2+50*dy/length,(a.y+b.y)/2-50*dx/length,std::atan2(dx,-dy)};
+            s.camera.sector=8;
+            s.obstacles=collision::staticWorld(s.level); s.doors=doors::closedDoors(s.level);
+            s.control.resetLevel(); s.obstacles=s.control.movementWorld();
+            s.items.load(s.level);
+        }
+        for (int visit=0;visit<3;++visit) {
+            const bool enabled=visit!=1;
+            if (visit) toggleInPause(s.settings);
+            check(s.settings.ignoreLockerCodes==enabled,"Pause preference did not reach the resumed session");
+            check(!s.items.modal(),"Changing preference opened a locker");
+            s.tap(SDL_SCANCODE_E); // Advance the remaining frames without pressing another key.
+            std::vector<Phase> phases;
+            for(unsigned i=0;i<600;++i) {
+                const auto* state=s.items.interfaceState();
+                check(state && state->contents==contents,"Interact did not open the selected locker");
+                check(state->screen==(enabled?(weapon?Screen::Weapon:Screen::Supply):Screen::Code),
+                      "Incorrect locker screen during opening");
+                if(enabled) check(!keypadVisible(*state),"Bypassed locker rendered the code keypad");
+                if(phases.empty() || phases.back()!=state->phase) phases.push_back(state->phase);
+                if(state->phase==Phase::Ready) {
+                    if(!enabled) check(!state->codeAccepted && keypadVisible(*state),
+                                       "Unauthorized locker did not wait at the visible keypad");
+                    break;
+                }
+                s.tick();
+            }
+            const std::vector<Phase> expected=enabled?
+                std::vector<Phase>{Phase::PanelSlide,Phase::PanelZoom,Phase::Shutters,
+                                   Phase::ContentExpand,Phase::ContentMove,Phase::ContentReveal,Phase::Ready}:
+                std::vector<Phase>{Phase::Opening,Phase::HandIn,Phase::Ready};
+            check(phases==expected,"Locker did not complete its expected sequence");
+            if(!enabled) {
+                for(unsigned i=0;i<160;++i) s.tick();
+                check(s.items.modal() && s.items.interfaceState()->screen==Screen::Code &&
+                      s.items.interfaceState()->phase==Phase::Ready,"Keypad advanced without a code");
+            }
+            check(s.player.hudState().injectors==0 && s.player.inventory().weapon()==0,
+                  "Opening the locker transferred its contents");
+            s.press(SDL_SCANCODE_BACKSPACE);
+        }
+        // The normal transition still pushes a real keypad off the screen.
+        toggleInPause(s.settings);
+        s.press(SDL_SCANCODE_E);
+        s.code("IJEKAH");
+        s.press(SDL_SCANCODE_BACKSPACE);
+        s.tap(SDL_SCANCODE_E);
+        for(unsigned i=0;i<200 && s.items.modal() && s.items.interfaceState()->phase!=Phase::PanelSlide;++i)
+            s.tick();
+        const auto* accepted=s.items.interfaceState();
+        check(accepted && accepted->codeAccepted && accepted->phase==Phase::PanelSlide &&
+              keypadVisible(*accepted),"Earned zone authorization lost its normal keypad transition");
+    }
+    SDL_DestroyRenderer(video); SDL_DestroyWindow(window); SDL_Quit();
+    std::cout<<"Supply and weapon lockers: loaded ON, paused OFF, paused ON; rendered frames verified.\n";
+}
 void flows()
 {
     Session s;
@@ -464,7 +707,10 @@ void missingVariants()
     check(mine.player.inventory().mine()==100,"Mine was not transferred into original fixed slot");
     mine.press(SDL_SCANCODE_E);
     check(!mine.items.modal(),"Empty mine cabinet reopened");
-    mine.items.load(mine.level); mine.press(SDL_SCANCODE_E); mine.code(); mine.press(SDL_SCANCODE_E);
+    mine.items.load(mine.level); mine.press(SDL_SCANCODE_E);
+    check(mine.items.interfaceState()->screen==interaction::Screen::Supply,
+          "Reloaded cabinet requested the zone code again");
+    mine.press(SDL_SCANCODE_E);
     check(mine.items.interfaceState()->notice=="ALREADY HAVE A MINE" &&
           mine.items.interfaceState()->contents==0x6064,"Full mine slot consumed cabinet");
     for(std::uint16_t contents:{0x0384,0x1384,0x2064}) {
@@ -849,6 +1095,14 @@ void codeTerminal()
     check(s.items.interfaceState()->notice=="CODE ZONE B101  JBHGAD","Original code-target list not browsable");
     s.press(SDL_SCANCODE_DOWN); s.press(SDL_SCANCODE_SPACE);
     check(!s.items.modal() && s.player.inventory().cards()[0]==0x1001,"Code reader consumed card or failed to exit");
+    s.level.sectors[0].walls[0].type=0x3205;
+    for (auto zone : s.level.codeTargets) {
+        s.level.zoneIndex=zone;
+        s.items.load(s.level); s.press(SDL_SCANCODE_E);
+        check(s.items.modal() && s.items.interfaceState()->screen==interaction::Screen::Code,
+              "Reading a zone code granted its keypad authorization");
+        s.press(SDL_SCANCODE_BACKSPACE);
+    }
     Session wrong(0x3508,1); card=0x4002; wrong.player.inventory().takeSupply(card);
     wrong.press(SDL_SCANCODE_E); wrong.press(SDL_SCANCODE_SPACE);
     check(wrong.items.interfaceState()->screen==interaction::Screen::Reader &&
@@ -1058,7 +1312,12 @@ void originals(const std::filesystem::path& directory)
 }
 int main(int argc,char* argv[])
 {
-    try { graphics(); checksum(); flows(); selectionRegressions(); detectorInventory(); batteryCabinet(); bombInventory(); inventoryAndElevator(); originalTravel(); unifiedControls(); cardCountsAndLiftDirections(); capacityAndPlan(); pauseAndFailures(); codeTerminal(); sequenceTiming(); missingVariants(); destructionReaders(); if(argc==2) originals(argv[1]); if(argc==3 && std::string_view(argv[1])=="--lab") { originalTravelLab(argv[2]); allPanelsLab(argv[2]); }
+    try {
+        if ((argc==3 || argc==4) && std::string_view(argv[1])=="--locker") {
+            lockerInteraction(argv[2],argc==4?argv[3]:"");
+            return 0;
+        }
+        graphics(); checksum(); keypadExit(); zoneAuthorizations(); lockerCodePreference(); flows(); selectionRegressions(); detectorInventory(); batteryCabinet(); bombInventory(); inventoryAndElevator(); originalTravel(); unifiedControls(); cardCountsAndLiftDirections(); capacityAndPlan(); pauseAndFailures(); codeTerminal(); sequenceTiming(); missingVariants(); destructionReaders(); if(argc==2) originals(argv[1]); if(argc==3 && std::string_view(argv[1])=="--lab") { originalTravelLab(argv[2]); allPanelsLab(argv[2]); }
         std::cout<<"Original interaction coordinates, bounds, resources and code format passed.\n";
     } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
 }

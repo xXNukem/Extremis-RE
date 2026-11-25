@@ -9,6 +9,8 @@
 // No original game assets are embedded or redistributed with the source port.
 // Reusable by introductory credits and future SDL menu screens.
 namespace original_font {
+// Draws the decoded accent above or below a glyph using the current ink color.
+bool drawAccent(SDL_Renderer* renderer, char mark, float middle, float y, float scale);
 class Font {
 public:
     explicit Font(SDL_Renderer* renderer, const std::filesystem::path& casqueSpr);

@@ -265,11 +265,12 @@ void Renderer::menuText(std::vector<std::uint32_t>& pixels, std::string_view tex
         } else x+=int(4*factor);
     }
 }
-void Renderer::code(std::vector<std::uint32_t>& pixels, const State& s) const
+void Renderer::code(std::vector<std::uint32_t>& pixels, const State& s, bool interactive) const
 {
     image(pixels,resources_.keyboard[0],62,25,false);
     // Selected key positions, EXE 0x1967c..0x196af. Rightmost keys are erase/enter.
-    const unsigned key=std::min(s.selection,13u);
+    const bool showExit = interactive && s.phase==Phase::Ready && !s.codeAccepted;
+    const unsigned key=std::min(s.selection,showExit ? keypadExit : 13u);
     if (s.pressedKey && *s.pressedKey<14 && s.fingerPhase==2) {
         const auto pressed=*s.pressedKey;
         image(pixels,resources_.keyboard[1],88+15*int(pressed%7),pressed<7?58:75);
@@ -279,6 +280,16 @@ void Renderer::code(std::vector<std::uint32_t>& pixels, const State& s) const
         +(s.phase==Phase::HandOut?4*int(s.frame):s.phase==Phase::HandIn?64-4*int(s.frame):0);
     image(pixels,resources_.keyboard[6],handX,handY,true,25,125,62,258);
     image(pixels,resources_.keyboard[s.fingerPhase==2?9:s.fingerPhase?8:7],handX+42,handY+9,true,25,125,62,258);
+    if (showExit) {
+        const auto label=localization::byId("menu.exit",localization::current());
+        const int left=88, top=92, width=4*int(label.size())+6;
+        for (int row=0;row<12;++row) {
+            auto start=pixels.begin()+(top+row)*320+left;
+            std::fill_n(start,width,colors_[key==keypadExit ? 102 : 220]);
+            if (row>0 && row<11) std::fill_n(start+1,width-2,colors_[0]);
+        }
+        smallText(pixels,label,left+3,top+2);
+    }
     if (!s.notice.empty()) { smallText(pixels,s.notice,77,36); return; }
     const std::string prompt="TYPE IN CODE ZONE "+s.zoneName+"    ";
     const bool localized=localization::current()!=localization::Language::English;

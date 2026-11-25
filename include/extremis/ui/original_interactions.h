@@ -13,6 +13,8 @@
 
 namespace interaction {
 enum class Screen { Code, Supply, Weapon, Cards, Reader, Plan, Codes, Inventory, Elevator };
+inline constexpr unsigned keypadExit = 14;
+
 enum class Phase { Ready, Opening, HandIn, CodeResult, HandOut, PanelSlide, PanelZoom,
                    Shutters, ContentExpand, ContentMove, ContentReveal, Closing,
                    CardInsert, CardCheck, CardResult, CardWithdraw, MovieIn, Movie, MovieOut };
@@ -75,7 +77,7 @@ private:
     void scaled(std::vector<std::uint32_t>& pixels, const spr_format::Image& sprite,
                 int x, int y, int width, int height) const;
     void reader(std::vector<std::uint32_t>& pixels, const State& state) const;
-    void code(std::vector<std::uint32_t>& pixels, const State& state) const;
+    void code(std::vector<std::uint32_t>& pixels, const State& state, bool interactive = true) const;
     void supply(std::vector<std::uint32_t>& pixels, const State& state, bool weapon) const;
     void inventory(std::vector<std::uint32_t>& pixels, const State& state) const;
     void cards(std::vector<std::uint32_t>& pixels, const State& state) const;

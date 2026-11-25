@@ -67,6 +67,7 @@ UserSettings loadUserSettings(const std::filesystem::path& path,
         else if (key == "vsync" && value <= 1) settings.vsync = value != 0;
         else if (key == "master_volume" && value <= 100) settings.masterVolume = value;
         else if (key == "classic_controls" && value <= 1) settings.classicControls = value != 0;
+        else if (key == "ignore_locker_codes" && value <= 1) settings.ignoreLockerCodes = value != 0;
         else if (key == "language" && value <= unsigned(UserLanguage::Spanish))
             settings.language = static_cast<UserLanguage>(value);
     }
@@ -94,6 +95,7 @@ bool saveUserSettings(const std::filesystem::path& path, const UserSettings& set
            << "vsync=" << settings.vsync << '\n'
            << "master_volume=" << settings.masterVolume << '\n'
            << "classic_controls=" << settings.classicControls << '\n'
+           << "ignore_locker_codes=" << settings.ignoreLockerCodes << '\n'
            << "language=" << unsigned(settings.language) << '\n';
     output.close();
     std::error_code error;

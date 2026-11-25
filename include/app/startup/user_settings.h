@@ -15,6 +15,7 @@ struct UserSettings {
     unsigned masterVolume = 80;
     bool classicControls = false;
     UserLanguage language = UserLanguage::English;
+    bool ignoreLockerCodes = false;
 
     float audioGain() const { return masterVolume / 100.f; }
 };

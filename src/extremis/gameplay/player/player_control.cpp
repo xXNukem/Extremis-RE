@@ -51,7 +51,6 @@ unsigned update(Camera& camera, const Input& input, double seconds, const Settin
             camera.postureTime = 0;
             if (!input.blockMovement &&
                 (camera.x != camera.bobStartX || camera.y != camera.bobStartY)) {
-                if (input.forward == 0) camera.bobPhase = 0;
                 camera.bobPhase += static_cast<unsigned>(std::floor(16 * camera.movementStep / 10));
                 if (camera.bobPhase >= 144) {
                     camera.bobPhase = audioEnabled ? 28 : 7;

@@ -119,12 +119,14 @@ bool Renderer::sequence(std::vector<std::uint32_t>& pixels,const State& s) const
     if(s.phase==Phase::PanelSlide || s.phase==Phase::PanelZoom) {
         const auto& door=s.screen==Screen::Plan?resources_.planDoor:weapon?resources_.weaponDoor:resources_.supplyDoor;
         if(s.phase==Phase::PanelSlide) {
-            // Original keyboard is pushed down while the enlarged door enters.
-            State keyboard=s; keyboard.screen=Screen::Code; keyboard.phase=Phase::Ready; keyboard.notice.clear();
-            auto previous=pixels; code(previous,keyboard);
-            const int down=std::min(100,4*int(s.frame));
-            for(int y=25+down;y<125;++y)
-                std::copy_n(previous.begin()+(y-down)*320+62,196,pixels.begin()+y*320+62);
+            // Push the previous keypad down only when the opening came through it.
+            if(s.codeAccepted) {
+                State keyboard=s; keyboard.screen=Screen::Code; keyboard.phase=Phase::Ready; keyboard.notice.clear();
+                auto previous=pixels; code(previous,keyboard,false);
+                const int down=std::min(100,4*int(s.frame));
+                for(int y=25+down;y<125;++y)
+                    std::copy_n(previous.begin()+(y-down)*320+62,196,pixels.begin()+y*320+62);
+            }
             scaled(pixels,door[0],-36,-231+4*int(s.frame),392,256);
         } else {
             const int percent=100-2*int(std::min(s.frame,25u));

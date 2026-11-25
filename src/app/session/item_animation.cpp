@@ -53,7 +53,7 @@ void ItemSession::finishPhase(SurvivalSession& player, GameAudio& audio, DoorCon
         if(s.screen==interaction::Screen::Codes) showCode();
         startPhase(s.codeAccepted?Phase::CodeResult:Phase::Ready); break;
     case Phase::CodeResult:
-        if (s.codeAccepted) { authorized_=true; startPhase(Phase::HandOut); }
+        if (s.codeAccepted) { authorizedZones_[zone_]=true; startPhase(Phase::HandOut); }
         else startPhase(Phase::Ready); // Keep the established retry/Escape controls.
         break;
     case Phase::HandOut: showContents(player); startPhase(Phase::PanelSlide); audio.interfaceMotor(); break;

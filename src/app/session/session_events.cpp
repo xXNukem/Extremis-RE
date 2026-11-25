@@ -59,8 +59,7 @@ AppSession::EventBatch AppSession::pollEvents(SDL_Window* window, SDL_Renderer* 
             playerInput.handleEvent(event,false);
             continue;
         }
-        // During play, Escape opens the port menu, including when a terminal or
-        // inventory screen is open. It no longer cancels those screens.
+        // The zone keypad owns Escape while it is on screen.
         const bool pressed=event.type==SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.windowID==windowId;
         const bool classicGameplay=settings.classicControls && show3D && survival.alive() &&
             !items.busy() && !mapSession.blocksSimulation() && SDL_GetKeyboardFocus()==window
@@ -68,7 +67,9 @@ AppSession::EventBatch AppSession::pollEvents(SDL_Window* window, SDL_Renderer* 
             && !debugMenu.open()
 #endif
             ;
-        if (pressed && (event.key.scancode==SDL_SCANCODE_ESCAPE ||
+        const auto* panel=items.interfaceState();
+        const bool keypad=panel && panel->screen==interaction::Screen::Code;
+        if (pressed && ((event.key.scancode==SDL_SCANCODE_ESCAPE && !keypad) ||
             (classicGameplay && event.key.scancode==SDL_SCANCODE_P))) {
             openMenu(window,renderer,dataDirectory,settings,settingsPath,exitCode,previousTicks,playerInput,gameAudio,true,result);
 #ifdef EXTREMIS_DEBUG_MENU

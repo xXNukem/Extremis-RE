@@ -176,7 +176,7 @@ void AppSession::run(SDL_Window* window, SDL_Renderer* renderer, const LaunchOpt
         const bool inputActive = camera && show3D && !debugPaused && SDL_GetKeyboardFocus() == window;
         // Resolve context changes before polling continuous WASD/Shift state.
         if (!restartRequested) items.update(camera ? &*camera : nullptr,!shuttleTravel && inputActive && !mapSession.blocksSimulation(),
-                     doorControl.movementWorld(),survival,gameAudio,&doorControl,elapsedSeconds);
+                     doorControl.movementWorld(),survival,gameAudio,&doorControl,elapsedSeconds,false,settings.ignoreLockerCodes);
         if (items.takeBombPlacement() && data && camera && camera->sector) {
             const auto index = *camera->sector;
             const auto& sector = data->level.sectors.at(index);

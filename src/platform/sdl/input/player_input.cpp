@@ -1,14 +1,28 @@
 #include "platform/sdl/input/player_input.h"
 
 #include <SDL3/SDL.h>
+#ifdef __APPLE__
+#include <CoreGraphics/CoreGraphics.h>
+#endif
 #include <cmath>
 #include <utility>
+
+#ifdef __APPLE__
+namespace {
+bool macFunctionKeyHeld()
+{
+    // Apple's Fn/Globe is an OS modifier, not an SDL3 scancode.
+    return (CGEventSourceFlagsState(kCGEventSourceStateHIDSystemState)
+            & kCGEventFlagMaskSecondaryFn) != 0;
+}
+} // namespace
+#endif
 
 PlayerInput::PlayerInput(SDL_Window* window, DoorControl& doors)
     : window_(window),
       devices_(window, {SDL_SCANCODE_W, SDL_SCANCODE_S, SDL_SCANCODE_D, SDL_SCANCODE_A,
           SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_LSHIFT, SDL_SCANCODE_RSHIFT,
-          SDL_SCANCODE_LALT, SDL_SCANCODE_RALT}, SDL_BUTTON_LEFT),
+          SDL_SCANCODE_LALT, SDL_SCANCODE_RALT, SDL_SCANCODE_LCTRL}, SDL_BUTTON_LEFT),
       doors_(doors) {}
 
 bool PlayerInput::handleEvent(const SDL_Event& event, bool gameplay)
@@ -101,7 +115,11 @@ bool PlayerInput::update(Camera* camera, bool view3D, double seconds, bool defer
         double(devices_.keyDown(SDL_SCANCODE_LEFT)) - double(devices_.keyDown(SDL_SCANCODE_RIGHT)),
         mouseX,
         devices_.keyDown(SDL_SCANCODE_LSHIFT) || devices_.keyDown(SDL_SCANCODE_RSHIFT),
-        devices_.keyDown(SDL_SCANCODE_LALT) || devices_.keyDown(SDL_SCANCODE_RALT)};
+#ifdef __APPLE__
+        macFunctionKeyHeld()};
+#else
+        devices_.keyDown(SDL_SCANCODE_LCTRL)};
+#endif
     if (!deferMovement) move(*camera,seconds,false);
     return true;
 }

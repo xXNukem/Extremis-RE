@@ -15,6 +15,8 @@ IDs estables propuestos con prefijo por superficie. EN reproduce el literal visi
 | options.audio | AUDIO | AUDIO | AUDIO | C++ opciones | — | Traducido; fuente verificada |
 | options.controls | CONTROLS | CONTROLES | COMMANDES | C++ opciones | El francés debe distinguir controles de mando si conviene | Traducido; fuente verificada |
 | options.language | LANGUAGE | IDIOMA | LANGUE | C++ opciones | — | Traducido; fuente verificada |
+| options.gameplay | GAMEPLAY | JUGABILIDAD | JOUABILITÉ | Menú principal y de pausa | Acentos | Implementado |
+| options.ignore_locker_codes | IGNORE LOCKER CODES | IGNORAR CÓDIGOS DE TAQUILLAS | IGNORER LES CODES DES CASIERS | Opciones de jugabilidad | Ancho con el estado activado y desactivado | Implementado |
 | options.back | BACK | VOLVER | RETOUR | C++ opciones | — | Traducido; fuente verificada |
 | options.aspect_ratio | ASPECT RATIO | RELACIÓN DE ASPECTO | FORMAT D’IMAGE | C++ vídeo | «AUTO» queda igual | Traducido; fuente verificada |
 | options.resolution | RESOLUTION | RESOLUCIÓN | RÉSOLUTION | C++ vídeo | Valores numéricos invariables | Traducido; fuente verificada |

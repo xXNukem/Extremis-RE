@@ -7,6 +7,7 @@
 #include "extremis/render/first_person/camera/camera_start.h"
 #include "extremis/ui/original_hud.h"
 #include "extremis/ui/localization.h"
+#include "extremis/render/first_person/presentation/view_scale.h"
 #include "extremis/gameplay/player/weapon_fire.h"
 #include "extremis/gameplay/enemies/enemy_system.h"
 #include "extremis/render/first_person/presentation/first_person_view.h"
@@ -308,7 +309,9 @@ void pickupPresentation(const std::filesystem::path& directory)
         SDL_CreateRenderer(window.get(),"software"),SDL_DestroyRenderer);
     check(bool(renderer),"Pickup renderer creation failed");
     const hud::Renderer visor(hud::load(directory));
-    const interaction::Renderer interfaces(interaction::load(directory));
+    const auto resources=interaction::load(directory);
+    const interaction::Renderer interfaces(resources);
+    const auto keypadInk=resources.palette[102];
     VideoRenderSettings video;
     video.preferences.fisheyeEnabled=true;
     FirstPersonRenderer view(renderer.get(),&video), reference(renderer.get());
@@ -358,6 +361,27 @@ void pickupPresentation(const std::filesystem::path& directory)
             video.mode={std::max(1,scale),scale==0,size.x,size.y,{}};
             auto normal=draw(nullptr);
             check(normal->w==size.x && normal->h==size.y,"Pickup drawable size did not change");
+            // The keypad is centered in the original DOS canvas inside each world view.
+            auto language=localization::Language::Spanish;
+            localization::bind(&language);
+            interaction::State keypad;
+            keypad.selection=interaction::keypadExit;
+            const auto panel=draw(&keypad);
+            localization::bind(nullptr);
+            const auto baseWidth=extremis::dosViewWidth(extremis::selectedAspect(aspect,size.x,size.y));
+            const double displayHeight=std::min(double(size.y),size.x*240./baseWidth);
+            for (int glyph=0;glyph<5;++glyph) {
+                bool visible=false;
+                const double left=size.x*.5+(91+4*glyph-160)*displayHeight/240;
+                const double top=size.y*.5+(94-100)*displayHeight/200;
+                for (int y=int(std::ceil(top));y<top+8*displayHeight/200;++y)
+                    for (int x=int(std::ceil(left));x<left+3*displayHeight/240;++x) {
+                        Uint8 r,g,b,a;
+                        check(SDL_ReadSurfacePixel(panel.get(),x,y,&r,&g,&b,&a),"Keypad capture failed");
+                        visible |= r==keypadInk.r && g==keypadInk.g && b==keypadInk.b;
+                    }
+                check(visible,"SALIR lost a glyph in the composed output");
+            }
             auto optical=draw(nullptr,{0,{},true});
             bool hasGreen=false;
             for (int y=0;y<optical->h;y+=11) for (int x=0;x<optical->w;x+=11) {
